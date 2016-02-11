@@ -917,21 +917,13 @@ static void wq_netinfo(struct work_struct *wq_obj)
  */
 static void wq_clear_halt(struct work_struct *wq_obj)
 {
-	struct buf_anchor *anchor;
-	struct most_dev *mdev;
-	struct mbo *mbo;
-	struct urb *urb;
-	struct usb_device *dev;
-	int pipe;
-	unsigned int channel;
-
-	anchor = to_buf_anchor(wq_obj);
-	urb = anchor->urb;
-	mbo = urb->context;
-	mdev = to_mdev(mbo->ifp);
-	channel = mbo->hdm_channel_id;
-	pipe = urb->pipe;
-	dev = urb->dev;
+	struct buf_anchor *anchor = to_buf_anchor(wq_obj);
+	struct urb *urb = anchor->urb;
+	struct mbo *mbo = urb->context;
+	struct most_dev *mdev = to_mdev(mbo->ifp);
+	struct usb_device *dev = urb->dev;
+	int pipe = urb->pipe;
+	unsigned int channel = mbo->hdm_channel_id;
 
 	mutex_lock(&mdev->io_mutex);
 	free_anchored_buffers(mdev, channel, MBO_E_INVAL);
