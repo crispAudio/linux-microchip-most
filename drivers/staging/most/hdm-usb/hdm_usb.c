@@ -1322,7 +1322,7 @@ hdm_probe(struct usb_interface *interface, const struct usb_device_id *id)
 
 	mutex_lock(&mdev->io_mutex);
 	if ((le16_to_cpu(usb_dev->descriptor.idProduct) == USB_DEV_ID_INIC) &&
-	    (le16_to_cpu(usb_dev->descriptor.idProduct) == USB_DEV_ID_INIC)) {
+	    (le16_to_cpu(usb_dev->descriptor.idProduct) == USB_DEV_ID_OS81119)) {
 		/* this increments the reference count of the instance
 		 * object of the core
 		 */
