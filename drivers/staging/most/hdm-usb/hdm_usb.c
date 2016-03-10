@@ -401,9 +401,7 @@ static void hdm_write_completion(struct urb *urb)
 		return;
 	}
 
-	if (unlikely(urb->status && !(urb->status == -ENOENT ||
-				      urb->status == -ECONNRESET ||
-				      urb->status == -ESHUTDOWN))) {
+	if (unlikely(urb->status && urb->status != -ESHUTDOWN)) {
 		mbo->processed_length = 0;
 		switch (urb->status) {
 		case -EPIPE:
@@ -566,9 +564,7 @@ static void hdm_read_completion(struct urb *urb)
 		return;
 	}
 
-	if (unlikely(urb->status && !(urb->status == -ENOENT ||
-				      urb->status == -ECONNRESET ||
-				      urb->status == -ESHUTDOWN))) {
+	if (unlikely(urb->status && urb->status != -ESHUTDOWN)) {
 		mbo->processed_length = 0;
 		switch (urb->status) {
 		case -EPIPE:
