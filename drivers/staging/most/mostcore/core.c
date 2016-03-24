@@ -1904,6 +1904,9 @@ static int __init most_init(void)
 		goto exit_driver;
 	}
 
+	if (dma_set_coherent_mask(core_dev, (u64)DMA_BIT_MASK(32)))
+		goto exit_class_container;
+
 	most_aim_kset = kset_create_and_add("aims", NULL, &core_dev->kobj);
 	if (!most_aim_kset) {
 		err = -ENOMEM;
