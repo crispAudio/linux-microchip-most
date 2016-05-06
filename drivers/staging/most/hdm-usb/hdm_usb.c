@@ -66,17 +66,13 @@
 /**
  * struct buf_anchor - used to create a list of pending URBs
  * @urb: pointer to USB request block
- * @clear_work_obj:
  * @list: linked list
  * @urb_completion:
  */
 struct buf_anchor {
 	struct urb *urb;
-	struct work_struct clear_work_obj;
 	struct list_head list;
 };
-
-#define to_buf_anchor(w) container_of(w, struct buf_anchor, clear_work_obj)
 
 /**
  * struct most_dci_obj - Direct Communication Interface
@@ -89,6 +85,17 @@ struct most_dci_obj {
 };
 
 #define to_dci_obj(p) container_of(p, struct most_dci_obj, kobj)
+
+struct most_dev;
+
+struct clear_hold_work {
+	struct work_struct ws;
+	struct most_dev *mdev;
+	unsigned int channel;
+	int pipe;
+};
+
+#define to_buf_anchor(w) container_of(w, struct clear_hold_work, ws)
 
 /**
  * struct most_dev - holds all usb interface specific stuff
@@ -126,6 +133,7 @@ struct most_dev {
 	spinlock_t anchor_list_lock[MAX_NUM_ENDPOINTS];
 	bool padding_active[MAX_NUM_ENDPOINTS];
 	bool is_channel_healthy[MAX_NUM_ENDPOINTS];
+	struct clear_hold_work clear_work[MAX_NUM_ENDPOINTS];
 	struct list_head *anchor_list;
 	struct mutex io_mutex;
 	struct timer_list link_stat_timer;
@@ -288,6 +296,8 @@ static int hdm_poison_channel(struct most_interface *iface, int channel)
 	mdev->is_channel_healthy[channel] = false;
 	spin_unlock_irqrestore(&mdev->anchor_list_lock[channel], flags);
 
+	cancel_work_sync(&mdev->clear_work[channel].ws);
+
 	mutex_lock(&mdev->io_mutex);
 	free_anchored_buffers(mdev, channel, MBO_E_CLOSE);
 	if (mdev->padding_active[channel])
@@ -402,8 +412,8 @@ static void hdm_write_completion(struct urb *urb)
 			dev_warn(dev, "Broken OUT pipe detected\n");
 			mdev->is_channel_healthy[channel] = false;
 			spin_unlock_irqrestore(lock, flags);
-			INIT_WORK(&anchor->clear_work_obj, wq_clear_halt);
-			queue_work(schedule_usb_work, &anchor->clear_work_obj);
+			mdev->clear_work[channel].pipe = urb->pipe;
+			queue_work(schedule_usb_work, &mdev->clear_work[channel].ws);
 			return;
 		case -ENODEV:
 		case -EPROTO:
@@ -559,8 +569,8 @@ static void hdm_read_completion(struct urb *urb)
 			dev_warn(dev, "Broken IN pipe detected\n");
 			mdev->is_channel_healthy[channel] = false;
 			spin_unlock_irqrestore(lock, flags);
-			INIT_WORK(&anchor->clear_work_obj, wq_clear_halt);
-			queue_work(schedule_usb_work, &anchor->clear_work_obj);
+			mdev->clear_work[channel].pipe = urb->pipe;
+			queue_work(schedule_usb_work, &mdev->clear_work[channel].ws);
 			return;
 		case -ENODEV:
 		case -EPROTO:
@@ -718,6 +728,9 @@ static int hdm_configure_channel(struct most_interface *iface, int channel,
 
 	mdev = to_mdev(iface);
 	mdev->is_channel_healthy[channel] = true;
+	mdev->clear_work[channel].channel = channel;
+	mdev->clear_work[channel].mdev = mdev;
+	INIT_WORK(&mdev->clear_work[channel].ws, wq_clear_halt);
 	dev = &mdev->usb_device->dev;
 
 	if (unlikely(!iface || !conf)) {
@@ -899,18 +912,15 @@ static void wq_netinfo(struct work_struct *wq_obj)
  */
 static void wq_clear_halt(struct work_struct *wq_obj)
 {
-	struct buf_anchor *anchor = to_buf_anchor(wq_obj);
-	struct urb *urb = anchor->urb;
-	struct mbo *mbo = urb->context;
-	struct most_dev *mdev = to_mdev(mbo->ifp);
-	struct usb_device *dev = urb->dev;
-	int pipe = urb->pipe;
-	unsigned int channel = mbo->hdm_channel_id;
+	struct clear_hold_work *clear_work = to_buf_anchor(wq_obj);
+	struct most_dev *mdev = clear_work->mdev;
+	unsigned int channel = clear_work->channel;
+	int pipe = clear_work->pipe;
 
 	mutex_lock(&mdev->io_mutex);
 	most_stop_enqueue(&mdev->iface, channel);
 	free_anchored_buffers(mdev, channel, MBO_E_INVAL);
-	if (usb_clear_halt(dev, pipe))
+	if (usb_clear_halt(mdev->usb_device, pipe))
 		dev_warn(&mdev->usb_device->dev, "Failed to reset endpoint.\n");
 	mdev->is_channel_healthy[channel] = true;
 	most_resume_enqueue(&mdev->iface, channel);
