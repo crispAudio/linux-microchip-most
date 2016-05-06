@@ -379,18 +379,12 @@ static int hdm_remove_padding(struct most_dev *mdev, int channel,
  */
 static void hdm_write_completion(struct urb *urb)
 {
-	struct mbo *mbo;
-	struct buf_anchor *anchor;
-	struct most_dev *mdev;
-	struct device *dev;
-	unsigned int channel;
+	struct mbo *mbo = urb->context;
+	struct buf_anchor *anchor = mbo->priv;
+	struct most_dev *mdev = to_mdev(mbo->ifp);
+	unsigned int channel = mbo->hdm_channel_id;
+	struct device *dev = &mdev->usb_device->dev;
 	unsigned long flags;
-
-	mbo = urb->context;
-	anchor = mbo->priv;
-	mdev = to_mdev(mbo->ifp);
-	channel = mbo->hdm_channel_id;
-	dev = &mdev->usb_device->dev;
 
 	if (urb->status == -ENOENT || urb->status == -ECONNRESET ||
 	    !mdev->is_channel_healthy[channel])
@@ -543,18 +537,12 @@ static void hdm_write_completion(struct urb *urb)
  */
 static void hdm_read_completion(struct urb *urb)
 {
-	struct mbo *mbo;
-	struct buf_anchor *anchor;
-	struct most_dev *mdev;
-	struct device *dev;
+	struct mbo *mbo = urb->context;
+	struct buf_anchor *anchor = mbo->priv;
+	struct most_dev *mdev = to_mdev(mbo->ifp);
+	unsigned int channel = mbo->hdm_channel_id;
+	struct device *dev = &mdev->usb_device->dev;
 	unsigned long flags;
-	unsigned int channel;
-
-	mbo = urb->context;
-	anchor = mbo->priv;
-	mdev = to_mdev(mbo->ifp);
-	channel = mbo->hdm_channel_id;
-	dev = &mdev->usb_device->dev;
 
 	if (urb->status == -ENOENT || urb->status == -ECONNRESET ||
 	    !mdev->is_channel_healthy[channel])
