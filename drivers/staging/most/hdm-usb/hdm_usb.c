@@ -388,9 +388,12 @@ static void hdm_write_completion(struct urb *urb)
 	spinlock_t *lock = mdev->anchor_list_lock + channel;
 	unsigned long flags;
 
+	spin_lock_irqsave(lock, flags);
 	if (urb->status == -ENOENT || urb->status == -ECONNRESET ||
-	    !mdev->is_channel_healthy[channel])
+	    !mdev->is_channel_healthy[channel]) {
+		spin_unlock_irqrestore(lock, flags);
 		return;
+	}
 
 	if (unlikely(urb->status && urb->status != -ESHUTDOWN)) {
 		mbo->processed_length = 0;
@@ -398,6 +401,7 @@ static void hdm_write_completion(struct urb *urb)
 		case -EPIPE:
 			dev_warn(dev, "Broken OUT pipe detected\n");
 			mdev->is_channel_healthy[channel] = false;
+			spin_unlock_irqrestore(lock, flags);
 			mbo->status = MBO_E_INVAL;
 			INIT_WORK(&anchor->clear_work_obj, wq_clear_halt);
 			queue_work(schedule_usb_work, &anchor->clear_work_obj);
@@ -415,11 +419,6 @@ static void hdm_write_completion(struct urb *urb)
 		mbo->processed_length = urb->actual_length;
 	}
 
-	spin_lock_irqsave(lock, flags);
-	if (!mdev->is_channel_healthy[channel]) {
-		spin_unlock_irqrestore(lock, flags);
-		return;
-	}
 	list_del(&anchor->list);
 	spin_unlock_irqrestore(lock, flags);
 	kfree(anchor);
@@ -547,9 +546,12 @@ static void hdm_read_completion(struct urb *urb)
 	spinlock_t *lock = mdev->anchor_list_lock + channel;
 	unsigned long flags;
 
+	spin_lock_irqsave(lock, flags);
 	if (urb->status == -ENOENT || urb->status == -ECONNRESET ||
-	    !mdev->is_channel_healthy[channel])
+	    !mdev->is_channel_healthy[channel]) {
+		spin_unlock_irqrestore(lock, flags);
 		return;
+	}
 
 	if (unlikely(urb->status && urb->status != -ESHUTDOWN)) {
 		mbo->processed_length = 0;
@@ -557,6 +559,7 @@ static void hdm_read_completion(struct urb *urb)
 		case -EPIPE:
 			dev_warn(dev, "Broken IN pipe detected\n");
 			mdev->is_channel_healthy[channel] = false;
+			spin_unlock_irqrestore(lock, flags);
 			mbo->status = MBO_E_INVAL;
 			INIT_WORK(&anchor->clear_work_obj, wq_clear_halt);
 			queue_work(schedule_usb_work, &anchor->clear_work_obj);
@@ -581,11 +584,6 @@ static void hdm_read_completion(struct urb *urb)
 		}
 	}
 
-	spin_lock_irqsave(lock, flags);
-	if (!mdev->is_channel_healthy[channel]) {
-		spin_unlock_irqrestore(lock, flags);
-		return;
-	}
 	list_del(&anchor->list);
 	spin_unlock_irqrestore(lock, flags);
 	kfree(anchor);
