@@ -74,7 +74,6 @@ struct buf_anchor {
 	struct urb *urb;
 	struct work_struct clear_work_obj;
 	struct list_head list;
-	struct completion urb_compl;
 };
 
 #define to_buf_anchor(w) container_of(w, struct buf_anchor, clear_work_obj)
@@ -209,12 +208,7 @@ static void free_anchored_buffers(struct most_dev *mdev, unsigned int channel,
 		spin_unlock_irqrestore(&mdev->anchor_list_lock[channel], flags);
 		if (likely(urb)) {
 			mbo = urb->context;
-			if (!irqs_disabled()) {
-				usb_kill_urb(urb);
-			} else {
-				usb_unlink_urb(urb);
-				wait_for_completion(&anchor->urb_compl);
-			}
+			usb_kill_urb(urb);
 			if ((mbo) && (mbo->complete)) {
 				mbo->status = status;
 				mbo->processed_length = 0;
@@ -399,10 +393,8 @@ static void hdm_write_completion(struct urb *urb)
 	dev = &mdev->usb_device->dev;
 
 	if ((urb->status == -ENOENT) || (urb->status == -ECONNRESET) ||
-	    (!mdev->is_channel_healthy[channel])) {
-		complete(&anchor->urb_compl);
+	    (!mdev->is_channel_healthy[channel]))
 		return;
-	}
 
 	if (unlikely(urb->status && urb->status != -ESHUTDOWN)) {
 		mbo->processed_length = 0;
@@ -565,10 +557,8 @@ static void hdm_read_completion(struct urb *urb)
 	dev = &mdev->usb_device->dev;
 
 	if ((urb->status == -ENOENT) || (urb->status == -ECONNRESET) ||
-	    (!mdev->is_channel_healthy[channel])) {
-		complete(&anchor->urb_compl);
+	    (!mdev->is_channel_healthy[channel]))
 		return;
-	}
 
 	if (unlikely(urb->status && urb->status != -ESHUTDOWN)) {
 		mbo->processed_length = 0;
@@ -667,7 +657,6 @@ static int hdm_enqueue(struct most_interface *iface, int channel,
 	}
 
 	anchor->urb = urb;
-	init_completion(&anchor->urb_compl);
 	mbo->priv = anchor;
 
 	if ((mdev->padding_active[channel]) &&
