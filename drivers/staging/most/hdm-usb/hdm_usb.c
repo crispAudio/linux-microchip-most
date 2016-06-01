@@ -409,7 +409,6 @@ static void hdm_write_completion(struct urb *urb)
 			dev_warn(dev, "Broken OUT pipe detected\n");
 			most_stop_enqueue(&mdev->iface, channel);
 			mbo->status = MBO_E_INVAL;
-			usb_unlink_urb(urb);
 			INIT_WORK(&anchor->clear_work_obj, wq_clear_halt);
 			schedule_work(&anchor->clear_work_obj);
 			return;
@@ -573,7 +572,6 @@ static void hdm_read_completion(struct urb *urb)
 		case -EPIPE:
 			dev_warn(dev, "Broken IN pipe detected\n");
 			mbo->status = MBO_E_INVAL;
-			usb_unlink_urb(urb);
 			INIT_WORK(&anchor->clear_work_obj, wq_clear_halt);
 			schedule_work(&anchor->clear_work_obj);
 			return;
@@ -922,29 +920,26 @@ static void wq_clear_halt(struct work_struct *wq_obj)
 	struct most_dev *mdev;
 	struct mbo *mbo;
 	struct urb *urb;
+	struct usb_device *dev;
+	int pipe;
 	unsigned int channel;
-	unsigned long flags;
 
 	anchor = to_buf_anchor(wq_obj);
 	urb = anchor->urb;
 	mbo = urb->context;
 	mdev = to_mdev(mbo->ifp);
 	channel = mbo->hdm_channel_id;
+	pipe = urb->pipe;
+	dev = urb->dev;
 
-	if (usb_clear_halt(urb->dev, urb->pipe))
+	mutex_lock(&mdev->io_mutex);
+	free_anchored_buffers(mdev, channel, MBO_E_INVAL);
+	if (usb_clear_halt(dev, pipe))
 		dev_warn(&mdev->usb_device->dev, "Failed to reset endpoint.\n");
 
-	usb_free_urb(urb);
-	spin_lock_irqsave(&mdev->anchor_list_lock[channel], flags);
-	list_del(&anchor->list);
-	spin_unlock_irqrestore(&mdev->anchor_list_lock[channel], flags);
-
-	if (likely(mbo->complete))
-		mbo->complete(mbo);
 	if (mdev->conf[channel].direction & MOST_CH_TX)
 		most_resume_enqueue(&mdev->iface, channel);
-
-	kfree(anchor);
+	mutex_unlock(&mdev->io_mutex);
 }
 
 /**
