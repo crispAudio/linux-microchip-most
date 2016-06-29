@@ -79,10 +79,12 @@ struct buf_anchor {
  * struct most_dci_obj - Direct Communication Interface
  * @kobj:position in sysfs
  * @usb_device: pointer to the usb device
+ * @reg_addr: register address for arbitrary DCI access
  */
 struct most_dci_obj {
 	struct kobject kobj;
 	struct usb_device *usb_device;
+	u16 reg_addr;
 };
 
 #define to_dci_obj(p) container_of(p, struct most_dci_obj, kobj)
@@ -801,17 +803,17 @@ static int hdm_update_netinfo(struct most_dev *mdev)
 	if (!is_valid_ether_addr(mdev->hw_addr)) {
 		if (drci_rd_reg(usb_device, DRCI_REG_HW_ADDR_HI, &hi) < 0) {
 			dev_err(dev, "Vendor request \"hw_addr_hi\" failed\n");
-			return -1;
+			return -EFAULT;
 		}
 
 		if (drci_rd_reg(usb_device, DRCI_REG_HW_ADDR_MI, &mi) < 0) {
 			dev_err(dev, "Vendor request \"hw_addr_mid\" failed\n");
-			return -1;
+			return -EFAULT;
 		}
 
 		if (drci_rd_reg(usb_device, DRCI_REG_HW_ADDR_LO, &lo) < 0) {
 			dev_err(dev, "Vendor request \"hw_addr_low\" failed\n");
-			return -1;
+			return -EFAULT;
 		}
 
 		mutex_lock(&mdev->io_mutex);
@@ -826,7 +828,7 @@ static int hdm_update_netinfo(struct most_dev *mdev)
 
 	if (drci_rd_reg(usb_device, DRCI_REG_NI_STATE, &link) < 0) {
 		dev_err(dev, "Vendor request \"link status\" failed\n");
-		return -1;
+		return -EFAULT;
 	}
 
 	mutex_lock(&mdev->io_mutex);
@@ -950,6 +952,10 @@ static struct usb_device_id usbid[] = {
 	struct most_dci_attribute most_dci_attr_##_name = \
 		__ATTR(_name, S_IRUGO | S_IWUSR, show_value, store_value)
 
+#define MOST_DCI_WO_ATTR(_name) \
+	struct most_dci_attribute most_dci_attr_##_name = \
+		__ATTR(_name, S_IWUSR, show_value, store_value)
+
 /**
  * struct most_dci_attribute - to access the attributes of a dci object
  * @attr: attributes of a dci object
@@ -1057,13 +1063,19 @@ static ssize_t show_value(struct most_dci_obj *dci_obj,
 		reg_addr = DRCI_REG_HW_ADDR_MI;
 	else if (!strcmp(attr->attr.name, "mep_eui48_lo"))
 		reg_addr = DRCI_REG_HW_ADDR_LO;
+	else if (!strcmp(attr->attr.name, "arb_address")) {
+		tmp_val = dci_obj->reg_addr;
+		goto show_attr;
+	}
+	else if (!strcmp(attr->attr.name, "arb_value"))
+		reg_addr = dci_obj->reg_addr;
 	else
 		return -EIO;
 
 	err = drci_rd_reg(dci_obj->usb_device, reg_addr, &tmp_val);
 	if (err < 0)
 		return err;
-
+show_attr:
 	return snprintf(buf, PAGE_SIZE, "%04x\n", tmp_val);
 }
 
@@ -1074,6 +1086,10 @@ static ssize_t store_value(struct most_dci_obj *dci_obj,
 	u16 val;
 	u16 reg_addr;
 	int err;
+
+	err = kstrtou16(buf, 16, &val);
+	if (err)
+		return err;
 
 	if (!strcmp(attr->attr.name, "mep_filter"))
 		reg_addr = DRCI_REG_MEP_FILTER;
@@ -1091,17 +1107,23 @@ static ssize_t store_value(struct most_dci_obj *dci_obj,
 		reg_addr = DRCI_REG_HW_ADDR_MI;
 	else if (!strcmp(attr->attr.name, "mep_eui48_lo"))
 		reg_addr = DRCI_REG_HW_ADDR_LO;
+	else if (!strcmp(attr->attr.name, "arb_address")) {
+		dci_obj->reg_addr = val;
+		goto exit;
+	}
+	else if (!strcmp(attr->attr.name, "arb_value"))
+		reg_addr = dci_obj->reg_addr;
+	else if (!strcmp(attr->attr.name, "sync_ep")) {
+		reg_addr = DRCI_REG_BASE + DRCI_COMMAND + val * 16;
+		val = 1;
+	}
 	else
-		return -EIO;
-
-	err = kstrtou16(buf, 16, &val);
-	if (err)
-		return err;
+		return -EFAULT;
 
 	err = drci_wr_reg(dci_obj->usb_device, reg_addr, val);
 	if (err < 0)
 		return err;
-
+exit:
 	return count;
 }
 
@@ -1109,6 +1131,7 @@ static MOST_DCI_RO_ATTR(ni_state);
 static MOST_DCI_RO_ATTR(packet_bandwidth);
 static MOST_DCI_RO_ATTR(node_address);
 static MOST_DCI_RO_ATTR(node_position);
+static MOST_DCI_WO_ATTR(sync_ep);
 static MOST_DCI_ATTR(mep_filter);
 static MOST_DCI_ATTR(mep_hash0);
 static MOST_DCI_ATTR(mep_hash1);
@@ -1117,6 +1140,8 @@ static MOST_DCI_ATTR(mep_hash3);
 static MOST_DCI_ATTR(mep_eui48_hi);
 static MOST_DCI_ATTR(mep_eui48_mi);
 static MOST_DCI_ATTR(mep_eui48_lo);
+static MOST_DCI_ATTR(arb_address);
+static MOST_DCI_ATTR(arb_value);
 
 /**
  * most_dci_def_attrs - array of default attribute files of the dci object
@@ -1126,6 +1151,7 @@ static struct attribute *most_dci_def_attrs[] = {
 	&most_dci_attr_packet_bandwidth.attr,
 	&most_dci_attr_node_address.attr,
 	&most_dci_attr_node_position.attr,
+	&most_dci_attr_sync_ep.attr,
 	&most_dci_attr_mep_filter.attr,
 	&most_dci_attr_mep_hash0.attr,
 	&most_dci_attr_mep_hash1.attr,
@@ -1134,6 +1160,8 @@ static struct attribute *most_dci_def_attrs[] = {
 	&most_dci_attr_mep_eui48_hi.attr,
 	&most_dci_attr_mep_eui48_mi.attr,
 	&most_dci_attr_mep_eui48_lo.attr,
+	&most_dci_attr_arb_address.attr,
+	&most_dci_attr_arb_value.attr,
 	NULL,
 };
 
