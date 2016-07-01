@@ -1039,6 +1039,9 @@ static ssize_t show_value(struct most_dci_obj *dci_obj,
 	u16 reg_addr;
 	int err;
 
+	if (!strcmp(attr->attr.name, "arb_address"))
+		return snprintf(buf, PAGE_SIZE, "%04x\n", dci_obj->reg_addr);
+
 	if (!strcmp(attr->attr.name, "ni_state"))
 		reg_addr = DRCI_REG_NI_STATE;
 	else if (!strcmp(attr->attr.name, "packet_bandwidth"))
@@ -1063,10 +1066,6 @@ static ssize_t show_value(struct most_dci_obj *dci_obj,
 		reg_addr = DRCI_REG_HW_ADDR_MI;
 	else if (!strcmp(attr->attr.name, "mep_eui48_lo"))
 		reg_addr = DRCI_REG_HW_ADDR_LO;
-	else if (!strcmp(attr->attr.name, "arb_address")) {
-		tmp_val = dci_obj->reg_addr;
-		goto show_attr;
-	}
 	else if (!strcmp(attr->attr.name, "arb_value"))
 		reg_addr = dci_obj->reg_addr;
 	else
@@ -1075,7 +1074,7 @@ static ssize_t show_value(struct most_dci_obj *dci_obj,
 	err = drci_rd_reg(dci_obj->usb_device, reg_addr, &tmp_val);
 	if (err < 0)
 		return err;
-show_attr:
+
 	return snprintf(buf, PAGE_SIZE, "%04x\n", tmp_val);
 }
 
@@ -1090,6 +1089,11 @@ static ssize_t store_value(struct most_dci_obj *dci_obj,
 	err = kstrtou16(buf, 16, &val);
 	if (err)
 		return err;
+
+	if (!strcmp(attr->attr.name, "arb_address")) {
+		dci_obj->reg_addr = val;
+		return count;
+	}
 
 	if (!strcmp(attr->attr.name, "mep_filter"))
 		reg_addr = DRCI_REG_MEP_FILTER;
@@ -1107,10 +1111,6 @@ static ssize_t store_value(struct most_dci_obj *dci_obj,
 		reg_addr = DRCI_REG_HW_ADDR_MI;
 	else if (!strcmp(attr->attr.name, "mep_eui48_lo"))
 		reg_addr = DRCI_REG_HW_ADDR_LO;
-	else if (!strcmp(attr->attr.name, "arb_address")) {
-		dci_obj->reg_addr = val;
-		goto exit;
-	}
 	else if (!strcmp(attr->attr.name, "arb_value"))
 		reg_addr = dci_obj->reg_addr;
 	else if (!strcmp(attr->attr.name, "sync_ep")) {
@@ -1123,7 +1123,7 @@ static ssize_t store_value(struct most_dci_obj *dci_obj,
 	err = drci_wr_reg(dci_obj->usb_device, reg_addr, val);
 	if (err < 0)
 		return err;
-exit:
+
 	return count;
 }
 
