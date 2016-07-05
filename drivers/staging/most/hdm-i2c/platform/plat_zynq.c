@@ -78,6 +78,5 @@ static void __exit zynq_i2c_exit(void)
 module_init(zynq_i2c_init);
 module_exit(zynq_i2c_exit);
 
-MODULE_AUTHOR("Jain Roy Ambi <JainRoy.Ambi@microchip.com>");
 MODULE_DESCRIPTION("I2C Platform Dependent Module");
 MODULE_LICENSE("GPL");

@@ -157,6 +157,5 @@ module_init(mlb_platform_init);
 module_exit(mlb_platform_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Jain Roy Ambi <JainRoy.Ambi@microchip.com>");
 MODULE_AUTHOR("Andrey Shvetsov <andrey.shvetsov@k2l.de>");
 MODULE_DESCRIPTION("IMX6Q MediaLB DIM2 Platform Device");

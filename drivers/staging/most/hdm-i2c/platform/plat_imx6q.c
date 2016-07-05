@@ -73,6 +73,5 @@ static void __exit imx6q_i2c_exit(void)
 module_init(imx6q_i2c_init);
 module_exit(imx6q_i2c_exit);
 
-MODULE_AUTHOR("Jain Roy Ambi <JainRoy.Ambi@microchip.com>");
 MODULE_DESCRIPTION("I2C Platform Dependent Module");
 MODULE_LICENSE("GPL");
