@@ -81,88 +81,86 @@ static struct dim2_arwen_platform_data arwen_pdata = {
 
 static int dim2_dt_probe(struct platform_device *pdev_dt)
 {
-    struct platform_device *pdev;
-    const struct of_device_id *match;
-    struct resource res[2];
-    int ret;
-    int rc = 0;
+	struct platform_device *pdev;
+	const struct of_device_id *match;
+	struct resource res[2];
+	int ret;
+	int rc = 0;
 
-    //memset(res, 0, sizeof(res));
+	//memset(res, 0, sizeof(res));
 
-    match = of_match_device(dim2_arwen_dt_ids, &pdev_dt->dev);
+	match = of_match_device(dim2_arwen_dt_ids, &pdev_dt->dev);
 
-    if (!match)
-    {
-            pr_err("Could not find drivers node in device tree \n");
-            ret = -EINVAL;
-            goto out;
-    }
-	
-    rc = of_address_to_resource(pdev_dt->dev.of_node, 0, &res[0]);
-    if (rc) {
-	  
-	  pr_err("Could not read dim register address from device tree\n");
-	  ret = -EFAULT;
-	  goto out;
-    }
+	if (!match) {
+		pr_err("Could not find drivers node in device tree \n");
+		ret = -EINVAL;
+		goto out;
+	}
 
-    pr_info("Found MLB3 Pin IP at address %x\n",res[0].start);
+	rc = of_address_to_resource(pdev_dt->dev.of_node, 0, &res[0]);
+	if (rc) {
+
+		pr_err("Could not read dim register address from device tree\n");
+		ret = -EFAULT;
+		goto out;
+	}
+
+	pr_info("Found MLB3 Pin IP at address %x\n", res[0].start);
 
 
-    if (!of_irq_to_resource(pdev_dt->dev.of_node, 0, &res[1])) {
-	   pr_err("Could not read interrupt number from device tree\n");
-	  ret = -EFAULT;
-	  goto out;
-    }
+	if (!of_irq_to_resource(pdev_dt->dev.of_node, 0, &res[1])) {
+		pr_err("Could not read interrupt number from device tree\n");
+		ret = -EFAULT;
+		goto out;
+	}
 
-    pr_info("Found interrupt number %d for MLB3 Pin IP\n",res[1].start);
-    // struct resource res[] = {
-            // {
-                    // .start	= MLB_IOREG_BASE,
-                    // .end	= MLB_IOREG_END,
-                    // .flags	= IORESOURCE_MEM,
-            // },
-            // {
-                    // .start	= MLB_AHB0_INT,
-                    // .end	= MLB_AHB0_INT,
-                    // .flags	= IORESOURCE_IRQ,
-            // },
-    // };
+	pr_info("Found interrupt number %d for MLB3 Pin IP\n", res[1].start);
+	// struct resource res[] = {
+	// {
+	// .start	= MLB_IOREG_BASE,
+	// .end	= MLB_IOREG_END,
+	// .flags	= IORESOURCE_MEM,
+	// },
+	// {
+	// .start	= MLB_AHB0_INT,
+	// .end	= MLB_AHB0_INT,
+	// .flags	= IORESOURCE_IRQ,
+	// },
+	// };
 
-    if (arwen_pdata.pdev)
-    {
-            return -ENOMEM;
-    }
+	if (arwen_pdata.pdev) {
+		return -ENOMEM;
+	}
 
-    pdev = platform_device_alloc("medialb_dim2", 0);
-    if (!pdev) {
-            pr_err("Failed to allocate platform device\n");
-            ret = -ENOMEM;
-            goto out;
-    }
+	pdev = platform_device_alloc("medialb_dim2", 0);
+	if (!pdev) {
+		pr_err("Failed to allocate platform device\n");
+		ret = -ENOMEM;
+		goto out;
+	}
 
-    ret = platform_device_add_resources(pdev, res, ARRAY_SIZE(res));
-    if (ret) {
-            pr_err("Failed to add resources\n");
-            goto out_free_pdev;
-    }
+	ret = platform_device_add_resources(pdev, res, ARRAY_SIZE(res));
+	if (ret) {
+		pr_err("Failed to add resources\n");
+		goto out_free_pdev;
+	}
 
-    arwen_pdata.pdev = pdev;
-    arwen_pdata.dev = &pdev_dt->dev;
-    ret = platform_device_add_data(pdev, &arwen_pdata.pdata,
-                                   sizeof arwen_pdata.pdata);
-    if (ret) {
-            pr_err("Failed to add platform data\n");
-            goto out_free_pdev;
-    }
+	arwen_pdata.pdev = pdev;
+	arwen_pdata.dev = &pdev_dt->dev;
+	ret = platform_device_add_data(pdev, &arwen_pdata.pdata,
+				       sizeof arwen_pdata.pdata);
+	if (ret) {
+		pr_err("Failed to add platform data\n");
+		goto out_free_pdev;
+	}
 
-    ret = platform_device_add(pdev);
-    if (ret) {
-            pr_err("Failed to add platform device\n");
-            goto out_free_pdev;
-    }
+	ret = platform_device_add(pdev);
+	if (ret) {
+		pr_err("Failed to add platform device\n");
+		goto out_free_pdev;
+	}
 
-    return 0;
+	return 0;
 
 out_free_pdev:
 	platform_device_put(pdev);

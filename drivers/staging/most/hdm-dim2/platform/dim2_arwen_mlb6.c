@@ -82,45 +82,43 @@ static int dim2_dt_probe(struct platform_device *pdev_dt)
 	//memset(res, 0, sizeof(res));
 
 	match = of_match_device(dim2_arwen_dt_ids, &pdev_dt->dev);
-	
-	if (!match)
-	{
+
+	if (!match) {
 		pr_err("Could not find drivers node in device tree \n");
 		ret = -EINVAL;
 		goto out;
 	}
-	
-    rc = of_address_to_resource(pdev_dt->dev.of_node, 0, &res[0]);
-    if (rc) {
-	  
-	  pr_err("Could not read dim register address from device tree\n");
-	  ret = -EFAULT;
-	  goto out;
-    }
 
-    pr_info("Found MLB6 Pin IP at address %x\n",res[0].start);
-    
-    if (!of_irq_to_resource(pdev_dt->dev.of_node, 0, &res[1])) {
-	  pr_err("Could not read interrupt number from device tree\n");
-	  ret = -EFAULT;
-	  goto out;
-    }
-    pr_info("Found interrupt number %d for MLB6 Pin IP\n",res[1].start);
+	rc = of_address_to_resource(pdev_dt->dev.of_node, 0, &res[0]);
+	if (rc) {
+
+		pr_err("Could not read dim register address from device tree\n");
+		ret = -EFAULT;
+		goto out;
+	}
+
+	pr_info("Found MLB6 Pin IP at address %x\n", res[0].start);
+
+	if (!of_irq_to_resource(pdev_dt->dev.of_node, 0, &res[1])) {
+		pr_err("Could not read interrupt number from device tree\n");
+		ret = -EFAULT;
+		goto out;
+	}
+	pr_info("Found interrupt number %d for MLB6 Pin IP\n", res[1].start);
 	// struct resource res[] = {
-		// {
-			// .start	= MLB_IOREG_BASE,
-			// .end	= MLB_IOREG_END,
-			// .flags	= IORESOURCE_MEM,
-		// },
-		// {
-			// .start	= MLB_AHB0_INT,
-			// .end	= MLB_AHB0_INT,
-			// .flags	= IORESOURCE_IRQ,
-		// },
+	// {
+	// .start	= MLB_IOREG_BASE,
+	// .end	= MLB_IOREG_END,
+	// .flags	= IORESOURCE_MEM,
+	// },
+	// {
+	// .start	= MLB_AHB0_INT,
+	// .end	= MLB_AHB0_INT,
+	// .flags	= IORESOURCE_IRQ,
+	// },
 	// };
 
-	if (arwen_pdata.pdev)
-	{
+	if (arwen_pdata.pdev) {
 		return -ENOMEM;
 	}
 

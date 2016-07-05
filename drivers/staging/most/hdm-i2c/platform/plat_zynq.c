@@ -44,7 +44,7 @@ static int __init zynq_i2c_init(void)
 	}
 
 	glue_logic_node = of_find_compatible_node(NULL, NULL,
-			  "xlnx,axi4-glue-logic-1.01.a");
+						  "xlnx,axi4-glue-logic-1.01.a");
 	if (!glue_logic_node) {
 		pr_err("Cannot find glue_logic module\n");
 		goto error;
