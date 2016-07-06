@@ -1,0 +1,26 @@
+backoprt: networking: ether_addr_copy
+
+From: Christian Gromm <christian.gromm@microchip.com>
+
+
+diff --git a/drivers/staging/most/aim-network/networking.c b/drivers/staging/most/aim-network/networking.c
+--- a/aim-network/networking.c
++++ b/aim-network/networking.c
+@@ -468,7 +468,7 @@ static int aim_rx_data(struct mbo *mbo)
+ 
+ 	if (nd->is_mamac) {
+ 		/* dest */
+-		ether_addr_copy(skb_put(skb, ETH_ALEN), dev->dev_addr);
++		memcpy(skb_put(skb, ETH_ALEN), dev->dev_addr, ETH_ALEN);
+ 
+ 		/* src */
+ 		memcpy(skb_put(skb, 4), &zero, 4);
+@@ -560,7 +560,7 @@ void most_deliver_netinfo(struct most_interface *iface,
+ 		return;
+ 
+ 	if (mac_addr)
+-		ether_addr_copy(dev->dev_addr, mac_addr);
++		memcpy(dev->dev_addr, mac_addr, ETH_ALEN);
+ 
+ 	if (nd->link_stat != link_stat) {
+ 		nd->link_stat = link_stat;
