@@ -1,11 +1,11 @@
-backoprt: networking: ether_addr_copy
+backport: networking: ether_addr_copy
 
 From: Christian Gromm <christian.gromm@microchip.com>
 
 
 diff --git a/drivers/staging/most/aim-network/networking.c b/drivers/staging/most/aim-network/networking.c
---- a/aim-network/networking.c
-+++ b/aim-network/networking.c
+--- a/drivers/staging/most/aim-network/networking.c
++++ b/drivers/staging/most/aim-network/networking.c
 @@ -468,7 +468,7 @@ static int aim_rx_data(struct mbo *mbo)
  
  	if (nd->is_mamac) {
