@@ -1,69 +1,99 @@
 #!/bin/bash
+#
+# This script fetches README, example Makefile and all relevant sources of the
+# MOST Linux Driver from the github repository.
+#
+# Usage:
+#   ./fetch-mld.bash [<TAG>]
+#
+# The optional <TAG> here is the git tag of the MOST Linux Driver, such as
+# mchp-dev or mld-1.3.12.  The default value for <TAG> is mchp-dev, that is the
+# development state of the MOST Linux Driver.
+#
+
 set -o nounset
 set -o errexit
 
-TAG=${MLD_TAG:-mchp-dev}
+TAG=${1:-${MLD_TAG:-mchp-dev}}
 PRJ=https://raw.githubusercontent.com/microchip-ais/linux
 
+_err() {
+	echo "$@" >&2
+	exit 1
+}
+
 _get_file() {
-	local SRC=$1
-	local DST=$2
+	local SRC=${PRJ}/${TAG}/$1
+	local DST=./$2
 	echo "wget ${SRC} ..."
 	mkdir -p "$(echo "${DST}" |sed -r "s,/[^/]+$,,")"
-	wget --quiet -O "${DST}" "${SRC}" || (echo "  FAILED"; exit 1)
+	wget --quiet -O "${DST}" "${SRC}" || _err "  FAILED"
+}
+
+get_if_missing() {
+	[[ -e "$1" ]] || _get_file "mld/$1" "$1"
 }
 
 get_src() {
-	_get_file "${PRJ}/${TAG}/drivers/staging/most/$1" ".src/$1"
+	_get_file "drivers/staging/most/$1" ".src/$1"
 }
 
 get_patch() {
-	_get_file "${PRJ}/${TAG}/mld/patches/$1" ".patches/$1"
+	_get_file "mld/patches/$1" ".patches/$1"
 }
 
 patch_mld() {
-	cat "./.patches/$1" |patch --force -p4 -d .src || (echo "  FAILED"; exit 1)
+	cat "./.patches/$1" |patch --force -p4 -d .src || _err "  FAILED"
 }
 
-rm -rf .src .patches
+main() {
+	which wget >/dev/null || _err "ERR: wget is not installed"
 
-get_src Documentation/ABI/sysfs-class-most.txt
-get_src Documentation/driver_usage.txt
-get_src aim-cdev/cdev.c
-get_src aim-network/networking.c
-get_src aim-network/networking.h
-get_src aim-sound/sound.c
-get_src aim-v4l2/video.c
-get_src hdm-dim2/dim2_errors.h
-get_src hdm-dim2/dim2_hal.c
-get_src hdm-dim2/dim2_hal.h
-get_src hdm-dim2/dim2_hdm.c
-get_src hdm-dim2/dim2_hdm.h
-get_src hdm-dim2/dim2_reg.h
-get_src hdm-dim2/dim2_sysfs.c
-get_src hdm-dim2/dim2_sysfs.h
-get_src hdm-dim2/platform/dim2_arwen_mlb3.c
-get_src hdm-dim2/platform/dim2_arwen_mlb6.c
-get_src hdm-dim2/platform/dim2_h2_dt.c
-get_src hdm-dim2/platform/dim2_mx6q.c
-get_src hdm-dim2/platform/dim2_mx6q_dt.c
-get_src hdm-dim2/platform/dim2_zynq_3p.c
-get_src hdm-dim2/platform/dim2_zynq_6p.c
-get_src hdm-i2c/hdm_i2c.c
-get_src hdm-i2c/platform/plat_imx6q.c
-get_src hdm-i2c/platform/plat_zynq.c
-get_src hdm-usb/hdm_usb.c
-get_src mostcore/core.c
-get_src mostcore/mostcore.h
+	rm -rf .src .patches
+	
+	get_if_missing README
+	get_if_missing Makefile
+	
+	get_src Documentation/ABI/sysfs-class-most.txt
+	get_src Documentation/driver_usage.txt
+	get_src aim-cdev/cdev.c
+	get_src aim-network/networking.c
+	get_src aim-network/networking.h
+	get_src aim-sound/sound.c
+	get_src aim-v4l2/video.c
+	get_src hdm-dim2/dim2_errors.h
+	get_src hdm-dim2/dim2_hal.c
+	get_src hdm-dim2/dim2_hal.h
+	get_src hdm-dim2/dim2_hdm.c
+	get_src hdm-dim2/dim2_hdm.h
+	get_src hdm-dim2/dim2_reg.h
+	get_src hdm-dim2/dim2_sysfs.c
+	get_src hdm-dim2/dim2_sysfs.h
+	get_src hdm-dim2/platform/dim2_arwen_mlb3.c
+	get_src hdm-dim2/platform/dim2_arwen_mlb6.c
+	get_src hdm-dim2/platform/dim2_h2_dt.c
+	get_src hdm-dim2/platform/dim2_mx6q.c
+	get_src hdm-dim2/platform/dim2_mx6q_dt.c
+	get_src hdm-dim2/platform/dim2_zynq_3p.c
+	get_src hdm-dim2/platform/dim2_zynq_6p.c
+	get_src hdm-i2c/hdm_i2c.c
+	get_src hdm-i2c/platform/plat_imx6q.c
+	get_src hdm-i2c/platform/plat_zynq.c
+	get_src hdm-usb/hdm_usb.c
+	get_src mostcore/core.c
+	get_src mostcore/mostcore.h
+	
+	get_patch backport__hdm-dim2__add_module_owner.patch
+	get_patch backport__hdm-i2c__add_module_owner.patch
+	get_patch backport__sound__snd_card_new.patch
+	get_patch backport__networking__alloc_netdev.patch
+	get_patch backport__networking__ether_addr_copy.patch
+	
+	patch_mld backport__hdm-dim2__add_module_owner.patch
+	patch_mld backport__hdm-i2c__add_module_owner.patch
+	# patch_mld backport__sound__snd_card_new.patch
+	# patch_mld backport__networking__alloc_netdev.patch
+	# patch_mld backport__networking__ether_addr_copy.patch
+}
 
-get_patch backport__hdm-dim2__add_module_owner.patch
-get_patch backport__hdm-i2c__add_module_owner.patch
-get_patch backport__sound__snd_card_new.patch
-get_patch backport__networking__alloc_netdev.patch
-get_patch backport__networking__ether_addr_copy.patch
-
-patch_mld backport__hdm-dim2__add_module_owner.patch
-patch_mld backport__hdm-i2c__add_module_owner.patch
-# patch_mld backport__sound__snd_card_new.patch
-# patch_mld backport__networking__alloc_netdev.patch
-# patch_mld backport__networking__ether_addr_copy.patch
+main
