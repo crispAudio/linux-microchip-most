@@ -50,10 +50,10 @@ main() {
 	which wget >/dev/null || _err "ERR: wget is not installed"
 
 	rm -rf .src .patches
-	
+
 	get_if_missing README
 	get_if_missing Makefile
-	
+
 	get_src Documentation/ABI/sysfs-class-most.txt
 	get_src Documentation/driver_usage.txt
 	get_src aim-cdev/cdev.c
@@ -82,18 +82,18 @@ main() {
 	get_src hdm-usb/hdm_usb.c
 	get_src mostcore/core.c
 	get_src mostcore/mostcore.h
-	
+
 	get_patch backport__hdm-dim2__add_module_owner.patch
 	get_patch backport__hdm-i2c__add_module_owner.patch
 	get_patch backport__sound__snd_card_new.patch
 	get_patch backport__networking__alloc_netdev.patch
 	get_patch backport__networking__ether_addr_copy.patch
-	
+	get_patch backport__hdm-dim2__devm_ioremap_resource.patch
+
+	# apply the universal patches only
+	# the rest is dependent on the kernel
 	patch_mld backport__hdm-dim2__add_module_owner.patch
 	patch_mld backport__hdm-i2c__add_module_owner.patch
-	# patch_mld backport__sound__snd_card_new.patch
-	# patch_mld backport__networking__alloc_netdev.patch
-	# patch_mld backport__networking__ether_addr_copy.patch
 }
 
 main
