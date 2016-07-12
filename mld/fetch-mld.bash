@@ -94,6 +94,12 @@ main() {
 	# the rest is dependent on the kernel
 	patch_mld backport__hdm-dim2__add_module_owner.patch
 	patch_mld backport__hdm-i2c__add_module_owner.patch
+
+	echo "add version info ..."
+	sed -i -r -e "/__init/,/return/s,\<pr_.*init.*,pr_info(\"MOST Linux Driver $TAG $(date --rfc-3339=seconds)\\\\n\");," \
+		.src/mostcore/core.c
+	grep --with-filename "MOST Linux Driver " .src/mostcore/core.c ||
+		_err "failed to set driver version info"
 }
 
 main
