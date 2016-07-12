@@ -18,8 +18,13 @@ TAG=${1:-${MLD_TAG:-mchp-dev}}
 PRJ=https://raw.githubusercontent.com/microchip-ais/linux
 
 _err() {
-	echo "$@" >&2
+	echo "  ERR: $@" >&2
 	exit 1
+}
+
+_warn() {
+	echo "  WARN: $@" >&2
+	return 0
 }
 
 _get_file() {
@@ -27,7 +32,7 @@ _get_file() {
 	local DST=./$2
 	echo "wget ${SRC} ..."
 	mkdir -p "$(echo "${DST}" |sed -r "s,/[^/]+$,,")"
-	wget --quiet -O "${DST}" "${SRC}" || _err "  FAILED"
+	wget --quiet -O "${DST}" "${SRC}"
 }
 
 get_if_missing() {
@@ -35,22 +40,18 @@ get_if_missing() {
 }
 
 get_src() {
-	_get_file "drivers/staging/most/$1" ".src/$1"
+	_get_file "drivers/staging/most/$1" ".src/$1" || _err "failed"
 }
 
 get_patch() {
-	_get_file "mld/patches/$1" ".patches/$1"
+	_get_file "mld/patches/$1" ".patches/$1" || _warn "failed"
 }
 
 patch_mld() {
-	cat "./.patches/$1" |patch --force -p4 -d .src || _err "  FAILED"
+	cat "./.patches/$1" |patch --force -p4 -d .src || _err "failed"
 }
 
-main() {
-	which wget >/dev/null || _err "ERR: wget is not installed"
-
-	rm -rf .src .patches
-
+local_fetch() {
 	get_if_missing README
 	get_if_missing Makefile
 
@@ -94,6 +95,23 @@ main() {
 	# the rest is dependent on the kernel
 	patch_mld backport__hdm-dim2__add_module_owner.patch
 	patch_mld backport__hdm-i2c__add_module_owner.patch
+}
+
+main() {
+	which wget >/dev/null || _err "wget is not installed"
+
+	rm -rf .src .patches
+
+	if _get_file "mld/fetch-mld.bash" ".fetch"; then
+		cat .fetch |while read x y; do
+			case $x in
+			(get_if_missing|get_src|get_patch) $x "$y";;
+			esac
+		done
+	else
+		echo "file not found, try to fetch using the local fetch function"
+		local_fetch
+	fi
 
 	echo "add version info ..."
 	sed -i -r -e "/__init/,/return/s,\<pr_.*init.*,pr_info(\"MOST Linux Driver $TAG $(date --rfc-3339=seconds)\\\\n\");," \
