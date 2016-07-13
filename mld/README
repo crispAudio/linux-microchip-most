@@ -10,13 +10,9 @@ Folow the instructions below to get the needed MOST Linux Driver version:
 
   $ mkdir mchp-mld
   $ cd mchp-mld
-
-  $ wget https://raw.githubusercontent.com/microchip-ais/linux/$VER/mld/README
-  $ wget https://raw.githubusercontent.com/microchip-ais/linux/$VER/mld/Makefile
   $ wget https://raw.githubusercontent.com/microchip-ais/linux/$VER/mld/fetch-mld.bash
-
   $ chmod +x fetch-mld.bash
-  $ MLD_TAG=$VER ./fetch-mld.bash
+  $ ./fetch-mld.bash $VER
 
 At the end of this procedure you will find the directory .src with all needed
 sources and the directory .patches with the backport patches needed to build
