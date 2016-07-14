@@ -1,11 +1,11 @@
 
-                 I2S Hardware Dependent Module(HDM) - 0.4.0
+                 I2S Hardware Dependent Module(HDM) - 0.5.0
                  ==========================================
 
 History of Changes
 ==================
-
-    0.4.0  Moved user configurable parameters from debugfs to standard mostcore path
+    0.5.0  Reworked interrupt handling, changed sysfs values to ASCII
+    0.4.0  Moved user configurable parameters from debugfs to standard mostcore path  
     0.3.1  Improved compatibility with mostcore API
     0.3.0  Adapted for Mostcore version 4.0.7
     0.2.0  Adapted for Mostcore version 4.0.4
@@ -22,8 +22,10 @@ Module Description
 
         1.README         - This file
         2.Makefile       - Kernel modules make file
-        3.hdm_i2s.c      - HDM
-        4.hdm_i2s.h      - Header file
+        3.i2s_hdm.c      - HDM
+        4.i2s_hdm.h      - Header file
+        3.i2s_clkgen.c   - I2S Clockgen Configuration
+        4.i2s_hdm.h      - Header file
         5.configure.sh   - A script to configure I2S parameters
 
 
@@ -75,28 +77,57 @@ This module builds a sysfs infrastructure to configure the I2S interface:
 
     # find /sys/devices/virtual/most/mostcore/devices/mdev1/bus -printf "%M %p\n"
     drwxr-xr-x /sys/devices/virtual/most/mostcore/devices/mdev1/bus
-    -rw-rw-rw- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/port_a_enable
-    -rw-rw-rw- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/port_a_clock_speed
-    -rw-rw-rw- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/port_a_clock_mode
-    -rw-rw-rw- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/clock_source
-    -rw-rw-rw- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/port_a_data_format
-    -rw-rw-rw- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/bus_enable
-    -rw-rw-rw- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/port_b_clock_mode
-    -rw-rw-rw- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/dcm_clock_multiplier
-    -rw-rw-rw- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/port_b_enable
-    -rw-rw-rw- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/port_b_clock_speed
-    -rw-rw-rw- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/dcm_clock_divider
-    -rw-rw-rw- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/ch0_bpf
-    -rw-rw-rw- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/ch1_bpf
-    -rw-rw-rw- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/ch2_bpf
-    -rw-rw-rw- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/ch3_bpf
-    -rw-rw-rw- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/ch4_bpf
-    -rw-rw-rw- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/ch5_bpf
-    -rw-rw-rw- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/ch6_bpf
-    -rw-rw-rw- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/ch7_bpf
-    -rw-rw-rw- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/port_b_data_format
+    -rw-rw-r-- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/bus_enable
+    -rw-rw-r-- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/clock_source
+    -rw-rw-r-- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/port_a_enable
+    -rw-rw-r-- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/port_a_clock_speed
+    -rw-rw-r-- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/port_a_clock_mode
+    -rw-rw-r-- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/port_a_data_format
+    -rw-rw-r-- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/port_b_clock_mode
+    -rw-rw-r-- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/port_b_enable
+    -rw-rw-r-- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/port_b_clock_speed
+    -rw-rw-r-- /sys/devices/virtual/most/mostcore/devices/mdev1/bus/port_b_data_format
 
+ Supported Values (without the ""):
+    bus_enable: "1" - for enable
+                "0" - for disable
+    
+    clock_source:   "phy1_rmck0" - for phy1 rmck0 as clock source
+                    "phy1_rmck1" - for phy1 rmck1 as clock source      
+                    "phy2_rmck0" - for phy2 rmck2 as clock source      
+                    "phy2_rmck1" - for phy2 rmck1 as clock source      
+                    "dbg_clk"    - for dbg_clk as clock source      
+                    "osc1_clk"   - for osc1_clk as clock source      
+                    "osc2_clk"   - for osc2_clk as clock source      
+                    "osc3_clk"   - for osc3_clk as clock source      
 
+    port_N_enable:  1 - for enable
+                    0 - for disable    
+
+    -- Maximum data rate:= clock_speed*frame_rate [Bits]
+    -- Example: 512fs means max 512 bits per frame => 64byte per frame
+    port_N_clock_speed: "8fs"  - 8*frame_rate (typical 48kHz)
+                        "16fs" - 16*frame_rate (typical 48kHz)      
+                        "32fs" - 32*frame_rate (typical 48kHz)      
+                        "64fs" - 64*frame_rate (typical 48kHz)      
+                        "128fs"- 128*frame_rate (typical 48kHz)        
+                        "256fs"- 256*frame_rate (typical 48kHz)        
+                        "512fs"- 512*frame_rate (typical 48kHz)        
+
+    port_N_clock_mode:  "master" - IP is driving I2S clock
+                        "slave"  - External I2S clock driver  
+
+    port_N_data_format:  "delayed"       - data is delayed by one clock
+                         "delayed_seq"   - sequential data delayed by one clock   
+                         "seq"           - sequential data alignment      
+                         "left_mono"     - data is left aligned, mono 
+                         "left_stereo"   - data is left aligned, stereo
+                         "right_mono"    - data is right aligned, mono 
+                         "right_stereo"  - data is right aligned, stereo    
+
+  
+                  
+      
 "configure.sh" script contains the supported values for all parameters.
 The script also contains some example configurations.
 
@@ -124,7 +155,7 @@ To configure a specific configuration run the script as,
     seq_512fs
 
     Important Note: The application must configure the buffer size as 2044 bytes
-
+    
 Testing
 =======
 
@@ -133,21 +164,21 @@ Testing
 
     HDM was tested with 4 bytes stereo audio using the following setup,
 
-        Audio In
-          Optolyzer
+        Audio In 
+          Optolyzer 
             MOST Network
-              INIC on MSP (OS81110)
-                I2S IP on MSP
-                  I2S HDM
-                    Mostcore
-                      Loop-back application
-                    Mostcore
-                  I2S HDM
-                I2S IP on MSP
-              INIC on MSP (OS81110)
+              INIC on MSP (OS81110) 
+                I2S IP on MSP 
+                  I2S HDM 
+                    Mostcore 
+                      Loop-back application 
+                    Mostcore 
+                  I2S HDM 
+                I2S IP on MSP 
+              INIC on MSP (OS81110) 
             MOST Network
-          Optolyzer
-        Audio Out
+          Optolyzer 
+        Audio Out 
 
 
     Tested Formats are (supported by OS81110),
@@ -165,17 +196,16 @@ Testing
 
     HDM was tested for different frame size (4, 8, 16, 32, 64) using the following setup,
 
-        Test application (TX Thread)
-          Mostcore
-            I2S HDM
+        Test application (TX Thread) 
+          Mostcore 
+            I2S HDM 
               MOST Network
-                I2S IP on MSP (TX Channel)
-                  INIC on MSP (OS81110)
+                I2S IP on MSP (TX Channel) 
+                  INIC on MSP (OS81110) 
                     Loop-back Socket Connection
-                  INIC on MSP (OS81110)
-                I2S IP on MSP (RX Channel)
+                  INIC on MSP (OS81110) 
+                I2S IP on MSP (RX Channel) 
               MOST Network
-            I2S HDM
-          Mostcore
-        Test application (RX Thread)
-
+            I2S HDM 
+          Mostcore 
+        Test application (RX Thread) 
