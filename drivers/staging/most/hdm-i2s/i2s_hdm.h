@@ -1,21 +1,14 @@
 /*
- * hdm_i2s.h - I2S HDM Header
+ * i2s_hdm.h - I2S HDM Header
  *
  * Copyright (C) 2015, Microchip Technology Germany II GmbH & Co. KG
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ * This file is licensed under GPLv2.
  */
 
 #ifndef I2S_HDM_H
@@ -91,38 +84,37 @@
 #define I2S_REG_CLK_128FS    0x00100000  /* 128 Clock Cycles per Frame */
 #define I2S_REG_CLK_256FS    0x00140000  /* 256 Clock Cycles per Frame */
 #define I2S_REG_CLK_512FS    0x00180000  /* 512 Clock Cycles per Frame */
-            
-enum i2s_clk_mode{
-    I2S_CLKMODE_UDEF        = UNDEFINED,                 /* Undefined*/
-    I2S_CLKMODE_MASTER      = I2S_REG_CLKMODE_MASTER,    /* IP is Clock Master */
-    I2S_CLKMODE_SLAVE       = I2S_REG_CLKMODE_SLAVE,     /* IP is Clock Slave*/
+
+enum i2s_clk_mode {
+	I2S_CLKMODE_UDEF        = UNDEFINED,                 /* Undefined*/
+	I2S_CLKMODE_MASTER      = I2S_REG_CLKMODE_MASTER,    /* IP is Clock Master */
+	I2S_CLKMODE_SLAVE       = I2S_REG_CLKMODE_SLAVE,     /* IP is Clock Slave*/
 };
 
 
-enum i2s_clk_speed{
-    I2S_CLK_UDEF   = UNDEFINED,             /* Undefined*/
-    I2S_CLK_8FS    = I2S_REG_CLK_8FS,       /* 8 Clock Cycles per Frame (typ. 8*48 kHz)*/
-    I2S_CLK_16FS   = I2S_REG_CLK_16FS,      /* 16 Clock Cycles per Frame (typ. 16*48 kHz)*/
-    I2S_CLK_32FS   = I2S_REG_CLK_32FS,      /* 32 Clock Cycles per Frame (typ. 32*48 kHz)*/
-    I2S_CLK_64FS   = I2S_REG_CLK_64FS,      /* 64 Clock Cycles per Frame (typ. 64*48 kHz)*/
-    I2S_CLK_128FS  = I2S_REG_CLK_128FS,     /* 128 Clock Cycles per Frame (typ. 128*48 kHz)*/
-    I2S_CLK_256FS  = I2S_REG_CLK_256FS,     /* 256 Clock Cycles per Frame (typ. 256*48 kHz)*/
-    I2S_CLK_512FS  = I2S_REG_CLK_512FS,     /* 512 Clock Cycles per Frame (typ. 512*48 kHz)*/
+enum i2s_clk_speed {
+	I2S_CLK_UDEF   = UNDEFINED,             /* Undefined*/
+	I2S_CLK_8FS    = I2S_REG_CLK_8FS,       /* 8 Clock Cycles per Frame (typ. 8*48 kHz)*/
+	I2S_CLK_16FS   = I2S_REG_CLK_16FS,      /* 16 Clock Cycles per Frame (typ. 16*48 kHz)*/
+	I2S_CLK_32FS   = I2S_REG_CLK_32FS,      /* 32 Clock Cycles per Frame (typ. 32*48 kHz)*/
+	I2S_CLK_64FS   = I2S_REG_CLK_64FS,      /* 64 Clock Cycles per Frame (typ. 64*48 kHz)*/
+	I2S_CLK_128FS  = I2S_REG_CLK_128FS,     /* 128 Clock Cycles per Frame (typ. 128*48 kHz)*/
+	I2S_CLK_256FS  = I2S_REG_CLK_256FS,     /* 256 Clock Cycles per Frame (typ. 256*48 kHz)*/
+	I2S_CLK_512FS  = I2S_REG_CLK_512FS,     /* 512 Clock Cycles per Frame (typ. 512*48 kHz)*/
 };
 
 
-enum i2s_data_format{
-    I2S_DATA_UDEF           = UNDEFINED,    /* Undefined*/
-    I2S_DATA_SEQ            = 0x1,          /* Sequential*/
-    I2S_DATA_DEL_SEQ        = 0x2,          /* Delayed Sequential-Bit*/
-    I2S_DATA_DEL            = 0x3,          /* Delayed-Bit*/
-    I2S_DATA_LEFT_MONO      = 0x4,          /* Left Justified - Mono*/
-    I2S_DATA_LEFT_STEREO    = 0x5,          /* Left Justified - Mono*/
-    I2S_DATA_RIGHT_MONO     = 0x6,          /* Left Justified - Mono*/
-    I2S_DATA_RIGHT_STEREO   = 0x7,          /* Right Justified - Mono*/
+enum i2s_data_format {
+	I2S_DATA_UDEF           = UNDEFINED,    /* Undefined*/
+	I2S_DATA_SEQ            = 0x1,          /* Sequential*/
+	I2S_DATA_DEL_SEQ        = 0x2,          /* Delayed Sequential-Bit*/
+	I2S_DATA_DEL            = 0x3,          /* Delayed-Bit*/
+	I2S_DATA_LEFT_MONO      = 0x4,          /* Left Justified - Mono*/
+	I2S_DATA_LEFT_STEREO    = 0x5,          /* Left Justified - Mono*/
+	I2S_DATA_RIGHT_MONO     = 0x6,          /* Left Justified - Mono*/
+	I2S_DATA_RIGHT_STEREO   = 0x7,          /* Right Justified - Mono*/
 };
 
 
 
-#endif	/* I2S_HDM_H */
-
+#endif

@@ -1,5 +1,5 @@
 # Makefile
-# 
+#
 
 obj-m := hdm_i2s.o
 
