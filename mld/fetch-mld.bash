@@ -92,7 +92,7 @@ local_fetch() {
 	get_patch backport__hdm-dim2__devm_ioremap_resource.patch
 
 	# apply the universal patches only
-	# the rest is dependent on the kernel
+	# the rest depends on your kernel
 	patch_mld backport__hdm-dim2__add_module_owner.patch
 	patch_mld backport__hdm-i2c__add_module_owner.patch
 }
@@ -105,7 +105,7 @@ main() {
 	if _get_file "mld/fetch-mld.bash" ".fetch"; then
 		cat .fetch |while read x y; do
 			case $x in
-			(get_if_missing|get_src|get_patch) $x "$y";;
+			(get_if_missing|get_src|get_patch|patch_mld) $x "$y";;
 			esac
 		done
 	else
