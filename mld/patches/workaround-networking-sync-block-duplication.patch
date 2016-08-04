@@ -1,6 +1,6 @@
 workaround: networking: sync block duplication
 
-In the case where the DIM macro at the same time transfers an MEP data
+In the case where the DIM macro transfers at the same time an MEP data
 to the MediaLB and a synchronous stream to MediaLB or EHC, the blocks of
 the synchronous stream in a size of a half of the synchronous DBR memory
 are sporadically duplicated on corresponding side of the synchronous
@@ -16,7 +16,7 @@ the buffer size of the MBO to implement the described workaround.
 
 Application note:
 
-To compensate the degradation of the transfer rate caused by this patch
+To compensate the transfer rate degradation caused by this patch
 an application may try to use smaller asynchronous buffers for the DIM2
 HDM used to transfer MEP over the MediaLB.  In this case the MTU must be
 decreased too.  The optimal MTU and the buffer size depend on the
@@ -31,7 +31,7 @@ For example the buffer size 1522 is big enough for the common used MTU
 value 1500 and the buffer size 522 is big enough for the MTU value 500.
 
 The MTU must be the same for all interfaces of the same ethernet
-brodcast domain.
+broadcast domain.
 
 For the MTU manipulation see the "mtu" parameter of the "ifconfig" or
 "ip link".
