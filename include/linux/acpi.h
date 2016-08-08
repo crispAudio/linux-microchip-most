@@ -578,6 +578,11 @@ int acpi_reconfig_notifier_unregister(struct notifier_block *nb);
 
 struct fwnode_handle;
 
+static inline bool acpi_dev_found(const char *hid)
+{
+	return false;
+}
+
 static inline bool is_acpi_node(struct fwnode_handle *fwnode)
 {
 	return false;
@@ -601,6 +606,12 @@ static inline bool is_acpi_data_node(struct fwnode_handle *fwnode)
 static inline struct acpi_data_node *to_acpi_data_node(struct fwnode_handle *fwnode)
 {
 	return NULL;
+}
+
+static inline bool acpi_data_node_match(struct fwnode_handle *fwnode,
+					const char *name)
+{
+	return false;
 }
 
 static inline struct fwnode_handle *acpi_fwnode_handle(struct acpi_device *adev)
@@ -686,6 +697,14 @@ static inline bool acpi_driver_match_device(struct device *dev,
 					    const struct device_driver *drv)
 {
 	return false;
+}
+
+static inline union acpi_object *acpi_evaluate_dsm(acpi_handle handle,
+						   const u8 *uuid,
+						   int rev, int func,
+						   union acpi_object *argv4)
+{
+	return NULL;
 }
 
 static inline int acpi_device_uevent_modalias(struct device *dev,

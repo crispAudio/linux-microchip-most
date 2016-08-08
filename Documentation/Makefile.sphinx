@@ -38,9 +38,10 @@ ALLSPHINXOPTS   = -D version=$(KERNELVERSION) -D release=$(KERNELRELEASE) -d $(B
 I18NSPHINXOPTS  = $(PAPEROPT_$(PAPER)) $(SPHINXOPTS) .
 
 quiet_cmd_sphinx = SPHINX  $@
-      cmd_sphinx = $(SPHINXBUILD) -b $2 $(ALLSPHINXOPTS) $(BUILDDIR)/$2
+      cmd_sphinx = BUILDDIR=$(BUILDDIR) $(SPHINXBUILD) -b $2 $(ALLSPHINXOPTS) $(BUILDDIR)/$2
 
 htmldocs:
+	$(MAKE) BUILDDIR=$(BUILDDIR) -f $(srctree)/Documentation/media/Makefile $@
 	$(call cmd,sphinx,html)
 
 pdfdocs:
@@ -62,10 +63,11 @@ sgmldocs:
 psdocs:
 mandocs:
 installmandocs:
-cleanmediadocs:
 
 cleandocs:
 	$(Q)rm -rf $(BUILDDIR)
+
+endif # HAVE_SPHINX
 
 dochelp:
 	@echo  ' Linux kernel internal documentation in different formats (Sphinx):'
@@ -74,5 +76,3 @@ dochelp:
 	@echo  '  epubdocs        - EPUB'
 	@echo  '  xmldocs         - XML'
 	@echo  '  cleandocs       - clean all generated files'
-
-endif # HAVE_SPHINX
