@@ -660,7 +660,7 @@ static int hdm_enqueue(struct most_interface *iface, int channel,
 
 	lock = mdev->anchor_list_lock + channel;
 	spin_lock_irqsave(lock, flags);
-	usb_anchor_urb(urb, mdev->busy_urbs);
+	usb_anchor_urb(urb, &mdev->busy_urbs[channel]);
 	spin_unlock_irqrestore(lock, flags);
 
 	retval = usb_submit_urb(urb, GFP_KERNEL);
