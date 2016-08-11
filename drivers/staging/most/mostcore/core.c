@@ -83,10 +83,13 @@ struct most_inst_obj {
 static const struct {
 	int most_ch_data_type;
 	char *name;
-} ch_data_type[] = { { MOST_CH_CONTROL, "control\n" },
+} ch_data_type[] = {
+	{ MOST_CH_CONTROL, "control\n" },
 	{ MOST_CH_ASYNC, "async\n" },
 	{ MOST_CH_SYNC, "sync\n" },
-	{ MOST_CH_ISOC_AVP, "isoc_avp\n"} };
+	{ MOST_CH_ISOC_AVP, "isoc_avp\n"},
+	{ MOST_CH_ISOC_AVP, "isoc\n"},
+};
 
 #define to_inst_obj(d) container_of(d, struct most_inst_obj, kobj)
 
