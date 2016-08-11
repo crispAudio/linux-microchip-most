@@ -405,7 +405,11 @@ static ssize_t store_set_direction(struct most_c_obj *c,
 {
 	if (!strcmp(buf, "dir_rx\n")) {
 		c->cfg.direction = MOST_CH_RX;
+	} else if (!strcmp(buf, "rx\n")) {
+		c->cfg.direction = MOST_CH_RX;
 	} else if (!strcmp(buf, "dir_tx\n")) {
+		c->cfg.direction = MOST_CH_TX;
+	} else if (!strcmp(buf, "tx\n")) {
 		c->cfg.direction = MOST_CH_TX;
 	} else {
 		pr_info("WARN: invalid attribute settings\n");
