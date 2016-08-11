@@ -261,9 +261,9 @@ static ssize_t show_available_directions(struct most_c_obj *c,
 
 	strcpy(buf, "");
 	if (c->iface->channel_vector[i].direction & MOST_CH_RX)
-		strcat(buf, "dir_rx ");
+		strcat(buf, "rx ");
 	if (c->iface->channel_vector[i].direction & MOST_CH_TX)
-		strcat(buf, "dir_tx ");
+		strcat(buf, "tx ");
 	strcat(buf, "\n");
 	return strlen(buf);
 }
@@ -392,9 +392,9 @@ static ssize_t show_set_direction(struct most_c_obj *c,
 				  char *buf)
 {
 	if (c->cfg.direction & MOST_CH_TX)
-		return snprintf(buf, PAGE_SIZE, "dir_tx\n");
+		return snprintf(buf, PAGE_SIZE, "tx\n");
 	else if (c->cfg.direction & MOST_CH_RX)
-		return snprintf(buf, PAGE_SIZE, "dir_rx\n");
+		return snprintf(buf, PAGE_SIZE, "rx\n");
 	return snprintf(buf, PAGE_SIZE, "unconfigured\n");
 }
 
