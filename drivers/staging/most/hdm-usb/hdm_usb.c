@@ -201,7 +201,7 @@ static void free_anchored_buffers(struct most_dev *mdev, unsigned int channel,
 	unsigned long flags;
 
 	spin_lock_irqsave(lock, flags);
-	while (urb = usb_get_from_anchor(&mdev->busy_urbs[channel])) {
+	while ((urb = usb_get_from_anchor(&mdev->busy_urbs[channel]))) {
 		spin_unlock_irqrestore(lock, flags);
 		mbo = urb->context;
 		usb_kill_urb(urb);
