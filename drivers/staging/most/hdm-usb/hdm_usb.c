@@ -64,7 +64,6 @@
 #define DRCI_READ_REQ		0xA0
 #define DRCI_WRITE_REQ		0xA1
 
-
 /**
  * struct most_dci_obj - Direct Communication Interface
  * @kobj:position in sysfs
