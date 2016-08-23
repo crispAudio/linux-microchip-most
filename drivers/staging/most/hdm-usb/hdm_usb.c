@@ -208,7 +208,7 @@ static void free_anchored_buffers(struct most_dev *mdev, unsigned int channel,
 {
 	struct mbo *mbo;
 	struct buf_anchor *anchor, *tmp;
-	spinlock_t *lock = mdev->anchor_list_lock + channel;
+	spinlock_t *lock = mdev->anchor_list_lock + channel; /* temp. lock */
 	unsigned long flags;
 
 	spin_lock_irqsave(lock, flags);
@@ -283,7 +283,7 @@ static int hdm_poison_channel(struct most_interface *iface, int channel)
 {
 	struct most_dev *mdev = to_mdev(iface);
 	unsigned long flags;
-	spinlock_t *lock;
+	spinlock_t *lock; /* temp. lock */
 
 	if (unlikely(!iface)) {
 		dev_warn(&mdev->usb_device->dev, "Poison: Bad interface.\n");
@@ -398,7 +398,7 @@ static void hdm_write_completion(struct urb *urb)
 	struct most_dev *mdev = to_mdev(mbo->ifp);
 	unsigned int channel = mbo->hdm_channel_id;
 	struct device *dev = &mdev->usb_device->dev;
-	spinlock_t *lock = mdev->anchor_list_lock + channel;
+	spinlock_t *lock = mdev->anchor_list_lock + channel; /* temp. lock */
 	unsigned long flags;
 
 	spin_lock_irqsave(lock, flags);
@@ -555,7 +555,7 @@ static void hdm_read_completion(struct urb *urb)
 	struct most_dev *mdev = to_mdev(mbo->ifp);
 	unsigned int channel = mbo->hdm_channel_id;
 	struct device *dev = &mdev->usb_device->dev;
-	spinlock_t *lock = mdev->anchor_list_lock + channel;
+	spinlock_t *lock = mdev->anchor_list_lock + channel; /* temp. lock */
 	unsigned long flags;
 
 	spin_lock_irqsave(lock, flags);
@@ -631,7 +631,7 @@ static int hdm_enqueue(struct most_interface *iface, int channel,
 	unsigned long flags;
 	unsigned long length;
 	void *virt_address;
-	spinlock_t *lock;
+	spinlock_t *lock; /* temp. lock */
 
 	if (unlikely(!iface || !mbo))
 		return -EIO;

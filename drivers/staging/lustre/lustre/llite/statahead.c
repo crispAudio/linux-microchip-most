@@ -632,7 +632,7 @@ static void ll_post_statahead(struct ll_statahead_info *sai)
 		/* XXX: No fid in reply, this is probably cross-ref case.
 		 * SA can't handle it yet.
 		 */
-		if (body->valid & OBD_MD_MDS) {
+		if (body->mbo_valid & OBD_MD_MDS) {
 			rc = -EAGAIN;
 			goto out;
 		}
@@ -641,7 +641,7 @@ static void ll_post_statahead(struct ll_statahead_info *sai)
 		 * revalidate.
 		 */
 		/* unlinked and re-created with the same name */
-		if (unlikely(!lu_fid_eq(&minfo->mi_data.op_fid2, &body->fid1))) {
+		if (unlikely(!lu_fid_eq(&minfo->mi_data.op_fid2, &body->mbo_fid1))) {
 			entry->se_inode = NULL;
 			iput(child);
 			child = NULL;
@@ -918,7 +918,8 @@ static void ll_statahead_one(struct dentry *parent, const char *entry_name,
 
 	if (rc) {
 		rc1 = ll_sa_entry_to_stated(sai, entry,
-					rc < 0 ? SA_ENTRY_INVA : SA_ENTRY_SUCC);
+					    rc < 0 ? SA_ENTRY_INVA :
+					    SA_ENTRY_SUCC);
 		if (rc1 == 0 && entry->se_index == sai->sai_index_wait)
 			wake_up(&sai->sai_waitq);
 	} else {
@@ -1035,7 +1036,7 @@ static int ll_statahead_thread(void *arg)
 	struct ll_statahead_info *sai    = ll_sai_get(plli->lli_sai);
 	struct ptlrpc_thread     *thread = &sai->sai_thread;
 	struct ptlrpc_thread *agl_thread = &sai->sai_agl_thread;
-	struct page	      *page;
+	struct page	      *page = NULL;
 	__u64		     pos    = 0;
 	int		       first  = 0;
 	int		       rc     = 0;
@@ -1052,6 +1053,8 @@ static int ll_statahead_thread(void *arg)
 	if (IS_ERR(op_data))
 		return PTR_ERR(op_data);
 
+	op_data->op_max_pages = ll_i2sbi(dir)->ll_md_brw_pages;
+
 	if (sbi->ll_flags & LL_SBI_AGL_ENABLED)
 		ll_start_agl(parent, sai);
 
@@ -1067,7 +1070,7 @@ static int ll_statahead_thread(void *arg)
 	wake_up(&thread->t_ctl_waitq);
 
 	ll_dir_chain_init(&chain);
-	page = ll_get_dir_page(dir, pos, &chain);
+	page = ll_get_dir_page(dir, op_data, pos, &chain);
 
 	while (1) {
 		struct lu_dirpage *dp;
@@ -1142,7 +1145,7 @@ interpret_it:
 				ll_post_statahead(sai);
 
 			if (unlikely(!thread_is_running(thread))) {
-				ll_release_page(page, 0);
+				ll_release_page(dir, page, false);
 				rc = 0;
 				goto out;
 			}
@@ -1164,9 +1167,8 @@ interpret_it:
 					if (!list_empty(&sai->sai_entries_received))
 						goto interpret_it;
 
-					if (unlikely(
-						!thread_is_running(thread))) {
-						ll_release_page(page, 0);
+					if (unlikely(!thread_is_running(thread))) {
+						ll_release_page(dir, page, false);
 						rc = 0;
 						goto out;
 					}
@@ -1180,16 +1182,16 @@ interpret_it:
 
 				goto keep_it;
 			}
-
 do_it:
 			ll_statahead_one(parent, name, namelen);
 		}
+
 		pos = le64_to_cpu(dp->ldp_hash_end);
 		if (pos == MDS_DIR_END_OFF) {
 			/*
 			 * End of directory reached.
 			 */
-			ll_release_page(page, 0);
+			ll_release_page(dir, page, false);
 			while (1) {
 				l_wait_event(thread->t_ctl_waitq,
 					     !list_empty(&sai->sai_entries_received) ||
@@ -1229,14 +1231,13 @@ do_it:
 			 * chain is exhausted.
 			 * Normal case: continue to the next page.
 			 */
-			ll_release_page(page, le32_to_cpu(dp->ldp_flags) &
-					      LDF_COLLIDE);
+			ll_release_page(dir, page,
+					le32_to_cpu(dp->ldp_flags) & LDF_COLLIDE);
 			sai->sai_in_readpage = 1;
-			page = ll_get_dir_page(dir, pos, &chain);
+			page = ll_get_dir_page(dir, op_data, pos, &chain);
 			sai->sai_in_readpage = 0;
 		}
 	}
-
 out:
 	ll_finish_md_op_data(op_data);
 	if (sai->sai_agl_valid) {
@@ -1344,13 +1345,23 @@ static int is_first_dirent(struct inode *dir, struct dentry *dentry)
 {
 	struct ll_dir_chain   chain;
 	const struct qstr  *target = &dentry->d_name;
+	struct md_op_data *op_data;
 	struct page	  *page;
 	__u64		 pos    = 0;
 	int		   dot_de;
 	int		   rc     = LS_NONE_FIRST_DE;
 
+	op_data = ll_prep_md_op_data(NULL, dir, dir, NULL, 0, 0,
+				     LUSTRE_OPC_ANY, dir);
+	if (IS_ERR(op_data))
+		return PTR_ERR(op_data);
+	/**
+	 * FIXME choose the start offset of the readdir
+	 */
+	op_data->op_max_pages = ll_i2sbi(dir)->ll_md_brw_pages;
+
 	ll_dir_chain_init(&chain);
-	page = ll_get_dir_page(dir, pos, &chain);
+	page = ll_get_dir_page(dir, op_data, pos, &chain);
 
 	while (1) {
 		struct lu_dirpage *dp;
@@ -1421,7 +1432,7 @@ static int is_first_dirent(struct inode *dir, struct dentry *dentry)
 			else
 				rc = LS_FIRST_DOT_DE;
 
-			ll_release_page(page, 0);
+			ll_release_page(dir, page, false);
 			goto out;
 		}
 		pos = le64_to_cpu(dp->ldp_hash_end);
@@ -1429,21 +1440,22 @@ static int is_first_dirent(struct inode *dir, struct dentry *dentry)
 			/*
 			 * End of directory reached.
 			 */
-			ll_release_page(page, 0);
+			ll_release_page(dir, page, false);
 			goto out;
 		} else {
 			/*
 			 * chain is exhausted
 			 * Normal case: continue to the next page.
 			 */
-			ll_release_page(page, le32_to_cpu(dp->ldp_flags) &
-					      LDF_COLLIDE);
-			page = ll_get_dir_page(dir, pos, &chain);
+			ll_release_page(dir, page,
+					le32_to_cpu(dp->ldp_flags) &
+					LDF_COLLIDE);
+			page = ll_get_dir_page(dir, op_data, pos, &chain);
 		}
 	}
-
 out:
 	ll_dir_chain_fini(&chain);
+	ll_finish_md_op_data(op_data);
 	return rc;
 }
 
@@ -1598,6 +1610,7 @@ int do_statahead_enter(struct inode *dir, struct dentry **dentryp,
 					       *dentryp,
 					       PFID(ll_inode2fid(d_inode(*dentryp))),
 					       PFID(ll_inode2fid(inode)));
+					ll_intent_release(&it);
 					ll_sai_unplug(sai, entry);
 					return -ESTALE;
 				} else {

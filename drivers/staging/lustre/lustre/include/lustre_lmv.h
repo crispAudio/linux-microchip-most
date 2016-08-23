@@ -41,13 +41,38 @@ struct lmv_oinfo {
 };
 
 struct lmv_stripe_md {
-	__u32	mea_magic;
-	__u32	mea_count;
-	__u32	mea_master;
-	__u32	mea_padding;
-	char	mea_pool_name[LOV_MAXPOOLNAME];
-	struct lu_fid mea_ids[0];
+	__u32	lsm_md_magic;
+	__u32	lsm_md_stripe_count;
+	__u32	lsm_md_master_mdt_index;
+	__u32	lsm_md_hash_type;
+	__u32	lsm_md_layout_version;
+	__u32	lsm_md_default_count;
+	__u32	lsm_md_default_index;
+	char	lsm_md_pool_name[LOV_MAXPOOLNAME];
+	struct lmv_oinfo lsm_md_oinfo[0];
 };
+
+static inline bool
+lsm_md_eq(const struct lmv_stripe_md *lsm1, const struct lmv_stripe_md *lsm2)
+{
+	int idx;
+
+	if (lsm1->lsm_md_magic != lsm2->lsm_md_magic ||
+	    lsm1->lsm_md_stripe_count != lsm2->lsm_md_stripe_count ||
+	    lsm1->lsm_md_master_mdt_index != lsm2->lsm_md_master_mdt_index ||
+	    lsm1->lsm_md_hash_type != lsm2->lsm_md_hash_type ||
+	    lsm1->lsm_md_layout_version != lsm2->lsm_md_layout_version ||
+	    !strcmp(lsm1->lsm_md_pool_name, lsm2->lsm_md_pool_name))
+		return false;
+
+	for (idx = 0; idx < lsm1->lsm_md_stripe_count; idx++) {
+		if (!lu_fid_eq(&lsm1->lsm_md_oinfo[idx].lmo_fid,
+			       &lsm2->lsm_md_oinfo[idx].lmo_fid))
+			return false;
+	}
+
+	return true;
+}
 
 union lmv_mds_md;
 
@@ -63,4 +88,34 @@ static inline void lmv_free_memmd(struct lmv_stripe_md *lsm)
 {
 	lmv_unpack_md(NULL, &lsm, NULL, 0);
 }
+
+static inline void lmv1_le_to_cpu(struct lmv_mds_md_v1 *lmv_dst,
+				  const struct lmv_mds_md_v1 *lmv_src)
+{
+	int i;
+
+	lmv_dst->lmv_magic = le32_to_cpu(lmv_src->lmv_magic);
+	lmv_dst->lmv_stripe_count = le32_to_cpu(lmv_src->lmv_stripe_count);
+	lmv_dst->lmv_master_mdt_index =
+		le32_to_cpu(lmv_src->lmv_master_mdt_index);
+	lmv_dst->lmv_hash_type = le32_to_cpu(lmv_src->lmv_hash_type);
+	lmv_dst->lmv_layout_version = le32_to_cpu(lmv_src->lmv_layout_version);
+
+	for (i = 0; i < lmv_src->lmv_stripe_count; i++)
+		fid_le_to_cpu(&lmv_dst->lmv_stripe_fids[i],
+			      &lmv_src->lmv_stripe_fids[i]);
+}
+
+static inline void lmv_le_to_cpu(union lmv_mds_md *lmv_dst,
+				 const union lmv_mds_md *lmv_src)
+{
+	switch (le32_to_cpu(lmv_src->lmv_magic)) {
+	case LMV_MAGIC_V1:
+		lmv1_le_to_cpu(&lmv_dst->lmv_md_v1, &lmv_src->lmv_md_v1);
+		break;
+	default:
+		break;
+	}
+}
+
 #endif

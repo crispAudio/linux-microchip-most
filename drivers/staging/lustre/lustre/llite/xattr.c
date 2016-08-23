@@ -263,32 +263,32 @@ getxattr_nocache:
 
 		/* only detect the xattr size */
 		if (size == 0) {
-			rc = body->eadatasize;
+			rc = body->mbo_eadatasize;
 			goto out;
 		}
 
-		if (size < body->eadatasize) {
+		if (size < body->mbo_eadatasize) {
 			CERROR("server bug: replied size %u > %u\n",
-			       body->eadatasize, (int)size);
+			       body->mbo_eadatasize, (int)size);
 			rc = -ERANGE;
 			goto out;
 		}
 
-		if (body->eadatasize == 0) {
+		if (body->mbo_eadatasize == 0) {
 			rc = -ENODATA;
 			goto out;
 		}
 
 		/* do not need swab xattr data */
 		xdata = req_capsule_server_sized_get(&req->rq_pill, &RMF_EADATA,
-						     body->eadatasize);
+						     body->mbo_eadatasize);
 		if (!xdata) {
 			rc = -EFAULT;
 			goto out;
 		}
 
-		memcpy(buffer, xdata, body->eadatasize);
-		rc = body->eadatasize;
+		memcpy(buffer, xdata, body->mbo_eadatasize);
+		rc = body->mbo_eadatasize;
 	}
 
 out_xattr:
@@ -379,19 +379,11 @@ static int ll_xattr_get(const struct xattr_handler *handler,
 		if (!S_ISREG(inode->i_mode) && !S_ISDIR(inode->i_mode))
 			return -ENODATA;
 
-		if (size == 0 && S_ISDIR(inode->i_mode)) {
-			/* XXX directory EA is fix for now, optimize to save
-			 * RPC transfer
-			 */
-			rc = sizeof(struct lov_user_md);
-			goto out;
-		}
-
 		lsm = ccc_inode_lsm_get(inode);
 		if (!lsm) {
 			if (S_ISDIR(inode->i_mode)) {
-				rc = ll_dir_getstripe(inode, &lmm,
-						      &lmmsize, &request);
+				rc = ll_dir_getstripe(inode, (void **)&lmm,
+						      &lmmsize, &request, 0);
 			} else {
 				rc = -ENODATA;
 			}
@@ -491,7 +483,8 @@ ssize_t ll_listxattr(struct dentry *dentry, char *buffer, size_t size)
 		if (!ll_i2info(inode)->lli_has_smd)
 			rc2 = -1;
 	} else if (S_ISDIR(inode->i_mode)) {
-		rc2 = ll_dir_getstripe(inode, &lmm, &lmmsize, &request);
+		rc2 = ll_dir_getstripe(inode, (void **)&lmm, &lmmsize,
+				       &request, 0);
 	}
 
 	if (rc2 < 0) {

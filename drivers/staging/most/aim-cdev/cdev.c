@@ -510,7 +510,7 @@ static int __init mod_init(void)
 
 	err = alloc_chrdev_region(&aim_devno, 0, 50, "cdev");
 	if (err < 0)
-		return err;
+		goto dest_ida;
 	major = MAJOR(aim_devno);
 
 	aim_class = class_create(THIS_MODULE, "most_cdev_aim");
@@ -519,7 +519,7 @@ static int __init mod_init(void)
 		err = PTR_ERR(aim_class);
 		goto free_cdev;
 	}
-	err = most_register_aim(&cdev_aim); 
+	err = most_register_aim(&cdev_aim);
 	if (err)
 		goto dest_class;
 	return 0;
@@ -528,6 +528,8 @@ dest_class:
 	class_destroy(aim_class);
 free_cdev:
 	unregister_chrdev_region(aim_devno, 1);
+dest_ida:
+	ida_destroy(&minor_id);
 	return err;
 }
 

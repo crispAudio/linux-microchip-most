@@ -51,7 +51,7 @@ struct most_c_obj {
 	u16 channel_id;
 	bool is_poisoned;
 	struct mutex start_mutex;
-	struct mutex nq_mutex;
+	struct mutex nq_mutex; /* nq thread synchronization */
 	int is_starving;
 	struct most_interface *iface;
 	struct most_inst_obj *inst;
