@@ -26,9 +26,9 @@
 #include "../dim2_hdm.h"
 #include "../dim2_hal.h"
 
-#define MLB_IOREG_BASE  0x75C20000
-#define MLB_IOREG_END   0x75C2FFFF
-#define MLB_AHB0_INT    35
+#define DIM2_IOREG_BASE  0x75C20000
+#define DIM2_IOREG_END   0x75C2FFFF
+#define DIM2_AHB0_INT    35
 
 
 static struct platform_device *pdev;
@@ -39,13 +39,13 @@ static int __init mlb_platform_init(void)
 
 	struct resource res[] = {
 		{
-			.start	= MLB_IOREG_BASE,
-			.end	= MLB_IOREG_END,
+			.start	= DIM2_IOREG_BASE,
+			.end	= DIM2_IOREG_END,
 			.flags	= IORESOURCE_MEM,
 		},
 		{
-			.start	= MLB_AHB0_INT,
-			.end	= MLB_AHB0_INT,
+			.start	= DIM2_AHB0_INT,
+			.end	= DIM2_AHB0_INT,
 			.flags	= IORESOURCE_IRQ,
 		},
 	};

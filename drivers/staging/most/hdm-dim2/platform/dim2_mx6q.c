@@ -27,9 +27,9 @@
 #include "../dim2_hdm.h"
 #include "../dim2_hal.h"
 
-#define MLB_IOREG_BASE  0x218C000
-#define MLB_IOREG_END   0x218CFFF
-#define MLB_AHB0_INT    149
+#define DIM2_IOREG_BASE  0x218C000
+#define DIM2_IOREG_END   0x218CFFF
+#define DIM2_AHB0_INT    149
 
 #define REG_MLBPC1      0x38
 #define MLBPC1_VAL      0x888
@@ -102,13 +102,13 @@ static int __init mlb_platform_init(void)
 	struct resource res[] = {
 		{
 			.flags = IORESOURCE_MEM,
-			.start = MLB_IOREG_BASE,
-			.end = MLB_IOREG_END,
+			.start = DIM2_IOREG_BASE,
+			.end = DIM2_IOREG_END,
 		},
 		{
 			.flags = IORESOURCE_IRQ,
-			.start = MLB_AHB0_INT,
-			.end = MLB_AHB0_INT,
+			.start = DIM2_AHB0_INT,
+			.end = DIM2_AHB0_INT,
 		},
 	};
 

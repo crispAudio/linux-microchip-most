@@ -101,7 +101,7 @@ static int dim2_dt_probe(struct platform_device *pdev_dt)
 	struct resource res[2] = {};
 	int ret;
 
-	enum { AHB0_INT_IDX = 0 };
+	enum { AHB0_INT_DT_IDX = 0 };
 
 	if (pd.pdev)
 		return -ENOMEM;
@@ -112,8 +112,8 @@ static int dim2_dt_probe(struct platform_device *pdev_dt)
 		return ret;
 	}
 
-	if (!of_irq_to_resource(node, AHB0_INT_IDX, &res[1])) {
-		pr_err("failed to get irq\n");
+	if (!of_irq_to_resource(node, AHB0_INT_DT_IDX, &res[1])) {
+		pr_err("failed to get ahb0_int resource\n");
 		return -ENOENT;
 	}
 

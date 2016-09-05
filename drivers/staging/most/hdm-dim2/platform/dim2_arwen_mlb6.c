@@ -51,12 +51,12 @@ static int dim2_dt_probe(struct platform_device *pdev_dt)
 
 	rc = of_address_to_resource(pdev_dt->dev.of_node, 0, &res[0]);
 	if (rc) {
-		pr_err("Could not read dim register address from device tree\n");
+		pr_err("failed to get memory region\n");
 		return -EFAULT;
 	}
 
 	if (!of_irq_to_resource(pdev_dt->dev.of_node, 0, &res[1])) {
-		pr_err("Could not read interrupt number from device tree\n");
+		pr_err("failed to get ahb0_int resource\n");
 		return -EFAULT;
 	}
 
