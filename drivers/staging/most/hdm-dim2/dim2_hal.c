@@ -49,6 +49,8 @@
 #define DBR_SIZE  (16 * 1024) /* specified by IP */
 #define DBR_BLOCK_SIZE  (DBR_SIZE / 32 / DBR_MAP_SIZE)
 
+#define ROUND_UP_TO(x, d)  (((x) + (d) - 1) / (d) * (d))
+
 /* -------------------------------------------------------------------------- */
 /* generic helper functions and macros */
 
@@ -698,7 +700,7 @@ static u8 init_ctrl_async(struct dim_channel *ch, u8 type, u8 is_tx,
 	if (!check_channel_address(ch_address))
 		return DIM_INIT_ERR_CHANNEL_ADDRESS;
 
-	ch->dbr_size = hw_buffer_size;
+	ch->dbr_size = ROUND_UP_TO(hw_buffer_size, DBR_BLOCK_SIZE);
 	ch->dbr_addr = alloc_dbr(ch->dbr_size);
 	if (ch->dbr_addr >= DBR_SIZE)
 		return DIM_INIT_ERR_OUT_OF_MEMORY;
@@ -824,7 +826,7 @@ u8 dim_destroy_channel(struct dim_channel *ch)
 	return DIM_NO_ERROR;
 }
 
-void dim_service_irq(struct dim_channel *const *channels)
+void dim_service_ahb_int_irq(struct dim_channel *const *channels)
 {
 	bool state_changed;
 
@@ -856,10 +858,6 @@ void dim_service_irq(struct dim_channel *const *channels)
 			++ch;
 		}
 	} while (state_changed);
-
-	/* clear pending Interrupts */
-	dimcb_io_write(&g.dim2->MS0, 0);
-	dimcb_io_write(&g.dim2->MS1, 0);
 }
 
 u8 dim_service_channel(struct dim_channel *ch)

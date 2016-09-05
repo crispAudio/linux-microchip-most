@@ -85,7 +85,6 @@ struct hdm_channel {
  * @most_iface: most interface structure
  * @capabilities: an array of channel capability data
  * @io_base: I/O register base address
- * @irq_ahb0: dim2 AHB0 irq number
  * @clk_speed: user selectable (through command line parameter) clock speed
  * @netinfo_task: thread to deliver network status
  * @netinfo_waitq: waitq for the thread to sleep
@@ -100,7 +99,6 @@ struct dim2_hdm {
 	struct most_interface most_iface;
 	char name[16 + sizeof "dim2-"];
 	void __iomem *io_base;
-	unsigned int irq_ahb0;
 	int clk_speed;
 	struct task_struct *netinfo_task;
 	wait_queue_head_t netinfo_waitq;
@@ -449,7 +447,7 @@ static irqreturn_t dim2_ahb_isr(int irq, void *_dev)
 	unsigned long flags;
 
 	spin_lock_irqsave(&dim_lock, flags);
-	dim_service_irq(get_active_channels(dev, buffer));
+	dim_service_ahb_int_irq(get_active_channels(dev, buffer));
 	spin_unlock_irqrestore(&dim_lock, flags);
 
 	dim2_tasklet.data = (unsigned long)dev;
@@ -526,7 +524,7 @@ static int configure_channel(struct most_interface *most_iface, int ch_idx,
 				hdm_ch->name, buf_size, new_size);
 		spin_lock_irqsave(&dim_lock, flags);
 		hal_ret = dim_init_control(&hdm_ch->ch, is_tx, ch_addr,
-					   new_size);
+					   is_tx ? new_size * 2 : new_size);
 		break;
 	case MOST_CH_ASYNC:
 		new_size = dim_norm_ctrl_async_buffer_size(buf_size);
@@ -539,7 +537,8 @@ static int configure_channel(struct most_interface *most_iface, int ch_idx,
 			pr_warn("%s: fixed buffer size (%d -> %d)\n",
 				hdm_ch->name, buf_size, new_size);
 		spin_lock_irqsave(&dim_lock, flags);
-		hal_ret = dim_init_async(&hdm_ch->ch, is_tx, ch_addr, new_size);
+		hal_ret = dim_init_async(&hdm_ch->ch, is_tx, ch_addr,
+					 is_tx ? new_size * 2 : new_size);
 		break;
 	case MOST_CH_ISOC_AVP:
 		new_size = dim_norm_isoc_buffer_size(buf_size, sub_size);
@@ -718,6 +717,7 @@ static int dim2_probe(struct platform_device *pdev)
 	struct resource *res;
 	int ret, i;
 	struct kobject *kobj;
+	int irq;
 
 	dev = devm_kzalloc(&pdev->dev, sizeof(*dev), GFP_KERNEL);
 	if (!dev)
@@ -731,18 +731,16 @@ static int dim2_probe(struct platform_device *pdev)
 	if (IS_ERR(dev->io_base))
 		return PTR_ERR(dev->io_base);
 
-	ret = platform_get_irq(pdev, 0);
-	if (ret < 0) {
-		dev_err(&pdev->dev, "failed to get irq\n");
+	irq = platform_get_irq(pdev, 0);
+	if (irq < 0) {
+		dev_err(&pdev->dev, "failed to get ahb0_int irq\n");
 		return -ENODEV;
 	}
-	dev->irq_ahb0 = ret;
 
-	ret = devm_request_irq(&pdev->dev, dev->irq_ahb0, dim2_ahb_isr, 0,
-			       "mlb_ahb0", dev);
+	ret = devm_request_irq(&pdev->dev, irq, dim2_ahb_isr, 0,
+			       "dim2_ahb0_int", dev);
 	if (ret) {
-		dev_err(&pdev->dev, "failed to request IRQ: %d, err: %d\n",
-			dev->irq_ahb0, ret);
+		dev_err(&pdev->dev, "failed to request ahb0_int irq %d\n", irq);
 		return ret;
 	}
 	init_waitqueue_head(&dev->netinfo_waitq);

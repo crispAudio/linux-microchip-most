@@ -29,7 +29,6 @@
 #include "../dim2_hal.h"
 
 struct dim2_arwen_platform_data {
-	struct dim2_platform_data pdata;
 	struct platform_device *pdev;
 	struct device *dev;
 };
@@ -39,62 +38,34 @@ static const struct of_device_id dim2_arwen_dt_ids[] = {
 	{},
 };
 
-static int init(struct dim2_platform_data *pdata, void *io_base, int clk_speed)
-{
-	return  0;
-}
 
-static void destroy(struct dim2_platform_data *pdata)
-{
-}
-
-
-static struct dim2_arwen_platform_data arwen_pdata = {
-	.pdata = {
-		.init = init,
-		.destroy = destroy,
-		.priv = &arwen_pdata,
-	},
-};
+static struct dim2_arwen_platform_data arwen_pdata;
 
 
 static int dim2_dt_probe(struct platform_device *pdev_dt)
 {
 	struct platform_device *pdev;
-	const struct of_device_id *match;
 	struct resource res[2];
 	int ret;
 	int rc;
 
-	match = of_match_device(dim2_arwen_dt_ids, &pdev_dt->dev);
-	if (!match) {
-		pr_err("Could not find drivers node in device tree \n");
-		return -EINVAL;
-	}
-
 	rc = of_address_to_resource(pdev_dt->dev.of_node, 0, &res[0]);
 	if (rc) {
-		pr_err("Could not read dim register address from device tree\n");
+		pr_err("failed to get memory region\n");
 		return -EFAULT;
 	}
-
-	pr_info("Found MLB6 Pin IP at address %x\n", res[0].start);
 
 	if (!of_irq_to_resource(pdev_dt->dev.of_node, 0, &res[1])) {
-		pr_err("Could not read interrupt number from device tree\n");
+		pr_err("failed to get ahb0_int resource\n");
 		return -EFAULT;
 	}
-
-	pr_info("Found interrupt number %d for MLB6 Pin IP\n", res[1].start);
 
 	if (arwen_pdata.pdev)
 		return -ENOMEM;
 
 	pdev = platform_device_alloc("medialb_dim2", 0);
-	if (!pdev) {
-		pr_err("Failed to allocate platform device\n");
+	if (!pdev)
 		return -ENOMEM;
-	}
 
 	ret = platform_device_add_resources(pdev, res, ARRAY_SIZE(res));
 	if (ret) {
@@ -104,12 +75,6 @@ static int dim2_dt_probe(struct platform_device *pdev_dt)
 
 	arwen_pdata.pdev = pdev;
 	arwen_pdata.dev = &pdev_dt->dev;
-	ret = platform_device_add_data(pdev, &arwen_pdata.pdata,
-				       sizeof arwen_pdata.pdata);
-	if (ret) {
-		pr_err("Failed to add platform data\n");
-		goto out_free_pdev;
-	}
 
 	ret = platform_device_add(pdev);
 	if (ret) {
