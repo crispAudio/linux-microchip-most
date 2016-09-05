@@ -71,23 +71,17 @@ static int dim2_dt_probe(struct platform_device *pdev_dt)
 		return -EFAULT;
 	}
 
-	pr_info("Found MLB3 Pin IP at address %x\n", res[0].start);
-
 	if (!of_irq_to_resource(pdev_dt->dev.of_node, 0, &res[1])) {
 		pr_err("Could not read interrupt number from device tree\n");
 		return -EFAULT;
 	}
 
-	pr_info("Found interrupt number %d for MLB3 Pin IP\n", res[1].start);
-
 	if (arwen_pdata.pdev)
 		return -ENOMEM;
 
 	pdev = platform_device_alloc("medialb_dim2", 0);
-	if (!pdev) {
-		pr_err("Failed to allocate platform device\n");
+	if (!pdev)
 		return -ENOMEM;
-	}
 
 	ret = platform_device_add_resources(pdev, res, ARRAY_SIZE(res));
 	if (ret) {
