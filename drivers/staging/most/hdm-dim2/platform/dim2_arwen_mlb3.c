@@ -29,7 +29,6 @@
 #include "../dim2_hal.h"
 
 struct dim2_arwen_platform_data {
-	struct dim2_platform_data pdata;
 	struct platform_device *pdev;
 	struct device *dev;
 };
@@ -39,23 +38,8 @@ static const struct of_device_id dim2_arwen_dt_ids[] = {
 	{},
 };
 
-static int init(struct dim2_platform_data *pdata, void *io_base, int clk_speed)
-{
-	return  0;
-}
 
-static void destroy(struct dim2_platform_data *pdata)
-{
-}
-
-
-static struct dim2_arwen_platform_data arwen_pdata = {
-	.pdata = {
-		.init = init,
-		.destroy = destroy,
-		.priv = &arwen_pdata,
-	},
-};
+static struct dim2_arwen_platform_data arwen_pdata;
 
 
 static int dim2_dt_probe(struct platform_device *pdev_dt)
@@ -91,12 +75,6 @@ static int dim2_dt_probe(struct platform_device *pdev_dt)
 
 	arwen_pdata.pdev = pdev;
 	arwen_pdata.dev = &pdev_dt->dev;
-	ret = platform_device_add_data(pdev, &arwen_pdata.pdata,
-				       sizeof arwen_pdata.pdata);
-	if (ret) {
-		pr_err("Failed to add platform data\n");
-		goto out_free_pdev;
-	}
 
 	ret = platform_device_add(pdev);
 	if (ret) {
