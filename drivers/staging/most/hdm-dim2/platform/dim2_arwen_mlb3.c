@@ -61,16 +61,9 @@ static struct dim2_arwen_platform_data arwen_pdata = {
 static int dim2_dt_probe(struct platform_device *pdev_dt)
 {
 	struct platform_device *pdev;
-	const struct of_device_id *match;
 	struct resource res[2];
 	int ret;
 	int rc;
-
-	match = of_match_device(dim2_arwen_dt_ids, &pdev_dt->dev);
-	if (!match) {
-		pr_err("Could not find drivers node in device tree \n");
-		return -EINVAL;
-	}
 
 	rc = of_address_to_resource(pdev_dt->dev.of_node, 0, &res[0]);
 	if (rc) {
