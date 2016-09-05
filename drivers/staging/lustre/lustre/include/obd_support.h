@@ -402,6 +402,7 @@ extern char obd_jobid_var[];
 #define OBD_FAIL_MDC_GETATTR_ENQUEUE     0x803
 #define OBD_FAIL_MDC_RPCS_SEM		 0x804
 #define OBD_FAIL_MDC_LIGHTWEIGHT	 0x805
+#define OBD_FAIL_MDC_CLOSE		 0x806
 
 #define OBD_FAIL_MGS		     0x900
 #define OBD_FAIL_MGS_ALL_REQUEST_NET     0x901
@@ -457,6 +458,7 @@ extern char obd_jobid_var[];
 #define OBD_FAIL_LOV_INIT			    0x1403
 #define OBD_FAIL_GLIMPSE_DELAY			    0x1404
 #define OBD_FAIL_LLITE_XATTR_ENOMEM		    0x1405
+#define OBD_FAIL_GETATTR_DELAY			    0x1409
 
 #define OBD_FAIL_FID_INDIR	0x1501
 #define OBD_FAIL_FID_INLMA	0x1502

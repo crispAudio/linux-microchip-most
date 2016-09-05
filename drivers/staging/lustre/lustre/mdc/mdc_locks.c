@@ -93,8 +93,8 @@ int it_open_error(int phase, struct lookup_intent *it)
 EXPORT_SYMBOL(it_open_error);
 
 /* this must be called on a lockh that is known to have a referenced lock */
-int mdc_set_lock_data(struct obd_export *exp, __u64 *lockh, void *data,
-		      __u64 *bits)
+int mdc_set_lock_data(struct obd_export *exp, const struct lustre_handle *lockh,
+		      void *data, __u64 *bits)
 {
 	struct ldlm_lock *lock;
 	struct inode *new_inode = data;
@@ -102,10 +102,10 @@ int mdc_set_lock_data(struct obd_export *exp, __u64 *lockh, void *data,
 	if (bits)
 		*bits = 0;
 
-	if (!*lockh)
+	if (!lustre_handle_is_used(lockh))
 		return 0;
 
-	lock = ldlm_handle2lock((struct lustre_handle *)lockh);
+	lock = ldlm_handle2lock(lockh);
 
 	LASSERT(lock);
 	lock_res_and_lock(lock);
@@ -183,28 +183,6 @@ int mdc_null_inode(struct obd_export *exp,
 
 	ldlm_resource_putref(res);
 	return 0;
-}
-
-/* find any ldlm lock of the inode in mdc
- * return 0    not find
- *	1    find one
- *      < 0    error
- */
-int mdc_find_cbdata(struct obd_export *exp,
-		    const struct lu_fid *fid,
-		    ldlm_iterator_t it, void *data)
-{
-	struct ldlm_res_id res_id;
-	int rc = 0;
-
-	fid_build_reg_res_name((struct lu_fid *)fid, &res_id);
-	rc = ldlm_resource_iterate(class_exp2obd(exp)->obd_namespace, &res_id,
-				   it, data);
-	if (rc == LDLM_ITER_STOP)
-		return 1;
-	else if (rc == LDLM_ITER_CONTINUE)
-		return 0;
-	return rc;
 }
 
 static inline void mdc_clear_replay_flag(struct ptlrpc_request *req, int rc)

@@ -3191,6 +3191,8 @@ int ll_getattr(struct vfsmount *mnt, struct dentry *de, struct kstat *stat)
 	if (res)
 		return res;
 
+	OBD_FAIL_TIMEOUT(OBD_FAIL_GETATTR_DELAY, 30);
+
 	stat->dev = inode->i_sb->s_dev;
 	if (ll_need_32bit_api(sbi))
 		stat->ino = cl_fid_build_ino(&lli->lli_fid, 1);
@@ -3629,7 +3631,7 @@ static int ll_layout_lock_set(struct lustre_handle *lockh, enum ldlm_mode mode,
 		   PFID(&lli->lli_fid), inode, reconf);
 
 	/* in case this is a caching lock and reinstate with new inode */
-	md_set_lock_data(sbi->ll_md_exp, &lockh->cookie, inode, NULL);
+	md_set_lock_data(sbi->ll_md_exp, lockh, inode, NULL);
 
 	lock_res_and_lock(lock);
 	lvb_ready = ldlm_is_lvb_ready(lock);
