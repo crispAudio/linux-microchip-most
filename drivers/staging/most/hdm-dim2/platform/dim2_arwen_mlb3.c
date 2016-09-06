@@ -44,18 +44,19 @@ static struct dim2_arwen_platform_data arwen_pdata;
 
 static int dim2_dt_probe(struct platform_device *pdev_dt)
 {
+	struct device_node *of_node = pdev_dt->dev.of_node;
 	struct platform_device *pdev;
 	struct resource res[2];
 	int ret;
 	int rc;
 
-	rc = of_address_to_resource(pdev_dt->dev.of_node, 0, &res[0]);
+	rc = of_address_to_resource(of_node, 0, &res[0]);
 	if (rc) {
 		pr_err("failed to get memory region\n");
 		return -EFAULT;
 	}
 
-	if (!of_irq_to_resource(pdev_dt->dev.of_node, 0, &res[1])) {
+	if (!of_irq_to_resource(of_node, 0, &res[1])) {
 		pr_err("failed to get ahb0_int resource\n");
 		return -EFAULT;
 	}
