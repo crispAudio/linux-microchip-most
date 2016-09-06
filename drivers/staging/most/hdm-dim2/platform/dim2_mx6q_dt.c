@@ -96,10 +96,10 @@ static int dim2_dt_probe(struct platform_device *pdev_dt)
 {
 	struct platform_device *pdev;
 	struct device_node *const node = pdev_dt->dev.of_node;
-	struct resource res[2] = {};
+	struct resource res[3];
 	int ret;
 
-	enum { AHB0_INT_DT_IDX = 1 };
+	enum dt_interrupts_order { MLB_INT_DT_IDX, AHB0_INT_DT_IDX };
 
 	if (pd.pdev)
 		return -ENOMEM;
@@ -112,6 +112,11 @@ static int dim2_dt_probe(struct platform_device *pdev_dt)
 
 	if (!of_irq_to_resource(node, AHB0_INT_DT_IDX, &res[1])) {
 		pr_err("failed to get ahb0_int resource\n");
+		return -ENOENT;
+	}
+
+	if (!of_irq_to_resource(node, MLB_INT_DT_IDX, &res[2])) {
+		pr_err("failed to get mlb_int resource\n");
 		return -ENOENT;
 	}
 

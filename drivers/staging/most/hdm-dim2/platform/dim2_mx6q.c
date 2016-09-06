@@ -30,6 +30,7 @@
 #define DIM2_IOREG_BASE  0x218C000
 #define DIM2_IOREG_END   0x218CFFF
 #define DIM2_AHB0_INT    149
+#define DIM2_MLB_INT     85
 
 #define REG_MLBPC1      0x38
 #define MLBPC1_VAL      0x888
@@ -109,6 +110,11 @@ static int __init mlb_platform_init(void)
 			.flags = IORESOURCE_IRQ,
 			.start = DIM2_AHB0_INT,
 			.end = DIM2_AHB0_INT,
+		},
+		{
+			.flags = IORESOURCE_IRQ,
+			.start = DIM2_MLB_INT,
+			.end = DIM2_MLB_INT,
 		},
 	};
 
