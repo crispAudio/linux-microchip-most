@@ -320,7 +320,7 @@ static void issue_beacon(struct adapter *padapter, int timeout_ms)
 	struct xmit_frame	*pmgntframe;
 	struct pkt_attrib	*pattrib;
 	unsigned char	*pframe;
-	struct rtw_ieee80211_hdr *pwlanhdr;
+	struct ieee80211_hdr *pwlanhdr;
 	__le16 *fctrl;
 	unsigned int	rate_len;
 	struct xmit_priv	*pxmitpriv = &(padapter->xmitpriv);
@@ -347,10 +347,10 @@ static void issue_beacon(struct adapter *padapter, int timeout_ms)
 	memset(pmgntframe->buf_addr, 0, WLANHDR_OFFSET + TXDESC_OFFSET);
 
 	pframe = (u8 *)(pmgntframe->buf_addr) + TXDESC_OFFSET;
-	pwlanhdr = (struct rtw_ieee80211_hdr *)pframe;
+	pwlanhdr = (struct ieee80211_hdr *)pframe;
 
 
-	fctrl = &(pwlanhdr->frame_ctl);
+	fctrl = &pwlanhdr->frame_control;
 	*(fctrl) = 0;
 
 	memcpy(pwlanhdr->addr1, bc_addr, ETH_ALEN);
@@ -361,8 +361,8 @@ static void issue_beacon(struct adapter *padapter, int timeout_ms)
 	/* pmlmeext->mgnt_seq++; */
 	SetFrameSubType(pframe, WIFI_BEACON);
 
-	pframe += sizeof(struct rtw_ieee80211_hdr_3addr);
-	pattrib->pktlen = sizeof(struct rtw_ieee80211_hdr_3addr);
+	pframe += sizeof(struct ieee80211_hdr_3addr);
+	pattrib->pktlen = sizeof(struct ieee80211_hdr_3addr);
 
 	if ((pmlmeinfo->state&0x03) == WIFI_FW_AP_STATE) {
 		int len_diff;
@@ -377,8 +377,8 @@ static void issue_beacon(struct adapter *padapter, int timeout_ms)
 			);
 		pframe += (cur_network->IELength+len_diff);
 		pattrib->pktlen += (cur_network->IELength+len_diff);
-		wps_ie = rtw_get_wps_ie(pmgntframe->buf_addr+TXDESC_OFFSET+sizeof(struct rtw_ieee80211_hdr_3addr)+_BEACON_IE_OFFSET_,
-			pattrib->pktlen-sizeof(struct rtw_ieee80211_hdr_3addr)-_BEACON_IE_OFFSET_, NULL, &wps_ielen);
+		wps_ie = rtw_get_wps_ie(pmgntframe->buf_addr+TXDESC_OFFSET+sizeof(struct ieee80211_hdr_3addr)+_BEACON_IE_OFFSET_,
+			pattrib->pktlen-sizeof(struct ieee80211_hdr_3addr)-_BEACON_IE_OFFSET_, NULL, &wps_ielen);
 		if (wps_ie && wps_ielen > 0)
 			rtw_get_wps_attr_content(wps_ie,  wps_ielen, WPS_ATTR_SELECTED_REGISTRAR, (u8 *)(&sr), NULL);
 		if (sr != 0)
@@ -461,7 +461,7 @@ static void issue_probersp(struct adapter *padapter, unsigned char *da)
 	struct xmit_frame			*pmgntframe;
 	struct pkt_attrib			*pattrib;
 	unsigned char					*pframe;
-	struct rtw_ieee80211_hdr	*pwlanhdr;
+	struct ieee80211_hdr *pwlanhdr;
 	__le16 *fctrl;
 	unsigned char					*mac, *bssid;
 	struct xmit_priv	*pxmitpriv = &(padapter->xmitpriv);
@@ -488,12 +488,12 @@ static void issue_probersp(struct adapter *padapter, unsigned char *da)
 	memset(pmgntframe->buf_addr, 0, WLANHDR_OFFSET + TXDESC_OFFSET);
 
 	pframe = (u8 *)(pmgntframe->buf_addr) + TXDESC_OFFSET;
-	pwlanhdr = (struct rtw_ieee80211_hdr *)pframe;
+	pwlanhdr = (struct ieee80211_hdr *)pframe;
 
 	mac = myid(&(padapter->eeprompriv));
 	bssid = cur_network->MacAddress;
 
-	fctrl = &(pwlanhdr->frame_ctl);
+	fctrl = &pwlanhdr->frame_control;
 	*(fctrl) = 0;
 	memcpy(pwlanhdr->addr1, da, ETH_ALEN);
 	memcpy(pwlanhdr->addr2, mac, ETH_ALEN);
@@ -503,7 +503,7 @@ static void issue_probersp(struct adapter *padapter, unsigned char *da)
 	pmlmeext->mgnt_seq++;
 	SetFrameSubType(fctrl, WIFI_PROBERSP);
 
-	pattrib->hdrlen = sizeof(struct rtw_ieee80211_hdr_3addr);
+	pattrib->hdrlen = sizeof(struct ieee80211_hdr_3addr);
 	pattrib->pktlen = pattrib->hdrlen;
 	pframe += pattrib->hdrlen;
 
@@ -609,7 +609,7 @@ static int issue_probereq(struct adapter *padapter, struct ndis_802_11_ssid *pss
 	struct xmit_frame		*pmgntframe;
 	struct pkt_attrib		*pattrib;
 	unsigned char			*pframe;
-	struct rtw_ieee80211_hdr	*pwlanhdr;
+	struct ieee80211_hdr *pwlanhdr;
 	__le16 *fctrl;
 	unsigned char			*mac;
 	unsigned char			bssrate[NumRates];
@@ -633,11 +633,11 @@ static int issue_probereq(struct adapter *padapter, struct ndis_802_11_ssid *pss
 	memset(pmgntframe->buf_addr, 0, WLANHDR_OFFSET + TXDESC_OFFSET);
 
 	pframe = (u8 *)(pmgntframe->buf_addr) + TXDESC_OFFSET;
-	pwlanhdr = (struct rtw_ieee80211_hdr *)pframe;
+	pwlanhdr = (struct ieee80211_hdr *)pframe;
 
 	mac = myid(&(padapter->eeprompriv));
 
-	fctrl = &(pwlanhdr->frame_ctl);
+	fctrl = &pwlanhdr->frame_control;
 	*(fctrl) = 0;
 
 	if (da) {
@@ -656,8 +656,8 @@ static int issue_probereq(struct adapter *padapter, struct ndis_802_11_ssid *pss
 	pmlmeext->mgnt_seq++;
 	SetFrameSubType(pframe, WIFI_PROBEREQ);
 
-	pframe += sizeof(struct rtw_ieee80211_hdr_3addr);
-	pattrib->pktlen = sizeof(struct rtw_ieee80211_hdr_3addr);
+	pframe += sizeof(struct ieee80211_hdr_3addr);
+	pattrib->pktlen = sizeof(struct ieee80211_hdr_3addr);
 
 	if (pssid)
 		pframe = rtw_set_ie(pframe, _SSID_IE_, pssid->SsidLength, pssid->Ssid, &(pattrib->pktlen));
@@ -745,7 +745,7 @@ static void issue_auth(struct adapter *padapter, struct sta_info *psta,
 	struct xmit_frame *pmgntframe;
 	struct pkt_attrib *pattrib;
 	unsigned char *pframe;
-	struct rtw_ieee80211_hdr *pwlanhdr;
+	struct ieee80211_hdr *pwlanhdr;
 	__le16 *fctrl;
 	unsigned int val32;
 	u16 val16;
@@ -769,17 +769,17 @@ static void issue_auth(struct adapter *padapter, struct sta_info *psta,
 	memset(pmgntframe->buf_addr, 0, WLANHDR_OFFSET + TXDESC_OFFSET);
 
 	pframe = (u8 *)(pmgntframe->buf_addr) + TXDESC_OFFSET;
-	pwlanhdr = (struct rtw_ieee80211_hdr *)pframe;
+	pwlanhdr = (struct ieee80211_hdr *)pframe;
 
-	fctrl = &(pwlanhdr->frame_ctl);
+	fctrl = &pwlanhdr->frame_control;
 	*(fctrl) = 0;
 
 	SetSeqNum(pwlanhdr, pmlmeext->mgnt_seq);
 	pmlmeext->mgnt_seq++;
 	SetFrameSubType(pframe, WIFI_AUTH);
 
-	pframe += sizeof(struct rtw_ieee80211_hdr_3addr);
-	pattrib->pktlen = sizeof(struct rtw_ieee80211_hdr_3addr);
+	pframe += sizeof(struct ieee80211_hdr_3addr);
+	pattrib->pktlen = sizeof(struct ieee80211_hdr_3addr);
 
 
 	if (psta) {/*  for AP mode */
@@ -866,7 +866,7 @@ static void issue_auth(struct adapter *padapter, struct sta_info *psta,
 
 			SetPrivacy(fctrl);
 
-			pattrib->hdrlen = sizeof(struct rtw_ieee80211_hdr_3addr);
+			pattrib->hdrlen = sizeof(struct ieee80211_hdr_3addr);
 
 			pattrib->encrypt = _WEP40_;
 
@@ -889,7 +889,7 @@ static void issue_asocrsp(struct adapter *padapter, unsigned short status,
 			  struct sta_info *pstat, int pkt_type)
 {
 	struct xmit_frame	*pmgntframe;
-	struct rtw_ieee80211_hdr	*pwlanhdr;
+	struct ieee80211_hdr *pwlanhdr;
 	struct pkt_attrib *pattrib;
 	unsigned char	*pbuf, *pframe;
 	unsigned short val;
@@ -916,9 +916,9 @@ static void issue_asocrsp(struct adapter *padapter, unsigned short status,
 	memset(pmgntframe->buf_addr, 0, WLANHDR_OFFSET + TXDESC_OFFSET);
 
 	pframe = (u8 *)(pmgntframe->buf_addr) + TXDESC_OFFSET;
-	pwlanhdr = (struct rtw_ieee80211_hdr *)pframe;
+	pwlanhdr = (struct ieee80211_hdr *)pframe;
 
-	fctrl = &(pwlanhdr->frame_ctl);
+	fctrl = &pwlanhdr->frame_control;
 	*(fctrl) = 0;
 
 	memcpy((void *)GetAddr1Ptr(pwlanhdr), pstat->hwaddr, ETH_ALEN);
@@ -933,7 +933,7 @@ static void issue_asocrsp(struct adapter *padapter, unsigned short status,
 	else
 		return;
 
-	pattrib->hdrlen = sizeof(struct rtw_ieee80211_hdr_3addr);
+	pattrib->hdrlen = sizeof(struct ieee80211_hdr_3addr);
 	pattrib->pktlen += pattrib->hdrlen;
 	pframe += pattrib->hdrlen;
 
@@ -1017,7 +1017,7 @@ static void issue_assocreq(struct adapter *padapter)
 	struct xmit_frame	*pmgntframe;
 	struct pkt_attrib	*pattrib;
 	unsigned char		*pframe, *p;
-	struct rtw_ieee80211_hdr	*pwlanhdr;
+	struct ieee80211_hdr *pwlanhdr;
 	__le16 *fctrl;
 	unsigned int	i, j, ie_len, index = 0;
 	unsigned char	rf_type, bssrate[NumRates], sta_bssrate[NumRates];
@@ -1040,9 +1040,9 @@ static void issue_assocreq(struct adapter *padapter)
 
 	memset(pmgntframe->buf_addr, 0, WLANHDR_OFFSET + TXDESC_OFFSET);
 	pframe = (u8 *)(pmgntframe->buf_addr) + TXDESC_OFFSET;
-	pwlanhdr = (struct rtw_ieee80211_hdr *)pframe;
+	pwlanhdr = (struct ieee80211_hdr *)pframe;
 
-	fctrl = &(pwlanhdr->frame_ctl);
+	fctrl = &pwlanhdr->frame_control;
 	*(fctrl) = 0;
 	memcpy(pwlanhdr->addr1, pnetwork->MacAddress, ETH_ALEN);
 	memcpy(pwlanhdr->addr2, myid(&(padapter->eeprompriv)), ETH_ALEN);
@@ -1052,8 +1052,8 @@ static void issue_assocreq(struct adapter *padapter)
 	pmlmeext->mgnt_seq++;
 	SetFrameSubType(pframe, WIFI_ASSOCREQ);
 
-	pframe += sizeof(struct rtw_ieee80211_hdr_3addr);
-	pattrib->pktlen = sizeof(struct rtw_ieee80211_hdr_3addr);
+	pframe += sizeof(struct ieee80211_hdr_3addr);
+	pattrib->pktlen = sizeof(struct ieee80211_hdr_3addr);
 
 	/* caps */
 
@@ -1212,7 +1212,7 @@ static int _issue_nulldata(struct adapter *padapter, unsigned char *da, unsigned
 	struct xmit_frame			*pmgntframe;
 	struct pkt_attrib			*pattrib;
 	unsigned char					*pframe;
-	struct rtw_ieee80211_hdr	*pwlanhdr;
+	struct ieee80211_hdr *pwlanhdr;
 	__le16 *fctrl;
 	struct xmit_priv	*pxmitpriv;
 	struct mlme_ext_priv	*pmlmeext;
@@ -1239,9 +1239,9 @@ static int _issue_nulldata(struct adapter *padapter, unsigned char *da, unsigned
 	memset(pmgntframe->buf_addr, 0, WLANHDR_OFFSET + TXDESC_OFFSET);
 
 	pframe = (u8 *)(pmgntframe->buf_addr) + TXDESC_OFFSET;
-	pwlanhdr = (struct rtw_ieee80211_hdr *)pframe;
+	pwlanhdr = (struct ieee80211_hdr *)pframe;
 
-	fctrl = &(pwlanhdr->frame_ctl);
+	fctrl = &pwlanhdr->frame_control;
 	*(fctrl) = 0;
 
 	if ((pmlmeinfo->state&0x03) == WIFI_FW_AP_STATE)
@@ -1260,8 +1260,8 @@ static int _issue_nulldata(struct adapter *padapter, unsigned char *da, unsigned
 	pmlmeext->mgnt_seq++;
 	SetFrameSubType(pframe, WIFI_DATA_NULL);
 
-	pframe += sizeof(struct rtw_ieee80211_hdr_3addr);
-	pattrib->pktlen = sizeof(struct rtw_ieee80211_hdr_3addr);
+	pframe += sizeof(struct ieee80211_hdr_3addr);
+	pattrib->pktlen = sizeof(struct ieee80211_hdr_3addr);
 
 	pattrib->last_txcmdsz = pattrib->pktlen;
 
@@ -1332,7 +1332,7 @@ static int _issue_qos_nulldata(struct adapter *padapter, unsigned char *da, u16 
 	struct xmit_frame			*pmgntframe;
 	struct pkt_attrib			*pattrib;
 	unsigned char					*pframe;
-	struct rtw_ieee80211_hdr	*pwlanhdr;
+	struct ieee80211_hdr *pwlanhdr;
 	__le16 *fctrl;
 	unsigned short *qc;
 	struct xmit_priv			*pxmitpriv = &(padapter->xmitpriv);
@@ -1359,9 +1359,9 @@ static int _issue_qos_nulldata(struct adapter *padapter, unsigned char *da, u16 
 	memset(pmgntframe->buf_addr, 0, WLANHDR_OFFSET + TXDESC_OFFSET);
 
 	pframe = (u8 *)(pmgntframe->buf_addr) + TXDESC_OFFSET;
-	pwlanhdr = (struct rtw_ieee80211_hdr *)pframe;
+	pwlanhdr = (struct ieee80211_hdr *)pframe;
 
-	fctrl = &(pwlanhdr->frame_ctl);
+	fctrl = &pwlanhdr->frame_control;
 	*(fctrl) = 0;
 
 	if ((pmlmeinfo->state&0x03) == WIFI_FW_AP_STATE)
@@ -1388,8 +1388,8 @@ static int _issue_qos_nulldata(struct adapter *padapter, unsigned char *da, u16 
 	pmlmeext->mgnt_seq++;
 	SetFrameSubType(pframe, WIFI_QOS_DATA_NULL);
 
-	pframe += sizeof(struct rtw_ieee80211_hdr_3addr_qos);
-	pattrib->pktlen = sizeof(struct rtw_ieee80211_hdr_3addr_qos);
+	pframe += sizeof(struct ieee80211_qos_hdr);
+	pattrib->pktlen = sizeof(struct ieee80211_qos_hdr);
 
 	pattrib->last_txcmdsz = pattrib->pktlen;
 
@@ -1457,7 +1457,7 @@ static int _issue_deauth(struct adapter *padapter, unsigned char *da, unsigned s
 	struct xmit_frame			*pmgntframe;
 	struct pkt_attrib			*pattrib;
 	unsigned char					*pframe;
-	struct rtw_ieee80211_hdr	*pwlanhdr;
+	struct ieee80211_hdr *pwlanhdr;
 	__le16 *fctrl;
 	struct xmit_priv			*pxmitpriv = &(padapter->xmitpriv);
 	struct mlme_ext_priv	*pmlmeext = &(padapter->mlmeextpriv);
@@ -1478,9 +1478,9 @@ static int _issue_deauth(struct adapter *padapter, unsigned char *da, unsigned s
 	memset(pmgntframe->buf_addr, 0, WLANHDR_OFFSET + TXDESC_OFFSET);
 
 	pframe = (u8 *)(pmgntframe->buf_addr) + TXDESC_OFFSET;
-	pwlanhdr = (struct rtw_ieee80211_hdr *)pframe;
+	pwlanhdr = (struct ieee80211_hdr *)pframe;
 
-	fctrl = &(pwlanhdr->frame_ctl);
+	fctrl = &pwlanhdr->frame_control;
 	*(fctrl) = 0;
 
 	memcpy(pwlanhdr->addr1, da, ETH_ALEN);
@@ -1491,8 +1491,8 @@ static int _issue_deauth(struct adapter *padapter, unsigned char *da, unsigned s
 	pmlmeext->mgnt_seq++;
 	SetFrameSubType(pframe, WIFI_DEAUTH);
 
-	pframe += sizeof(struct rtw_ieee80211_hdr_3addr);
-	pattrib->pktlen = sizeof(struct rtw_ieee80211_hdr_3addr);
+	pframe += sizeof(struct ieee80211_hdr_3addr);
+	pattrib->pktlen = sizeof(struct ieee80211_hdr_3addr);
 
 	le_tmp = cpu_to_le16(reason);
 	pframe = rtw_set_fixed_ie(pframe, _RSON_CODE_, &le_tmp,
@@ -1573,7 +1573,7 @@ static void issue_action_BA(struct adapter *padapter, unsigned char *raddr,
 	struct xmit_frame *pmgntframe;
 	struct pkt_attrib *pattrib;
 	u8 *pframe;
-	struct rtw_ieee80211_hdr *pwlanhdr;
+	struct ieee80211_hdr *pwlanhdr;
 	__le16 *fctrl;
 	struct xmit_priv *pxmitpriv = &(padapter->xmitpriv);
 	struct mlme_ext_priv *pmlmeext = &(padapter->mlmeextpriv);
@@ -1596,9 +1596,9 @@ static void issue_action_BA(struct adapter *padapter, unsigned char *raddr,
 	memset(pmgntframe->buf_addr, 0, WLANHDR_OFFSET + TXDESC_OFFSET);
 
 	pframe = (u8 *)(pmgntframe->buf_addr) + TXDESC_OFFSET;
-	pwlanhdr = (struct rtw_ieee80211_hdr *)pframe;
+	pwlanhdr = (struct ieee80211_hdr *)pframe;
 
-	fctrl = &(pwlanhdr->frame_ctl);
+	fctrl = &pwlanhdr->frame_control;
 	*(fctrl) = 0;
 
 	memcpy(pwlanhdr->addr1, raddr, ETH_ALEN);
@@ -1609,8 +1609,8 @@ static void issue_action_BA(struct adapter *padapter, unsigned char *raddr,
 	pmlmeext->mgnt_seq++;
 	SetFrameSubType(pframe, WIFI_ACTION);
 
-	pframe += sizeof(struct rtw_ieee80211_hdr_3addr);
-	pattrib->pktlen = sizeof(struct rtw_ieee80211_hdr_3addr);
+	pframe += sizeof(struct ieee80211_hdr_3addr);
+	pattrib->pktlen = sizeof(struct ieee80211_hdr_3addr);
 
 	pframe = rtw_set_fixed_ie(pframe, 1, &(category), &(pattrib->pktlen));
 	pframe = rtw_set_fixed_ie(pframe, 1, &(action), &(pattrib->pktlen));
@@ -1719,7 +1719,7 @@ static void issue_action_BSSCoexistPacket(struct adapter *padapter)
 	struct xmit_frame			*pmgntframe;
 	struct pkt_attrib			*pattrib;
 	unsigned char				*pframe;
-	struct rtw_ieee80211_hdr	*pwlanhdr;
+	struct ieee80211_hdr *pwlanhdr;
 	__le16 *fctrl;
 	struct	wlan_network	*pnetwork = NULL;
 	struct xmit_priv			*pxmitpriv = &(padapter->xmitpriv);
@@ -1755,9 +1755,9 @@ static void issue_action_BSSCoexistPacket(struct adapter *padapter)
 	memset(pmgntframe->buf_addr, 0, WLANHDR_OFFSET + TXDESC_OFFSET);
 
 	pframe = (u8 *)(pmgntframe->buf_addr) + TXDESC_OFFSET;
-	pwlanhdr = (struct rtw_ieee80211_hdr *)pframe;
+	pwlanhdr = (struct ieee80211_hdr *)pframe;
 
-	fctrl = &(pwlanhdr->frame_ctl);
+	fctrl = &pwlanhdr->frame_control;
 	*(fctrl) = 0;
 
 	memcpy(pwlanhdr->addr1, cur_network->MacAddress, ETH_ALEN);
@@ -1768,8 +1768,8 @@ static void issue_action_BSSCoexistPacket(struct adapter *padapter)
 	pmlmeext->mgnt_seq++;
 	SetFrameSubType(pframe, WIFI_ACTION);
 
-	pframe += sizeof(struct rtw_ieee80211_hdr_3addr);
-	pattrib->pktlen = sizeof(struct rtw_ieee80211_hdr_3addr);
+	pframe += sizeof(struct ieee80211_hdr_3addr);
+	pattrib->pktlen = sizeof(struct ieee80211_hdr_3addr);
 
 	pframe = rtw_set_fixed_ie(pframe, 1, &(category), &(pattrib->pktlen));
 	pframe = rtw_set_fixed_ie(pframe, 1, &(action), &(pattrib->pktlen));
@@ -2052,7 +2052,7 @@ static u8 collect_bss_info(struct adapter *padapter,
 	struct mlme_ext_priv	*pmlmeext = &padapter->mlmeextpriv;
 	struct mlme_ext_info	*pmlmeinfo = &(pmlmeext->mlmext_info);
 
-	len = packet_len - sizeof(struct rtw_ieee80211_hdr_3addr);
+	len = packet_len - sizeof(struct ieee80211_hdr_3addr);
 
 	if (len > MAX_IE_SZ)
 		return _FAIL;
@@ -2082,7 +2082,7 @@ static u8 collect_bss_info(struct adapter *padapter,
 
 	/* below is to copy the information element */
 	bssid->IELength = len;
-	memcpy(bssid->IEs, (pframe + sizeof(struct rtw_ieee80211_hdr_3addr)), bssid->IELength);
+	memcpy(bssid->IEs, (pframe + sizeof(struct ieee80211_hdr_3addr)), bssid->IELength);
 
 	/* get the signal strength in dBM.raw data */
 	bssid->Rssi = precv_frame->attrib.phy_info.recvpower;
@@ -2624,7 +2624,7 @@ static unsigned int OnBeacon(struct adapter *padapter,
 			}
 
 			/* check the vendor of the assoc AP */
-			pmlmeinfo->assoc_AP_vendor = check_assoc_AP(pframe+sizeof(struct rtw_ieee80211_hdr_3addr), len-sizeof(struct rtw_ieee80211_hdr_3addr));
+			pmlmeinfo->assoc_AP_vendor = check_assoc_AP(pframe+sizeof(struct ieee80211_hdr_3addr), len-sizeof(struct ieee80211_hdr_3addr));
 
 			/* update TSF Value */
 			update_TSF(pmlmeext, pframe, len);
@@ -3581,7 +3581,7 @@ static unsigned int on_action_spct(struct adapter *padapter,
 	struct sta_info *psta = NULL;
 	struct sta_priv *pstapriv = &padapter->stapriv;
 	u8 *pframe = precv_frame->rx_data;
-	u8 *frame_body = pframe + sizeof(struct rtw_ieee80211_hdr_3addr);
+	u8 *frame_body = pframe + sizeof(struct ieee80211_hdr_3addr);
 	u8 category;
 	u8 action;
 
@@ -3655,7 +3655,7 @@ static unsigned int OnAction_back(struct adapter *padapter,
 	if (psta == NULL)
 		return _SUCCESS;
 
-	frame_body = (unsigned char *)(pframe + sizeof(struct rtw_ieee80211_hdr_3addr));
+	frame_body = (unsigned char *)(pframe + sizeof(struct ieee80211_hdr_3addr));
 
 	category = frame_body[0];
 	if (category == RTW_WLAN_CATEGORY_BACK) { /*  representing Block Ack */
@@ -3742,7 +3742,7 @@ static unsigned int on_action_public_p2p(struct recv_frame *precv_frame)
 	u8 *pframe = precv_frame->rx_data;
 	u8 *frame_body;
 	u8 dialogToken = 0;
-	frame_body = (unsigned char *)(pframe + sizeof(struct rtw_ieee80211_hdr_3addr));
+	frame_body = (unsigned char *)(pframe + sizeof(struct ieee80211_hdr_3addr));
 
 	dialogToken = frame_body[7];
 
@@ -3756,7 +3756,7 @@ static unsigned int on_action_public_vendor(struct recv_frame *precv_frame)
 {
 	unsigned int ret = _FAIL;
 	u8 *pframe = precv_frame->rx_data;
-	u8 *frame_body = pframe + sizeof(struct rtw_ieee80211_hdr_3addr);
+	u8 *frame_body = pframe + sizeof(struct ieee80211_hdr_3addr);
 
 	if (!memcmp(frame_body + 2, P2P_OUI, 4))
 		ret = on_action_public_p2p(precv_frame);
@@ -3768,7 +3768,7 @@ static unsigned int on_action_public_default(struct recv_frame *precv_frame, u8 
 {
 	unsigned int ret = _FAIL;
 	u8 *pframe = precv_frame->rx_data;
-	u8 *frame_body = pframe + sizeof(struct rtw_ieee80211_hdr_3addr);
+	u8 *frame_body = pframe + sizeof(struct ieee80211_hdr_3addr);
 	u8 token;
 
 	token = frame_body[2];
@@ -3787,7 +3787,7 @@ static unsigned int on_action_public(struct adapter *padapter,
 {
 	unsigned int ret = _FAIL;
 	u8 *pframe = precv_frame->rx_data;
-	u8 *frame_body = pframe + sizeof(struct rtw_ieee80211_hdr_3addr);
+	u8 *frame_body = pframe + sizeof(struct ieee80211_hdr_3addr);
 	u8 category, action;
 
 	/* check RA matches or not */
@@ -3859,7 +3859,7 @@ static unsigned int OnAction(struct adapter *padapter,
 	unsigned char	*frame_body;
 	u8 *pframe = precv_frame->rx_data;
 
-	frame_body = (unsigned char *)(pframe + sizeof(struct rtw_ieee80211_hdr_3addr));
+	frame_body = (unsigned char *)(pframe + sizeof(struct ieee80211_hdr_3addr));
 
 	category = frame_body[0];
 

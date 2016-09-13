@@ -341,9 +341,6 @@ void set_channel_bwmode(struct adapter *padapter, unsigned char channel, unsigne
 {
 	u8 center_ch;
 
-	if (padapter->bNotifyChannelChange)
-		DBG_88E("[%s] ch = %d, offset = %d, bwmode = %d\n", __func__, channel, channel_offset, bwmode);
-
 	if ((bwmode == HT_CHANNEL_WIDTH_20) ||
 	    (channel_offset == HAL_PRIME_CHNL_OFFSET_DONT_CARE)) {
 		/* SelectChannel(padapter, channel); */
@@ -881,7 +878,7 @@ int rtw_check_bcn_info(struct adapter  *Adapter, u8 *pframe, u32 packet_len)
 	if (is_client_associated_to_ap(Adapter) == false)
 		return true;
 
-	len = packet_len - sizeof(struct rtw_ieee80211_hdr_3addr);
+	len = packet_len - sizeof(struct ieee80211_hdr_3addr);
 
 	if (len > MAX_IE_SZ) {
 		DBG_88E("%s IE too long for survey event\n", __func__);
@@ -907,7 +904,7 @@ int rtw_check_bcn_info(struct adapter  *Adapter, u8 *pframe, u32 packet_len)
 
 	/* below is to copy the information element */
 	bssid->IELength = len;
-	memcpy(bssid->IEs, (pframe + sizeof(struct rtw_ieee80211_hdr_3addr)), bssid->IELength);
+	memcpy(bssid->IEs, (pframe + sizeof(struct ieee80211_hdr_3addr)), bssid->IELength);
 
 	/* check bw and channel offset */
 	/* parsing HT_CAP_IE */
@@ -1511,7 +1508,7 @@ void update_wireless_mode(struct adapter *padapter)
 	SIFS_Timer = 0x0a0a0808;/* 0x0808 -> for CCK, 0x0a0a -> for OFDM */
 				/* change this value if having IOT issues. */
 
-	padapter->HalFunc.SetHwRegHandler(padapter, HW_VAR_RESP_SIFS,  (u8 *)&SIFS_Timer);
+	rtw_hal_set_hwreg(padapter, HW_VAR_RESP_SIFS,  (u8 *)&SIFS_Timer);
 
 	if (pmlmeext->cur_wireless_mode & WIRELESS_11B)
 		update_mgnt_tx_rate(padapter, IEEE80211_CCK_RATE_1MB);
@@ -1587,7 +1584,7 @@ void update_TSF(struct mlme_ext_priv *pmlmeext, u8 *pframe, uint len)
 	u8 *pIE;
 	__le32 *pbuf;
 
-	pIE = pframe + sizeof(struct rtw_ieee80211_hdr_3addr);
+	pIE = pframe + sizeof(struct ieee80211_hdr_3addr);
 	pbuf = (__le32 *)pIE;
 
 	pmlmeext->TSFValue = le32_to_cpu(*(pbuf+1));

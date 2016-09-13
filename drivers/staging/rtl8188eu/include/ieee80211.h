@@ -291,35 +291,6 @@ struct sta_data {
 /* this is stolen from ipw2200 driver */
 #define IEEE_IBSS_MAC_HASH_SIZE 31
 
-struct rtw_ieee80211_hdr {
-	__le16 frame_ctl;
-	__le16 duration_id;
-	u8 addr1[ETH_ALEN];
-	u8 addr2[ETH_ALEN];
-	u8 addr3[ETH_ALEN];
-	u16 seq_ctl;
-	u8 addr4[ETH_ALEN];
-} __packed;
-
-struct rtw_ieee80211_hdr_3addr {
-	__le16 frame_ctl;
-	__le16 duration_id;
-	u8 addr1[ETH_ALEN];
-	u8 addr2[ETH_ALEN];
-	u8 addr3[ETH_ALEN];
-	u16 seq_ctl;
-} __packed;
-
-struct rtw_ieee80211_hdr_3addr_qos {
-	__le16 frame_ctl;
-	__le16 duration_id;
-	u8 addr1[ETH_ALEN];
-	u8 addr2[ETH_ALEN];
-	u8 addr3[ETH_ALEN];
-	u16 seq_ctl;
-	u16     qc;
-}  __packed;
-
 enum eap_type {
 	EAP_PACKET = 0,
 	EAPOL_START,
@@ -569,16 +540,6 @@ struct ieee80211_snap_hdr {
 #define IEEE80211_DEFAULT_TX_ESSID "Penguin"
 #define IEEE80211_DEFAULT_BASIC_RATE 10
 
-struct ieee80211_txb {
-	u8 nr_frags;
-	u8 encrypted;
-	u16 reserved;
-	u16 frag_size;
-	u16 payload_size;
-	struct sk_buff *fragments[0];
-};
-
-
 /* SWEEP TABLE ENTRIES NUMBER*/
 #define MAX_SWEEP_TAB_ENTRIES		  42
 #define MAX_SWEEP_TAB_ENTRIES_PER_PACKET  7
@@ -675,11 +636,6 @@ static inline int is_broadcast_mac_addr(const u8 *addr)
 
 #define CFG_IEEE80211_RESERVE_FCS (1<<0)
 #define CFG_IEEE80211_COMPUTE_FCS (1<<1)
-
-struct tx_pending {
-	int frag;
-	struct ieee80211_txb *txb;
-};
 
 #define MAXTID	16
 

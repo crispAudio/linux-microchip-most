@@ -200,10 +200,10 @@ static void p80211req_mibset_mibget(wlandevice_t *wlandev,
 	u8 *key = mibitem->data + sizeof(p80211pstrd_t);
 
 	switch (mibitem->did) {
-	case DIDmib_dot11smt_dot11WEPDefaultKeysTable_dot11WEPDefaultKey0:
-	case DIDmib_dot11smt_dot11WEPDefaultKeysTable_dot11WEPDefaultKey1:
-	case DIDmib_dot11smt_dot11WEPDefaultKeysTable_dot11WEPDefaultKey2:
-	case DIDmib_dot11smt_dot11WEPDefaultKeysTable_dot11WEPDefaultKey3:
+	case DIDmib_dot11smt_dot11WEPDefaultKeysTable_key(1):
+	case DIDmib_dot11smt_dot11WEPDefaultKeysTable_key(2):
+	case DIDmib_dot11smt_dot11WEPDefaultKeysTable_key(3):
+	case DIDmib_dot11smt_dot11WEPDefaultKeysTable_key(4):
 		if (!isget)
 			wep_change_key(wlandev,
 				       P80211DID_ITEM(mibitem->did) - 1,

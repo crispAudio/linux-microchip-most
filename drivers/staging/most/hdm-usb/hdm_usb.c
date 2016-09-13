@@ -987,14 +987,14 @@ struct regs {
 	u16 reg;
 };
 
-const static struct regs ro_regs[] = {
+static const struct regs ro_regs[] = {
 	{ "ni_state", DRCI_REG_NI_STATE },
 	{ "packet_bandwidth", DRCI_REG_PACKET_BW },
 	{ "node_address", DRCI_REG_NODE_ADDR },
 	{ "node_position", DRCI_REG_NODE_POS },
 };
 
-const static struct regs rw_regs[] = {
+static const struct regs rw_regs[] = {
 	{ "mep_filter", DRCI_REG_MEP_FILTER },
 	{ "mep_hash0", DRCI_REG_HASH_TBL0 },
 	{ "mep_hash1", DRCI_REG_HASH_TBL1 },
@@ -1066,7 +1066,9 @@ static ssize_t store_value(struct most_dci_obj *dci_obj,
 	if (!strcmp(name, "arb_value")) {
 		reg_addr = dci_obj->reg_addr;
 	} else if (!strcmp(name, "sync_ep")) {
-		reg_addr = DRCI_REG_BASE + DRCI_COMMAND + val * 16;
+		u16 ep = val;
+
+		reg_addr = DRCI_REG_BASE + DRCI_COMMAND + ep * 16;
 		val = 1;
 	} else if (get_static_reg_addr(ro_regs, name, &reg_addr)) {
 		return -EFAULT;

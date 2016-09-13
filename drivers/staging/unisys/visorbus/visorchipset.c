@@ -25,10 +25,6 @@
 #include <linux/uuid.h>
 #include <linux/crash_dump.h>
 
-#include "channel_guid.h"
-#include "controlvmchannel.h"
-#include "controlvmcompletionstatus.h"
-#include "guestlinuxdebug.h"
 #include "version.h"
 #include "visorbus.h"
 #include "visorbus_private.h"
@@ -36,9 +32,6 @@
 
 #define CURRENT_FILE_PC VISOR_CHIPSET_PC_visorchipset_main_c
 
-#define MAX_NAME_SIZE 128
-#define MAX_IP_SIZE   50
-#define MAXOUTSTANDINGCHANNELCOMMAND 256
 #define POLLJIFFIES_CONTROLVMCHANNEL_FAST   1
 #define POLLJIFFIES_CONTROLVMCHANNEL_SLOW 100
 
@@ -101,10 +94,6 @@ static struct delayed_work periodic_controlvm_work;
 
 static struct cdev file_cdev;
 static struct visorchannel **file_controlvm_channel;
-static struct controlvm_message_packet g_devicechangestate_packet;
-
-static LIST_HEAD(bus_info_list);
-static LIST_HEAD(dev_info_list);
 
 static struct visorchannel *controlvm_channel;
 
@@ -128,22 +117,6 @@ static struct visor_controlvm_payload_info controlvm_payload_info;
  */
 static struct controlvm_message controlvm_pending_msg;
 static bool controlvm_pending_msg_valid;
-
-/*
- * This identifies a data buffer that has been received via a controlvm messages
- * in a remote --> local CONTROLVM_TRANSMIT_FILE conversation.
- */
-struct putfile_buffer_entry {
-	struct list_head next;	/* putfile_buffer_entry list */
-	struct parser_context *parser_ctx; /* points to input data buffer */
-};
-
-/*
- * List of struct putfile_request *, via next_putfile_request member.
- * Each entry in this list identifies an outstanding TRANSMIT_FILE
- * conversation.
- */
-static LIST_HEAD(putfile_request_list);
 
 /*
  * This describes a buffer and its current state of transfer (e.g., how many
@@ -1720,7 +1693,6 @@ handle_command(struct controlvm_message inmsg, u64 channel_addr)
 			 * when sending back the response to Command
 			 */
 			my_device_changestate(&inmsg);
-			g_devicechangestate_packet = inmsg.cmd;
 			break;
 		}
 		break;

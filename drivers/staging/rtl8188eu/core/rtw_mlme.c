@@ -52,8 +52,6 @@ int rtw_init_mlme_priv(struct adapter *padapter)
 	_rtw_init_queue(&(pmlmepriv->free_bss_pool));
 	_rtw_init_queue(&(pmlmepriv->scanned_queue));
 
-	set_scanned_network_val(pmlmepriv, 0);
-
 	memset(&pmlmepriv->assoc_ssid, 0, sizeof(struct ndis_802_11_ssid));
 
 	pbuf = vzalloc(MAX_BSS_CNT * (sizeof(struct wlan_network)));
@@ -100,12 +98,6 @@ void rtw_free_mlme_priv_ie_data(struct mlme_priv *pmlmepriv)
 	rtw_free_mlme_ie_data(&pmlmepriv->wps_probe_req_ie, &pmlmepriv->wps_probe_req_ie_len);
 	rtw_free_mlme_ie_data(&pmlmepriv->wps_probe_resp_ie, &pmlmepriv->wps_probe_resp_ie_len);
 	rtw_free_mlme_ie_data(&pmlmepriv->wps_assoc_resp_ie, &pmlmepriv->wps_assoc_resp_ie_len);
-
-	rtw_free_mlme_ie_data(&pmlmepriv->p2p_beacon_ie, &pmlmepriv->p2p_beacon_ie_len);
-	rtw_free_mlme_ie_data(&pmlmepriv->p2p_probe_req_ie, &pmlmepriv->p2p_probe_req_ie_len);
-	rtw_free_mlme_ie_data(&pmlmepriv->p2p_probe_resp_ie, &pmlmepriv->p2p_probe_resp_ie_len);
-	rtw_free_mlme_ie_data(&pmlmepriv->p2p_go_probe_resp_ie, &pmlmepriv->p2p_go_probe_resp_ie_len);
-	rtw_free_mlme_ie_data(&pmlmepriv->p2p_assoc_req_ie, &pmlmepriv->p2p_assoc_req_ie_len);
 }
 #else
 void rtw_free_mlme_priv_ie_data(struct mlme_priv *pmlmepriv)
@@ -143,8 +135,6 @@ struct wlan_network *_rtw_alloc_network(struct mlme_priv *pmlmepriv)
 	pnetwork->aid = 0;
 	pnetwork->join_res = 0;
 
-	pmlmepriv->num_of_scanned++;
-
 exit:
 	spin_unlock_bh(&free_queue->lock);
 
@@ -175,7 +165,6 @@ static void _rtw_free_network(struct mlme_priv *pmlmepriv, struct wlan_network *
 	spin_lock_bh(&free_queue->lock);
 	list_del_init(&(pnetwork->list));
 	list_add_tail(&(pnetwork->list), &(free_queue->queue));
-	pmlmepriv->num_of_scanned--;
 	spin_unlock_bh(&free_queue->lock);
 }
 
@@ -189,7 +178,6 @@ void _rtw_free_network_nolock(struct	mlme_priv *pmlmepriv, struct wlan_network *
 		return;
 	list_del_init(&(pnetwork->list));
 	list_add_tail(&(pnetwork->list), get_list_head(free_queue));
-	pmlmepriv->num_of_scanned--;
 }
 
 /*
@@ -732,7 +720,6 @@ static void free_scanqueue(struct	mlme_priv *pmlmepriv)
 		list_del_init(plist);
 		list_add_tail(plist, &free_queue->queue);
 		plist = ptemp;
-		pmlmepriv->num_of_scanned--;
 	}
 
 	spin_unlock_bh(&free_queue->lock);
@@ -2032,7 +2019,7 @@ void rtw_update_ht_cap(struct adapter *padapter, u8 *pie, uint ie_len)
 		int i;
 		u8	rf_type;
 
-		padapter->HalFunc.GetHwRegHandler(padapter, HW_VAR_RF_TYPE, (u8 *)(&rf_type));
+		rtw_hal_get_hwreg(padapter, HW_VAR_RF_TYPE, (u8 *)(&rf_type));
 
 		/* update the MCS rates */
 		for (i = 0; i < 16; i++) {

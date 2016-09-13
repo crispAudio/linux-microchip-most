@@ -44,7 +44,6 @@
 #include <linux/if_arp.h>
 #include <linux/rtnetlink.h>
 #include <linux/delay.h>
-#include <linux/proc_fs.h>	/*  Necessary because we use the proc fs */
 #include <linux/interrupt.h>	/*  for struct tasklet_struct */
 #include <linux/ip.h>
 #include <linux/kthread.h>
@@ -82,10 +81,8 @@ void _rtw_init_queue(struct __queue *pqueue);
 
 struct rtw_netdev_priv_indicator {
 	void *priv;
-	u32 sizeof_priv;
 };
-struct net_device *rtw_alloc_etherdev_with_old_priv(int sizeof_priv,
-						    void *old_priv);
+struct net_device *rtw_alloc_etherdev_with_old_priv(void *old_priv);
 
 #define rtw_netdev_priv(netdev)					\
 	(((struct rtw_netdev_priv_indicator *)netdev_priv(netdev))->priv)
