@@ -667,7 +667,6 @@ static void ras_update_stride_detector(struct ll_readahead_state *ras,
 	ras->ras_stride_length = stride_gap + ras->ras_consecutive_pages;
 
 	RAS_CDEBUG(ras);
-	return;
 }
 
 /* Stride Read-ahead window will be increased inc_len according to
@@ -883,7 +882,6 @@ out_unlock:
 	RAS_CDEBUG(ras);
 	ras->ras_request_index++;
 	spin_unlock(&ras->ras_lock);
-	return;
 }
 
 int ll_writepage(struct page *vmpage, struct writeback_control *wbc)
@@ -1024,7 +1022,7 @@ int ll_writepages(struct address_space *mapping, struct writeback_control *wbc)
 	if (result > 0) {
 		wbc->nr_to_write -= result;
 		result = 0;
-	 }
+	}
 
 	if (wbc->range_cyclic || (range_whole && wbc->nr_to_write > 0)) {
 		if (end == OBD_OBJECT_EOF)
