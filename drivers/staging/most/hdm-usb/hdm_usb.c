@@ -122,7 +122,7 @@ struct most_dev {
 	u16 link_stat;
 	char description[MAX_STRING_LEN];
 	char suffix[MAX_NUM_ENDPOINTS][MAX_SUFFIX_LEN];
-	spinlock_t channel_lock[MAX_NUM_ENDPOINTS];
+	spinlock_t channel_lock[MAX_NUM_ENDPOINTS]; /* sync channel access */
 	bool padding_active[MAX_NUM_ENDPOINTS];
 	bool is_channel_healthy[MAX_NUM_ENDPOINTS];
 	struct clear_hold_work clear_work[MAX_NUM_ENDPOINTS];
