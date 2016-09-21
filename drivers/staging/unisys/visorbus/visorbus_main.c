@@ -35,10 +35,6 @@ static int visorbus_forcenomatch;
 
 static int busreg_rc = -ENODEV; /* stores the result from bus registration */
 
-static int visorbus_uevent(struct device *xdev, struct kobj_uevent_env *env);
-static int visorbus_match(struct device *xdev, struct device_driver *xdrv);
-static void fix_vbus_dev_info(struct visor_device *visordev);
-
 /*
  * BUS type attributes
  *
@@ -98,21 +94,6 @@ static const struct attribute_group *visorbus_dev_groups[] = {
 	&visorbus_dev_group,
 	NULL,
 };
-
-/*
- * This describes the TYPE of bus.
- *  (Don't confuse this with an INSTANCE of the bus.)
- */
-struct bus_type visorbus_type = {
-	.name = "visorbus",
-	.match = visorbus_match,
-	.uevent = visorbus_uevent,
-	.dev_groups = visorbus_dev_groups,
-	.bus_groups = visorbus_bus_groups,
-};
-
-static long long bus_count;	/* number of bus instances */
-					/* ever-increasing */
 
 /* filled in with info about parent chipset driver when we register with it */
 static struct ultra_vbus_deviceinfo chipset_driverinfo;
@@ -176,6 +157,18 @@ visorbus_match(struct device *xdev, struct device_driver *xdrv)
 
 	return 0;
 }
+
+/*
+ * This describes the TYPE of bus.
+ *  (Don't confuse this with an INSTANCE of the bus.)
+ */
+struct bus_type visorbus_type = {
+	.name = "visorbus",
+	.match = visorbus_match,
+	.uevent = visorbus_uevent,
+	.dev_groups = visorbus_dev_groups,
+	.bus_groups = visorbus_bus_groups,
+};
 
 /**
  * visorbus_releae_busdevice() - called when device_unregister() is called for
@@ -536,48 +529,6 @@ dev_stop_periodic_work(struct visor_device *dev)
 }
 
 /**
- * visordriver_probe_device() - handle new visor device coming online
- * @xdev: struct device for the visor device being probed
- *
- * This is called automatically upon adding a visor_device (device_add), or
- * adding a visor_driver (visorbus_register_visor_driver), but only after
- * visorbus_match() has returned 1 to indicate a successful match between
- * driver and device.
- *
- * If successful, a reference to the device will be held onto via get_device().
- *
- * Return: 0 if successful, meaning the function driver's probe() function
- *         was successful with this device, otherwise a negative errno
- *         value indicating failure reason
- */
-static int
-visordriver_probe_device(struct device *xdev)
-{
-	int res;
-	struct visor_driver *drv;
-	struct visor_device *dev;
-
-	drv = to_visor_driver(xdev->driver);
-	dev = to_visor_device(xdev);
-
-	if (!drv->probe)
-		return -ENODEV;
-
-	mutex_lock(&dev->visordriver_callback_lock);
-	dev->being_removed = false;
-
-	res = drv->probe(dev);
-	if (res >= 0) {
-		/* success: reference kept via unmatched get_device() */
-		get_device(&dev->device);
-		fix_vbus_dev_info(dev);
-	}
-
-	mutex_unlock(&dev->visordriver_callback_lock);
-	return res;
-}
-
-/**
  * visordriver_remove_device() - handle visor device going away
  * @xdev: struct device for the visor device being removed
  *
@@ -605,91 +556,6 @@ visordriver_remove_device(struct device *xdev)
 	put_device(&dev->device);
 	return 0;
 }
-
-/**
- * visorbus_register_visor_driver() - registers the provided visor driver
- *                                    for handling one or more visor device
- *                                    types (channel_types)
- * @drv: the driver to register
- *
- * A visor function driver calls this function to register
- * the driver.  The caller MUST fill in the following fields within the
- * #drv structure:
- *     name, version, owner, channel_types, probe, remove
- *
- * Here's how the whole Linux bus / driver / device model works.
- *
- * At system start-up, the visorbus kernel module is loaded, which registers
- * visorbus_type as a bus type, using bus_register().
- *
- * All kernel modules that support particular device types on a
- * visorbus bus are loaded.  Each of these kernel modules calls
- * visorbus_register_visor_driver() in their init functions, passing a
- * visor_driver struct.  visorbus_register_visor_driver() in turn calls
- * register_driver(&visor_driver.driver).  This .driver member is
- * initialized with generic methods (like probe), whose sole responsibility
- * is to act as a broker for the real methods, which are within the
- * visor_driver struct.  (This is the way the subclass behavior is
- * implemented, since visor_driver is essentially a subclass of the
- * generic driver.)  Whenever a driver_register() happens, core bus code in
- * the kernel does (see device_attach() in drivers/base/dd.c):
- *
- *     for each dev associated with the bus (the bus that driver is on) that
- *     does not yet have a driver
- *         if bus.match(dev,newdriver) == yes_matched  ** .match specified
- *                                                ** during bus_register().
- *             newdriver.probe(dev)  ** for visor drivers, this will call
- *                   ** the generic driver.probe implemented in visorbus.c,
- *                   ** which in turn calls the probe specified within the
- *                   ** struct visor_driver (which was specified by the
- *                   ** actual device driver as part of
- *                   ** visorbus_register_visor_driver()).
- *
- * The above dance also happens when a new device appears.
- * So the question is, how are devices created within the system?
- * Basically, just call device_add(dev).  See pci_bus_add_devices().
- * pci_scan_device() shows an example of how to build a device struct.  It
- * returns the newly-created struct to pci_scan_single_device(), who adds it
- * to the list of devices at PCIBUS.devices.  That list of devices is what
- * is traversed by pci_bus_add_devices().
- *
- * Return: integer indicating success (zero) or failure (non-zero)
- */
-int visorbus_register_visor_driver(struct visor_driver *drv)
-{
-	int rc = 0;
-
-	if (busreg_rc < 0)
-		return -ENODEV; /*can't register on a nonexistent bus*/
-
-	drv->driver.name = drv->name;
-	drv->driver.bus = &visorbus_type;
-	drv->driver.probe = visordriver_probe_device;
-	drv->driver.remove = visordriver_remove_device;
-	drv->driver.owner = drv->owner;
-
-	/*
-	 * driver_register does this:
-	 *   bus_add_driver(drv)
-	 *   ->if (drv.bus)  ** (bus_type) **
-	 *       driver_attach(drv)
-	 *         for each dev with bus type of drv.bus
-	 *           if (!dev.drv)  ** no driver assigned yet **
-	 *             if (bus.match(dev,drv))  [visorbus_match]
-	 *               dev.drv = drv
-	 *               if (!drv.probe(dev))   [visordriver_probe_device]
-	 *                 dev.drv = NULL
-	 */
-
-	rc = driver_register(&drv->driver);
-	if (rc < 0)
-		return rc;
-	rc = register_driver_attributes(drv);
-	if (rc < 0)
-		driver_unregister(&drv->driver);
-	return rc;
-}
-EXPORT_SYMBOL_GPL(visorbus_register_visor_driver);
 
 /**
  * visorbus_unregister_visor_driver() - unregisters the provided driver
@@ -1031,6 +897,133 @@ fix_vbus_dev_info(struct visor_device *visordev)
 }
 
 /**
+ * visordriver_probe_device() - handle new visor device coming online
+ * @xdev: struct device for the visor device being probed
+ *
+ * This is called automatically upon adding a visor_device (device_add), or
+ * adding a visor_driver (visorbus_register_visor_driver), but only after
+ * visorbus_match() has returned 1 to indicate a successful match between
+ * driver and device.
+ *
+ * If successful, a reference to the device will be held onto via get_device().
+ *
+ * Return: 0 if successful, meaning the function driver's probe() function
+ *         was successful with this device, otherwise a negative errno
+ *         value indicating failure reason
+ */
+static int
+visordriver_probe_device(struct device *xdev)
+{
+	int res;
+	struct visor_driver *drv;
+	struct visor_device *dev;
+
+	drv = to_visor_driver(xdev->driver);
+	dev = to_visor_device(xdev);
+
+	if (!drv->probe)
+		return -ENODEV;
+
+	mutex_lock(&dev->visordriver_callback_lock);
+	dev->being_removed = false;
+
+	res = drv->probe(dev);
+	if (res >= 0) {
+		/* success: reference kept via unmatched get_device() */
+		get_device(&dev->device);
+		fix_vbus_dev_info(dev);
+	}
+
+	mutex_unlock(&dev->visordriver_callback_lock);
+	return res;
+}
+
+/**
+ * visorbus_register_visor_driver() - registers the provided visor driver
+ *                                    for handling one or more visor device
+ *                                    types (channel_types)
+ * @drv: the driver to register
+ *
+ * A visor function driver calls this function to register
+ * the driver.  The caller MUST fill in the following fields within the
+ * #drv structure:
+ *     name, version, owner, channel_types, probe, remove
+ *
+ * Here's how the whole Linux bus / driver / device model works.
+ *
+ * At system start-up, the visorbus kernel module is loaded, which registers
+ * visorbus_type as a bus type, using bus_register().
+ *
+ * All kernel modules that support particular device types on a
+ * visorbus bus are loaded.  Each of these kernel modules calls
+ * visorbus_register_visor_driver() in their init functions, passing a
+ * visor_driver struct.  visorbus_register_visor_driver() in turn calls
+ * register_driver(&visor_driver.driver).  This .driver member is
+ * initialized with generic methods (like probe), whose sole responsibility
+ * is to act as a broker for the real methods, which are within the
+ * visor_driver struct.  (This is the way the subclass behavior is
+ * implemented, since visor_driver is essentially a subclass of the
+ * generic driver.)  Whenever a driver_register() happens, core bus code in
+ * the kernel does (see device_attach() in drivers/base/dd.c):
+ *
+ *     for each dev associated with the bus (the bus that driver is on) that
+ *     does not yet have a driver
+ *         if bus.match(dev,newdriver) == yes_matched  ** .match specified
+ *                                                ** during bus_register().
+ *             newdriver.probe(dev)  ** for visor drivers, this will call
+ *                   ** the generic driver.probe implemented in visorbus.c,
+ *                   ** which in turn calls the probe specified within the
+ *                   ** struct visor_driver (which was specified by the
+ *                   ** actual device driver as part of
+ *                   ** visorbus_register_visor_driver()).
+ *
+ * The above dance also happens when a new device appears.
+ * So the question is, how are devices created within the system?
+ * Basically, just call device_add(dev).  See pci_bus_add_devices().
+ * pci_scan_device() shows an example of how to build a device struct.  It
+ * returns the newly-created struct to pci_scan_single_device(), who adds it
+ * to the list of devices at PCIBUS.devices.  That list of devices is what
+ * is traversed by pci_bus_add_devices().
+ *
+ * Return: integer indicating success (zero) or failure (non-zero)
+ */
+int visorbus_register_visor_driver(struct visor_driver *drv)
+{
+	int rc = 0;
+
+	if (busreg_rc < 0)
+		return -ENODEV; /*can't register on a nonexistent bus*/
+
+	drv->driver.name = drv->name;
+	drv->driver.bus = &visorbus_type;
+	drv->driver.probe = visordriver_probe_device;
+	drv->driver.remove = visordriver_remove_device;
+	drv->driver.owner = drv->owner;
+
+	/*
+	 * driver_register does this:
+	 *   bus_add_driver(drv)
+	 *   ->if (drv.bus)  ** (bus_type) **
+	 *       driver_attach(drv)
+	 *         for each dev with bus type of drv.bus
+	 *           if (!dev.drv)  ** no driver assigned yet **
+	 *             if (bus.match(dev,drv))  [visorbus_match]
+	 *               dev.drv = drv
+	 *               if (!drv.probe(dev))   [visordriver_probe_device]
+	 *                 dev.drv = NULL
+	 */
+
+	rc = driver_register(&drv->driver);
+	if (rc < 0)
+		return rc;
+	rc = register_driver_attributes(drv);
+	if (rc < 0)
+		driver_unregister(&drv->driver);
+	return rc;
+}
+EXPORT_SYMBOL_GPL(visorbus_register_visor_driver);
+
+/**
  * create_bus_instance() - create a device instance for the visor bus itself
  * @dev: struct visor_device indicating the bus instance
  *
@@ -1070,7 +1063,6 @@ create_bus_instance(struct visor_device *dev)
 	} else {
 		kfree(hdr_info);
 	}
-	bus_count++;
 	list_add_tail(&dev->list_all, &list_all_bus_instances);
 	dev_set_drvdata(&dev->device, dev);
 	return 0;
@@ -1091,7 +1083,6 @@ remove_bus_instance(struct visor_device *dev)
 	 * successfully been able to trace thru the code to see where/how
 	 * release() gets called.  But I know it does.
 	 */
-	bus_count--;
 	if (dev->visorchannel) {
 		visorchannel_destroy(dev->visorchannel);
 		dev->visorchannel = NULL;

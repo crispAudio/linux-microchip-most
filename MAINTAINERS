@@ -5297,6 +5297,13 @@ M:	Greg Kroah-Hartman <gregkh@linuxfoundation.org>
 S:	Maintained
 F:	drivers/staging/greybus/
 
+GREYBUS AUDIO PROTOCOLS DRIVERS
+M:	Vaibhav Agarwal <vaibhav.sr@gmail.com>
+S:	Maintained
+F:	drivers/staging/greybus/audio_codec.c
+F:	drivers/staging/greybus/audio_module.c
+F:	drivers/staging/greybus/audio_topology.c
+
 GREYBUS PROTOCOLS DRIVERS
 M:	Rui Miguel Silva <rmfrfs@gmail.com>
 S:	Maintained
@@ -5313,6 +5320,30 @@ S:	Maintained
 F:	drivers/staging/greybus/loopback.c
 F:	drivers/staging/greybus/timesync.c
 F:	drivers/staging/greybus/timesync_platform.c
+
+GREYBUS PROTOCOLS DRIVERS
+M:	Viresh Kumar <vireshk@kernel.org>
+S:	Maintained
+F:	drivers/staging/greybus/authentication.c
+F:	drivers/staging/greybus/bootrom.c
+F:	drivers/staging/greybus/firmware.h
+F:	drivers/staging/greybus/fw-core.c
+F:	drivers/staging/greybus/fw-download.c
+F:	drivers/staging/greybus/fw-managament.c
+F:	drivers/staging/greybus/greybus_authentication.h
+F:	drivers/staging/greybus/greybus_firmware.h
+F:	drivers/staging/greybus/hid.c
+F:	drivers/staging/greybus/i2c.c
+F:	drivers/staging/greybus/spi.c
+F:	drivers/staging/greybus/spilib.c
+F:	drivers/staging/greybus/spilib.h
+
+GREYBUS PLATFORM DRIVERS
+M:	Vaibhav Hiremath <hvaibhav.linux@gmail.com>
+S:	Maintained
+F:	drivers/staging/greybus/arche-platform.c
+F:	drivers/staging/greybus/arche-apb-ctrl.c
+F:	drivers/staging/greybus/arche_platform.h
 
 GSPCA FINEPIX SUBDRIVER
 M:	Frank Zago <frank@zago.net>
