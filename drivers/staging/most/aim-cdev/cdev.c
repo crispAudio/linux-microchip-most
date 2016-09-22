@@ -190,6 +190,7 @@ static ssize_t aim_write(struct file *filp, const char __user *buf,
 	size_t to_copy, left;
 	struct mbo *mbo = NULL;
 	struct aim_channel *c = filp->private_data;
+	ssize_t ret;
 
 	mutex_lock(&c->io_mutex);
 	while (c->dev && !ch_get_mbo(c, &mbo)) {
@@ -203,15 +204,15 @@ static ssize_t aim_write(struct file *filp, const char __user *buf,
 	}
 
 	if (unlikely(!c->dev)) {
-		mutex_unlock(&c->io_mutex);
-		return -ENODEV;
+		ret = -ENODEV;
+		goto unlock;
 	}
 
 	to_copy = min(count, c->cfg->buffer_size - c->mbo_offs);
 	left = copy_from_user(mbo->virt_address + c->mbo_offs, buf, to_copy);
 	if (left == to_copy) {
-		mutex_unlock(&c->io_mutex);
-		return -EFAULT;
+		ret = -EFAULT;
+		goto unlock;
 	}
 
 	c->mbo_offs += to_copy - left;
@@ -224,8 +225,11 @@ static ssize_t aim_write(struct file *filp, const char __user *buf,
 		most_submit_mbo(mbo);
 	}
 
+	ret = to_copy - left;
+
+unlock:
 	mutex_unlock(&c->io_mutex);
-	return to_copy - left;
+	return ret;
 }
 
 /**
