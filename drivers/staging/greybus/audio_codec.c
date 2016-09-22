@@ -322,7 +322,7 @@ int gbaudio_module_update(struct gbaudio_codec_info *codec,
 	dev_dbg(module->dev, "%s:Module update %s sequence\n", w->name,
 		enable ? "Enable":"Disable");
 
-	if ((w->id != snd_soc_dapm_aif_in) && (w->id != snd_soc_dapm_aif_out)){
+	if ((w->id != snd_soc_dapm_aif_in) && (w->id != snd_soc_dapm_aif_out)) {
 		dev_dbg(codec->dev, "No action required for %s\n", w->name);
 		return 0;
 	}
@@ -1008,7 +1008,7 @@ static int gbcodec_probe(struct snd_soc_codec *codec)
 	snd_soc_codec_set_drvdata(codec, info);
 	gbcodec = info;
 
-        device_init_wakeup(codec->dev, 1);
+	device_init_wakeup(codec->dev, 1);
 	return 0;
 }
 
