@@ -187,10 +187,10 @@ static int aim_close(struct inode *inode, struct file *filp)
 static ssize_t aim_write(struct file *filp, const char __user *buf,
 			 size_t count, loff_t *offset)
 {
+	int ret;
 	size_t to_copy, left;
 	struct mbo *mbo = NULL;
 	struct aim_channel *c = filp->private_data;
-	ssize_t ret;
 
 	mutex_lock(&c->io_mutex);
 	while (c->dev && !ch_get_mbo(c, &mbo)) {
@@ -226,7 +226,6 @@ static ssize_t aim_write(struct file *filp, const char __user *buf,
 	}
 
 	ret = to_copy - left;
-
 unlock:
 	mutex_unlock(&c->io_mutex);
 	return ret;

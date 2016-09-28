@@ -88,8 +88,6 @@ do {						\
 
 #define SCSI_LUN(srb)		((srb)->device->lun)
 
-typedef unsigned long DELAY_PARA_T;
-
 struct rtsx_chip;
 
 struct rtsx_dev {
@@ -130,8 +128,6 @@ struct rtsx_dev {
 	struct rtsx_chip	*chip;
 };
 
-typedef struct rtsx_dev rtsx_dev_t;
-
 /* Convert between rtsx_dev and the corresponding Scsi_Host */
 static inline struct Scsi_Host *rtsx_to_host(struct rtsx_dev *dev)
 {
@@ -165,8 +161,10 @@ static inline void get_current_time(u8 *timeval_buf, int buf_len)
 	timeval_buf[7] = (u8)(tv_usec);
 }
 
-/* The scsi_lock() and scsi_unlock() macros protect the sm_state and the
- * single queue element srb for write access */
+/*
+ * The scsi_lock() and scsi_unlock() macros protect the sm_state and the
+ * single queue element srb for write access
+ */
 #define scsi_unlock(host)	spin_unlock_irq(host->host_lock)
 #define scsi_lock(host)		spin_lock_irq(host->host_lock)
 

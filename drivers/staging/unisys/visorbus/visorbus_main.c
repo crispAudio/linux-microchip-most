@@ -18,7 +18,6 @@
 
 #include "visorbus.h"
 #include "visorbus_private.h"
-#include "version.h"
 #include "vmcallinterface.h"
 
 #define MYDRVNAME "visorbus"
@@ -34,34 +33,6 @@ static int visorbus_forcenomatch;
 #define POLLJIFFIES_NORMALCHANNEL     10
 
 static int busreg_rc = -ENODEV; /* stores the result from bus registration */
-
-/*
- * BUS type attributes
- *
- * define & implement display of bus attributes under
- * /sys/bus/visorbus.
- */
-
-static ssize_t version_show(struct bus_type *bus, char *buf)
-{
-	return snprintf(buf, PAGE_SIZE, "%s\n", VERSION);
-}
-
-static BUS_ATTR_RO(version);
-
-static struct attribute *visorbus_bus_attrs[] = {
-	&bus_attr_version.attr,
-	NULL,
-};
-
-static const struct attribute_group visorbus_bus_group = {
-	.attrs = visorbus_bus_attrs,
-};
-
-static const struct attribute_group *visorbus_bus_groups[] = {
-	&visorbus_bus_group,
-	NULL,
-};
 
 /*
  * DEVICE type attributes
@@ -167,7 +138,6 @@ struct bus_type visorbus_type = {
 	.match = visorbus_match,
 	.uevent = visorbus_uevent,
 	.dev_groups = visorbus_dev_groups,
-	.bus_groups = visorbus_bus_groups,
 };
 
 /**
@@ -391,8 +361,8 @@ static ssize_t client_bus_info_show(struct device *dev,
 		if (vdev->name)
 			partition_name = vdev->name;
 		shift = snprintf(pos, remain,
-				 "Client device / client driver info for %s eartition (vbus #%u):\n",
-				 partition_name, vdev->chipset_dev_no);
+				 "Client device / client driver info for %s partition (vbus #%u):\n",
+				 partition_name, vdev->chipset_bus_no);
 		pos += shift;
 		remain -= shift;
 		shift = visorchannel_read(channel,
@@ -464,36 +434,6 @@ static const struct attribute_group *visorbus_groups[] = {
 		&dev_attr_grp,
 		NULL
 };
-
-/*
- *  DRIVER attributes
- *
- *  define & implement display of driver attributes under
- *  /sys/bus/visorbus/drivers/<drivername>.
- */
-
-static ssize_t
-DRIVER_ATTR_version(struct device_driver *xdrv, char *buf)
-{
-	struct visor_driver *drv = to_visor_driver(xdrv);
-
-	return snprintf(buf, PAGE_SIZE, "%s\n", drv->version);
-}
-
-static int
-register_driver_attributes(struct visor_driver *drv)
-{
-	struct driver_attribute version =
-	    __ATTR(version, S_IRUGO, DRIVER_ATTR_version, NULL);
-	drv->version_attr = version;
-	return driver_create_file(&drv->driver, &drv->version_attr);
-}
-
-static void
-unregister_driver_attributes(struct visor_driver *drv)
-{
-	driver_remove_file(&drv->driver, &drv->version_attr);
-}
 
 static void
 dev_periodic_work(unsigned long __opaque)
@@ -567,7 +507,6 @@ visordriver_remove_device(struct device *xdev)
 void
 visorbus_unregister_visor_driver(struct visor_driver *drv)
 {
-	unregister_driver_attributes(drv);
 	driver_unregister(&drv->driver);
 }
 EXPORT_SYMBOL_GPL(visorbus_unregister_visor_driver);
@@ -823,7 +762,7 @@ write_vbus_bus_info(struct visorchannel *chan,
 static void
 write_vbus_dev_info(struct visorchannel *chan,
 		    struct spar_vbus_headerinfo *hdr_info,
-		    struct ultra_vbus_deviceinfo *info, int devix)
+		    struct ultra_vbus_deviceinfo *info, unsigned int devix)
 {
 	int off =
 	    (sizeof(struct channel_header) + hdr_info->dev_info_offset) +
@@ -848,8 +787,8 @@ fix_vbus_dev_info(struct visor_device *visordev)
 	int i;
 	struct visor_device *bdev;
 	struct visor_driver *visordrv;
-	int bus_no = visordev->chipset_bus_no;
-	int dev_no = visordev->chipset_dev_no;
+	u32 bus_no = visordev->chipset_bus_no;
+	u32 dev_no = visordev->chipset_dev_no;
 	struct ultra_vbus_deviceinfo dev_info;
 	const char *chan_type_name = NULL;
 	struct spar_vbus_headerinfo *hdr_info;
@@ -857,14 +796,12 @@ fix_vbus_dev_info(struct visor_device *visordev)
 	if (!visordev->device.driver)
 		return;
 
-	hdr_info = (struct spar_vbus_headerinfo *)visordev->vbus_hdr_info;
-	if (!hdr_info)
-		return;
-
 	bdev = visorbus_get_device_by_id(bus_no, BUS_ROOT_DEVICE, NULL);
 	if (!bdev)
 		return;
-
+	hdr_info = (struct spar_vbus_headerinfo *)bdev->vbus_hdr_info;
+	if (!hdr_info)
+		return;
 	visordrv = to_visor_driver(visordev->device.driver);
 
 	/*
@@ -882,9 +819,7 @@ fix_vbus_dev_info(struct visor_device *visordev)
 		}
 	}
 
-	bus_device_info_init(&dev_info, chan_type_name,
-			     visordrv->name, visordrv->version,
-			     visordrv->vertag);
+	bus_device_info_init(&dev_info, chan_type_name, visordrv->name);
 	write_vbus_dev_info(bdev->visorchannel, hdr_info, &dev_info, dev_no);
 
 	/*
@@ -1014,9 +949,6 @@ int visorbus_register_visor_driver(struct visor_driver *drv)
 	 */
 
 	rc = driver_register(&drv->driver);
-	if (rc < 0)
-		return rc;
-	rc = register_driver_attributes(drv);
 	if (rc < 0)
 		driver_unregister(&drv->driver);
 	return rc;
@@ -1343,9 +1275,7 @@ visorbus_init(void)
 	int err;
 
 	POSTCODE_LINUX_3(DRIVER_ENTRY_PC, 0, POSTCODE_SEVERITY_INFO);
-	bus_device_info_init(&clientbus_driverinfo,
-			     "clientbus", "visorbus",
-			     VERSION, NULL);
+	bus_device_info_init(&clientbus_driverinfo, "clientbus", "visorbus");
 
 	err = create_bus_type();
 	if (err < 0) {
@@ -1353,9 +1283,7 @@ visorbus_init(void)
 		goto error;
 	}
 
-	bus_device_info_init(&chipset_driverinfo,
-			     "chipset", "visorchipset",
-			     VERSION, NULL);
+	bus_device_info_init(&chipset_driverinfo, "chipset", "visorchipset");
 
 	return 0;
 

@@ -25,7 +25,6 @@
 #include <linux/uuid.h>
 #include <linux/crash_dump.h>
 
-#include "version.h"
 #include "visorbus.h"
 #include "visorbus_private.h"
 #include "vmcallinterface.h"
@@ -509,8 +508,8 @@ controlvm_respond_chipset_init(struct controlvm_message_header *msg_hdr,
 
 	controlvm_init_response(&outmsg, msg_hdr, response);
 	outmsg.cmd.init_chipset.features = features;
-	if (!visorchannel_signalinsert(controlvm_channel,
-				       CONTROLVM_QUEUE_REQUEST, &outmsg)) {
+	if (visorchannel_signalinsert(controlvm_channel,
+				      CONTROLVM_QUEUE_REQUEST, &outmsg)) {
 		return;
 	}
 }
@@ -558,8 +557,8 @@ controlvm_respond(struct controlvm_message_header *msg_hdr, int response)
 	if (outmsg.hdr.flags.test_message == 1)
 		return;
 
-	if (!visorchannel_signalinsert(controlvm_channel,
-				       CONTROLVM_QUEUE_REQUEST, &outmsg)) {
+	if (visorchannel_signalinsert(controlvm_channel,
+				      CONTROLVM_QUEUE_REQUEST, &outmsg)) {
 		return;
 	}
 }
@@ -573,8 +572,8 @@ static void controlvm_respond_physdev_changestate(
 	controlvm_init_response(&outmsg, msg_hdr, response);
 	outmsg.cmd.device_change_state.state = state;
 	outmsg.cmd.device_change_state.flags.phys_device = 1;
-	if (!visorchannel_signalinsert(controlvm_channel,
-				       CONTROLVM_QUEUE_REQUEST, &outmsg)) {
+	if (visorchannel_signalinsert(controlvm_channel,
+				      CONTROLVM_QUEUE_REQUEST, &outmsg)) {
 		return;
 	}
 }
@@ -671,8 +670,8 @@ device_changestate_responder(enum controlvm_id cmd_id,
 	outmsg.cmd.device_change_state.dev_no = dev_no;
 	outmsg.cmd.device_change_state.state = response_state;
 
-	if (!visorchannel_signalinsert(controlvm_channel,
-				       CONTROLVM_QUEUE_REQUEST, &outmsg))
+	if (visorchannel_signalinsert(controlvm_channel,
+				      CONTROLVM_QUEUE_REQUEST, &outmsg))
 		return;
 }
 
@@ -2001,8 +2000,8 @@ handle_command(struct controlvm_message inmsg, u64 channel_addr)
 static bool
 read_controlvm_event(struct controlvm_message *msg)
 {
-	if (visorchannel_signalremove(controlvm_channel,
-				      CONTROLVM_QUEUE_EVENT, msg)) {
+	if (!visorchannel_signalremove(controlvm_channel,
+				       CONTROLVM_QUEUE_EVENT, msg)) {
 		/* got a message */
 		if (msg->hdr.flags.test_message == 1)
 			return false;
@@ -2049,9 +2048,9 @@ controlvm_periodic_work(struct work_struct *work)
 	bool got_command = false;
 	bool handle_command_failed = false;
 
-	while (visorchannel_signalremove(controlvm_channel,
-					 CONTROLVM_QUEUE_RESPONSE,
-					 &inmsg))
+	while (!visorchannel_signalremove(controlvm_channel,
+					  CONTROLVM_QUEUE_RESPONSE,
+					  &inmsg))
 		;
 	if (!got_command) {
 		if (controlvm_pending_msg_valid) {
@@ -2264,6 +2263,4 @@ module_exit(exit_unisys);
 
 MODULE_AUTHOR("Unisys");
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Supervisor chipset driver for service partition: ver "
-		   VERSION);
-MODULE_VERSION(VERSION);
+MODULE_DESCRIPTION("s-Par visorbus driver for virtual device buses");

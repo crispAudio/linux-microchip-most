@@ -335,9 +335,9 @@ static int forward_taskmgmt_command(enum task_mgmt_types tasktype,
 
 	dev_dbg(&scsidev->sdev_gendev,
 		"visorhba: initiating type=%d taskmgmt command\n", tasktype);
-	if (!visorchannel_signalinsert(devdata->dev->visorchannel,
-				       IOCHAN_TO_IOPART,
-				       cmdrsp))
+	if (visorchannel_signalinsert(devdata->dev->visorchannel,
+				      IOCHAN_TO_IOPART,
+				      cmdrsp))
 		goto err_del_scsipending_ent;
 
 	/* It can take the Service Partition up to 35 seconds to complete
@@ -538,9 +538,9 @@ visorhba_queue_command_lck(struct scsi_cmnd *scsicmd,
 	}
 	cmdrsp->scsi.guest_phys_entries = scsi_sg_count(scsicmd);
 
-	if (!visorchannel_signalinsert(devdata->dev->visorchannel,
-				       IOCHAN_TO_IOPART,
-				       cmdrsp))
+	if (visorchannel_signalinsert(devdata->dev->visorchannel,
+				      IOCHAN_TO_IOPART,
+				      cmdrsp))
 		/* queue must be full and we aren't going to wait */
 		goto err_del_scsipending_ent;
 
@@ -927,9 +927,9 @@ drain_queue(struct uiscmdrsp *cmdrsp, struct visorhba_devdata *devdata)
 	struct scsi_cmnd *scsicmd;
 
 	while (1) {
-		if (!visorchannel_signalremove(devdata->dev->visorchannel,
-					       IOCHAN_FROM_IOPART,
-					       cmdrsp))
+		if (visorchannel_signalremove(devdata->dev->visorchannel,
+					      IOCHAN_FROM_IOPART,
+					      cmdrsp))
 			break; /* queue empty */
 
 		if (cmdrsp->cmdtype == CMD_SCSI_TYPE) {
@@ -1220,4 +1220,4 @@ module_exit(visorhba_exit);
 
 MODULE_AUTHOR("Unisys");
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("s-Par hba driver");
+MODULE_DESCRIPTION("s-Par HBA driver for virtual SCSI host busses");
