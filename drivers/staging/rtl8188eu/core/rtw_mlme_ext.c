@@ -4240,7 +4240,7 @@ void report_survey_event(struct adapter *padapter,
 
 	INIT_LIST_HEAD(&pcmd_obj->list);
 
-	pcmd_obj->cmdcode = GEN_CMD_CODE(_Set_MLME_EVT);
+	pcmd_obj->cmdcode = _Set_MLME_EVT_CMD_;
 	pcmd_obj->cmdsz = cmdsz;
 	pcmd_obj->parmbuf = pevtcmd;
 
@@ -4249,7 +4249,7 @@ void report_survey_event(struct adapter *padapter,
 
 	pc2h_evt_hdr = (struct C2HEvent_Header *)(pevtcmd);
 	pc2h_evt_hdr->len = sizeof(struct survey_event);
-	pc2h_evt_hdr->ID = GEN_EVT_CODE(_Survey);
+	pc2h_evt_hdr->ID = _Survey_EVT_;
 	pc2h_evt_hdr->seq = atomic_inc_return(&pmlmeext->event_seq);
 
 	psurvey_evt = (struct survey_event *)(pevtcmd + sizeof(struct C2HEvent_Header));
@@ -4290,7 +4290,7 @@ void report_surveydone_event(struct adapter *padapter)
 
 	INIT_LIST_HEAD(&pcmd_obj->list);
 
-	pcmd_obj->cmdcode = GEN_CMD_CODE(_Set_MLME_EVT);
+	pcmd_obj->cmdcode = _Set_MLME_EVT_CMD_;
 	pcmd_obj->cmdsz = cmdsz;
 	pcmd_obj->parmbuf = pevtcmd;
 
@@ -4299,7 +4299,7 @@ void report_surveydone_event(struct adapter *padapter)
 
 	pc2h_evt_hdr = (struct C2HEvent_Header *)(pevtcmd);
 	pc2h_evt_hdr->len = sizeof(struct surveydone_event);
-	pc2h_evt_hdr->ID = GEN_EVT_CODE(_SurveyDone);
+	pc2h_evt_hdr->ID = _SurveyDone_EVT_;
 	pc2h_evt_hdr->seq = atomic_inc_return(&pmlmeext->event_seq);
 
 	psurveydone_evt = (struct surveydone_event *)(pevtcmd + sizeof(struct C2HEvent_Header));
@@ -4334,7 +4334,7 @@ void report_join_res(struct adapter *padapter, int res)
 
 	INIT_LIST_HEAD(&pcmd_obj->list);
 
-	pcmd_obj->cmdcode = GEN_CMD_CODE(_Set_MLME_EVT);
+	pcmd_obj->cmdcode = _Set_MLME_EVT_CMD_;
 	pcmd_obj->cmdsz = cmdsz;
 	pcmd_obj->parmbuf = pevtcmd;
 
@@ -4343,7 +4343,7 @@ void report_join_res(struct adapter *padapter, int res)
 
 	pc2h_evt_hdr = (struct C2HEvent_Header *)(pevtcmd);
 	pc2h_evt_hdr->len = sizeof(struct joinbss_event);
-	pc2h_evt_hdr->ID = GEN_EVT_CODE(_JoinBss);
+	pc2h_evt_hdr->ID = _JoinBss_EVT_;
 	pc2h_evt_hdr->seq = atomic_inc_return(&pmlmeext->event_seq);
 
 	pjoinbss_evt = (struct joinbss_event *)(pevtcmd + sizeof(struct C2HEvent_Header));
@@ -4385,7 +4385,7 @@ void report_del_sta_event(struct adapter *padapter, unsigned char *MacAddr, unsi
 
 	INIT_LIST_HEAD(&pcmd_obj->list);
 
-	pcmd_obj->cmdcode = GEN_CMD_CODE(_Set_MLME_EVT);
+	pcmd_obj->cmdcode = _Set_MLME_EVT_CMD_;
 	pcmd_obj->cmdsz = cmdsz;
 	pcmd_obj->parmbuf = pevtcmd;
 
@@ -4394,7 +4394,7 @@ void report_del_sta_event(struct adapter *padapter, unsigned char *MacAddr, unsi
 
 	pc2h_evt_hdr = (struct C2HEvent_Header *)(pevtcmd);
 	pc2h_evt_hdr->len = sizeof(struct stadel_event);
-	pc2h_evt_hdr->ID = GEN_EVT_CODE(_DelSTA);
+	pc2h_evt_hdr->ID = _DelSTA_EVT_;
 	pc2h_evt_hdr->seq = atomic_inc_return(&pmlmeext->event_seq);
 
 	pdel_sta_evt = (struct stadel_event *)(pevtcmd + sizeof(struct C2HEvent_Header));
@@ -4438,7 +4438,7 @@ void report_add_sta_event(struct adapter *padapter, unsigned char *MacAddr, int 
 
 	INIT_LIST_HEAD(&pcmd_obj->list);
 
-	pcmd_obj->cmdcode = GEN_CMD_CODE(_Set_MLME_EVT);
+	pcmd_obj->cmdcode = _Set_MLME_EVT_CMD_;
 	pcmd_obj->cmdsz = cmdsz;
 	pcmd_obj->parmbuf = pevtcmd;
 
@@ -4447,7 +4447,7 @@ void report_add_sta_event(struct adapter *padapter, unsigned char *MacAddr, int 
 
 	pc2h_evt_hdr = (struct C2HEvent_Header *)(pevtcmd);
 	pc2h_evt_hdr->len = sizeof(struct stassoc_event);
-	pc2h_evt_hdr->ID = GEN_EVT_CODE(_AddSTA);
+	pc2h_evt_hdr->ID = _AddSTA_EVT_;
 	pc2h_evt_hdr->seq = atomic_inc_return(&pmlmeext->event_seq);
 
 	padd_sta_evt = (struct stassoc_event *)(pevtcmd + sizeof(struct C2HEvent_Header));
@@ -4849,7 +4849,7 @@ void survey_timer_hdl(unsigned long data)
 			goto exit_survey_timer_hdl;
 		}
 
-		init_h2fwcmd_w_parm_no_rsp(ph2c, psurveyPara, GEN_CMD_CODE(_SiteSurvey));
+		init_h2fwcmd_w_parm_no_rsp(ph2c, psurveyPara, _SiteSurvey_CMD_);
 		rtw_enqueue_cmd(pcmdpriv, ph2c);
 	}
 
@@ -5425,7 +5425,7 @@ u8 set_tx_beacon_cmd(struct adapter *padapter)
 				      pmlmeinfo->hidden_ssid_mode);
 	ptxBeacon_parm->IELength += len_diff;
 
-	init_h2fwcmd_w_parm_no_rsp(ph2c, ptxBeacon_parm, GEN_CMD_CODE(_TX_Beacon));
+	init_h2fwcmd_w_parm_no_rsp(ph2c, ptxBeacon_parm, _TX_Beacon_CMD_);
 
 	res = rtw_enqueue_cmd(pcmdpriv, ph2c);
 

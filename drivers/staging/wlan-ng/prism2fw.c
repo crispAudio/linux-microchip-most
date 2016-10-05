@@ -96,16 +96,16 @@ struct s3inforec {
 	u16 len;
 	u16 type;
 	union {
-		hfa384x_compident_t version;
-		hfa384x_caplevel_t compat;
+		struct hfa384x_compident version;
+		struct hfa384x_caplevel compat;
 		u16 buildseq;
-		hfa384x_compident_t platform;
+		struct hfa384x_compident platform;
 	} info;
 };
 
 struct pda {
 	u8 buf[HFA384x_PDA_LEN_MAX];
-	hfa384x_pdrec_t *rec[HFA384x_PDA_RECS_MAX];
+	struct hfa384x_pdrec *rec[HFA384x_PDA_RECS_MAX];
 	unsigned int nrec;
 };
 
@@ -152,10 +152,10 @@ static struct imgchunk fchunk[CHUNKS_MAX];
 /* PDA, built from [card|newfile]+[addfile1+addfile2...] */
 
 static struct pda pda;
-static hfa384x_compident_t nicid;
-static hfa384x_caplevel_t rfid;
-static hfa384x_caplevel_t macid;
-static hfa384x_caplevel_t priid;
+static struct hfa384x_compident nicid;
+static struct hfa384x_caplevel rfid;
+static struct hfa384x_caplevel macid;
+static struct hfa384x_caplevel priid;
 
 /*================================================================*/
 /* Local Function Declarations */
@@ -266,7 +266,7 @@ static int prism2_fwapply(const struct ihex_binrec *rfptr,
 
 	/* clear the pda and add an initial END record */
 	memset(&pda, 0, sizeof(pda));
-	pda.rec[0] = (hfa384x_pdrec_t *)pda.buf;
+	pda.rec[0] = (struct hfa384x_pdrec *)pda.buf;
 	pda.rec[0]->len = cpu_to_le16(2);	/* len in words */
 	pda.rec[0]->code = cpu_to_le16(HFA384x_PDR_END_OF_PDA);
 	pda.nrec = 1;
@@ -599,7 +599,7 @@ static int mkpdrlist(struct pda *pda)
 	curroff = 0;
 	while (curroff < (HFA384x_PDA_LEN_MAX / 2 - 1) &&
 	       le16_to_cpu(pda16[curroff + 1]) != HFA384x_PDR_END_OF_PDA) {
-		pda->rec[pda->nrec] = (hfa384x_pdrec_t *)&(pda16[curroff]);
+		pda->rec[pda->nrec] = (struct hfa384x_pdrec *)&(pda16[curroff]);
 
 		if (le16_to_cpu(pda->rec[pda->nrec]->code) ==
 		    HFA384x_PDR_NICID) {
@@ -638,7 +638,7 @@ static int mkpdrlist(struct pda *pda)
 		       curroff, pda->nrec);
 		return 1;
 	}
-	pda->rec[pda->nrec] = (hfa384x_pdrec_t *)&(pda16[curroff]);
+	pda->rec[pda->nrec] = (struct hfa384x_pdrec *)&(pda16[curroff]);
 	(pda->nrec)++;
 	return 0;
 }

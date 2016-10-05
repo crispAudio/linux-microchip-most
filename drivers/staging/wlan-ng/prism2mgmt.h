@@ -65,7 +65,7 @@ extern int prism2_reset_settletime;
 
 u32 prism2sta_ifstate(struct wlandevice *wlandev, u32 ifstate);
 
-void prism2sta_ev_info(struct wlandevice *wlandev, hfa384x_InfFrame_t *inf);
+void prism2sta_ev_info(struct wlandevice *wlandev, struct hfa384x_InfFrame *inf);
 void prism2sta_ev_txexc(struct wlandevice *wlandev, u16 status);
 void prism2sta_ev_tx(struct wlandevice *wlandev, u16 status);
 void prism2sta_ev_alloc(struct wlandevice *wlandev);
@@ -96,10 +96,11 @@ void prism2mgmt_bytestr2pstr(struct hfa384x_bytestr *bytestr,
 			     struct p80211pstrd *pstr);
 
 /* functions to convert Group Addresses */
-void prism2mgmt_get_grpaddr(u32 did, struct p80211pstrd *pstr, hfa384x_t *priv);
+void prism2mgmt_get_grpaddr(u32 did, struct p80211pstrd *pstr,
+			    struct hfa384x *priv);
 int prism2mgmt_set_grpaddr(u32 did,
 			   u8 *prism2buf, struct p80211pstrd *pstr,
-			   hfa384x_t *priv);
+			   struct hfa384x *priv);
 int prism2mgmt_get_grpaddr_index(u32 did);
 
 void prism2sta_processing_defer(struct work_struct *data);

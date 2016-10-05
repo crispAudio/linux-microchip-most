@@ -290,8 +290,7 @@ static int channel_attr_groups_set(struct gb_channel *channel,
 		return 0;
 
 	/* Set attributes based in the channel flags */
-	channel->attrs = kcalloc(size + 1, sizeof(**channel->attrs),
-				 GFP_KERNEL);
+	channel->attrs = kcalloc(size + 1, sizeof(*channel->attrs), GFP_KERNEL);
 	if (!channel->attrs)
 		return -ENOMEM;
 	channel->attr_group = kcalloc(1, sizeof(*channel->attr_group),
@@ -464,6 +463,9 @@ static int gb_blink_set(struct led_classdev *cdev, unsigned long *delay_on,
 	if (channel->releasing)
 		return -ESHUTDOWN;
 
+	if (!delay_on || !delay_off)
+		return -EINVAL;
+
 	mutex_lock(&channel->lock);
 	ret = gb_pm_runtime_get_sync(bundle);
 	if (ret < 0)
@@ -481,7 +483,7 @@ static int gb_blink_set(struct led_classdev *cdev, unsigned long *delay_on,
 	if (ret < 0)
 		goto out_pm_put;
 
-	if (delay_on)
+	if (*delay_on)
 		channel->active = true;
 	else
 		channel->active = false;
