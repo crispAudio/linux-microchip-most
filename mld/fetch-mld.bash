@@ -90,7 +90,6 @@ local_fetch() {
 	get_patch backport__networking__alloc_netdev.patch
 	get_patch backport__networking__ether_addr_copy.patch
 	get_patch backport__hdm-dim2__devm_ioremap_resource.patch
-	get_patch workaround-networking-sync-block-duplication.patch
 
 	# apply the universal patches only
 	# the rest depends on your kernel
