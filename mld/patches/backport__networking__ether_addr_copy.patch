@@ -1,12 +1,12 @@
 backport: networking: ether_addr_copy
 
-From: Christian Gromm <christian.gromm@microchip.com>
+From: Andrey Shvetsov <andrey.shvetsov@k2l.de>
 
 
 diff --git a/drivers/staging/most/aim-network/networking.c b/drivers/staging/most/aim-network/networking.c
 --- a/drivers/staging/most/aim-network/networking.c
 +++ b/drivers/staging/most/aim-network/networking.c
-@@ -468,7 +468,7 @@ static int aim_rx_data(struct mbo *mbo)
+@@ -479,7 +479,7 @@ static int aim_rx_data(struct mbo *mbo)
  
  	if (nd->is_mamac) {
  		/* dest */
@@ -15,12 +15,12 @@ diff --git a/drivers/staging/most/aim-network/networking.c b/drivers/staging/mos
  
  		/* src */
  		memcpy(skb_put(skb, 4), &zero, 4);
-@@ -560,7 +560,7 @@ void most_deliver_netinfo(struct most_interface *iface,
- 		return;
- 
- 	if (mac_addr)
--		ether_addr_copy(dev->dev_addr, mac_addr);
-+		memcpy(dev->dev_addr, mac_addr, ETH_ALEN);
- 
- 	if (nd->link_stat != link_stat) {
- 		nd->link_stat = link_stat;
+@@ -573,7 +573,7 @@ void most_deliver_netinfo(struct most_interface *iface,
+ 		if (!is_valid_ether_addr(dev->dev_addr)) {
+ 			netdev_info(dev, "set mac %02x-%02x-%02x-%02x-%02x-%02x\n",
+ 				    m[0], m[1], m[2], m[3], m[4], m[5]);
+-			ether_addr_copy(dev->dev_addr, m);
++			memcpy(dev->dev_addr, m, ETH_ALEN);
+ 			complete(&nd->mac_compl);
+ 		} else if (!ether_addr_equal(dev->dev_addr, m)) {
+ 			netdev_warn(dev, "reject mac %02x-%02x-%02x-%02x-%02x-%02x\n",

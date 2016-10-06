@@ -80,6 +80,11 @@ local_fetch() {
 	get_src hdm-i2c/hdm_i2c.c
 	get_src hdm-i2c/platform/plat_imx6q.c
 	get_src hdm-i2c/platform/plat_zynq.c
+	get_src hdm-i2s/i2s_hdm.h
+	get_src hdm-i2s/i2s_clkgen.h
+	get_src hdm-i2s/i2s_clkgen.c
+	get_src hdm-i2s/i2s_hdm.c
+	get_src hdm-i2s/configure.sh
 	get_src hdm-usb/hdm_usb.c
 	get_src mostcore/core.c
 	get_src mostcore/mostcore.h
@@ -90,7 +95,6 @@ local_fetch() {
 	get_patch backport__networking__alloc_netdev.patch
 	get_patch backport__networking__ether_addr_copy.patch
 	get_patch backport__hdm-dim2__devm_ioremap_resource.patch
-	get_patch workaround-networking-sync-block-duplication.patch
 
 	# apply the universal patches only
 	# the rest depends on your kernel
