@@ -80,6 +80,11 @@ local_fetch() {
 	get_src hdm-i2c/hdm_i2c.c
 	get_src hdm-i2c/platform/plat_imx6q.c
 	get_src hdm-i2c/platform/plat_zynq.c
+	get_src hdm-i2s/i2s_hdm.h
+	get_src hdm-i2s/i2s_clkgen.h
+	get_src hdm-i2s/i2s_clkgen.c
+	get_src hdm-i2s/i2s_hdm.c
+	get_src hdm-i2s/configure.sh
 	get_src hdm-usb/hdm_usb.c
 	get_src mostcore/core.c
 	get_src mostcore/mostcore.h
