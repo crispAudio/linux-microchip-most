@@ -1,4 +1,4 @@
-The MOST Linux Driver 1.3.12
+The MOST Linux Driver
 
 The latest version of this file may be downloaded from the
 https://raw.githubusercontent.com/microchip-ais/linux/mchp-dev/mld/README
@@ -26,8 +26,39 @@ To see the build instructions:
 HISTORY OF CHANGES
 ==================
 
-1.3.12
-------
+mchp-dev
+--------
+
+- networking-aim: to prevent the non-standard behavior, the networking startup
+  call (ifup) remains blocked until the networking interface receives a valid
+  MAC address from the INIC (commit 3c3f3af938cd)
+- networking-aim: fixed startup of the networking interfaces based on the
+  MediaLB and start before the MOST ring is locked (commit 1396c3de7053)
+- dim2-hdm: added monitoring of the used Async Tx DBR memory as a workaround
+  for the issue, where the Sync channel duplicates the packets while the Async
+  channel has the traffic.  This change needs the configured interrupt mlb_int
+  additional to ahb0_int in the device tree. (commit f40841ab035c)
+- dim2-hdm: increased DBR size of the Control and Async Tx channels to double
+  of configured buffer size to improve the throughput of the transmitted
+  over the MediaLB messages
+- core: the properties add_link and remove_link made write-only
+- core: added read-only property 'links' that shows all linked to the AIM
+  channels (without link parameters)
+- core: the property set_datatype accepts also 'isoc' and returns 'isoc'
+  instead of 'isoc_avp'
+- core: the property set_direction accepts also 'tx' and 'rx' and returns 'tx'
+  and 'rx' instead of correspondingly 'dir_tx' and 'dir_rx'
+- core: the properties available_datatypes and available_directions return text
+  instead of binary content and may be grep'd now
+- cdev-aim: writing for streaming channels (sync/isoc) made possible using the
+  buffer of any size.  This allows to use the redirection like
+  'cat stream >/dev/mdev0-ca12' instead of 'dd'.
+- i2s-hdm: added I2S HDM
+- made a lot of diverse code improvements
+
+
+mld-1.3.12
+----------
 
 - usb-hdm: added support for USB gadget OS81210
 - usb-hdm: added arbitrary access to DCI registers
