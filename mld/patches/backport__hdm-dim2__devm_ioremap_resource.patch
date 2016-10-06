@@ -1,78 +1,105 @@
 backport: hdm-dim2: devm_ioremap_resource 
 
 From: Andrey Shvetsov <andrey.shvetsov@k2l.de>
+
+
 diff --git a/drivers/staging/most/hdm-dim2/dim2_hdm.c b/drivers/staging/most/hdm-dim2/dim2_hdm.c
-index 9c274e7..4fe28d3 100644
+index 35aee9f..7655d5f 100644
 --- a/drivers/staging/most/hdm-dim2/dim2_hdm.c
 +++ b/drivers/staging/most/hdm-dim2/dim2_hdm.c
-@@ -727,14 +727,29 @@ static int dim2_probe(struct platform_device *pdev)
+@@ -722,6 +722,40 @@ static int poison_channel(struct most_interface *most_iface, int ch_idx)
+ 	return ret;
+ }
+ 
++static void __iomem *my_ioremap_resource(struct device *dev, struct resource *res)
++{
++	void __iomem *io_base;
++	struct platform_device *pdev =
++		container_of(dev, struct platform_device, dev);
++
++	if (!res) {
++		dev_err(dev, "no memory region defined\n");
++		return ERR_PTR(-ENOENT);
++	}
++
++	if (!request_mem_region(res->start, resource_size(res), pdev->name)) {
++		dev_err(dev, "failed to request mem region\n");
++		return ERR_PTR(-EBUSY);
++	}
++
++	io_base = ioremap(res->start, resource_size(res));
++	if (!io_base) {
++		dev_err(dev, "failed to ioremap\n");
++		release_mem_region(res->start, resource_size(res));
++		return ERR_PTR(-ENOMEM);
++	}
++
++	return io_base;
++}
++
++static void my_unmap_release(struct platform_device *pdev, void __iomem *io_base)
++{
++	struct resource *res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++
++	iounmap(io_base);
++	release_mem_region(res->start, resource_size(res));
++}
++
+ /*
+  * dim2_probe - dim2 probe handler
+  * @pdev: platform device structure
+@@ -745,13 +779,14 @@ static int dim2_probe(struct platform_device *pdev)
  
  	platform_set_drvdata(pdev, dev);
  	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 -	dev->io_base = devm_ioremap_resource(&pdev->dev, res);
--	if (IS_ERR(dev->io_base))
--		return PTR_ERR(dev->io_base);
-+	if (!res) {
-+		dev_err(&pdev->dev, "no memory region defined\n");
-+		ret = -ENOENT;
-+		return ret;
-+	}
-+
-+	if (!request_mem_region(res->start, resource_size(res), pdev->name)) {
-+		dev_err(&pdev->dev, "failed to request mem region\n");
-+		ret = -EBUSY;
-+		return ret;
-+	}
-+
-+	dev->io_base = ioremap(res->start, resource_size(res));
-+	if (!dev->io_base) {
-+		dev_err(&pdev->dev, "failed to ioremap\n");
-+		ret = -ENOMEM;
-+		goto err_release_mem;
-+	}
++	dev->io_base = my_ioremap_resource(&pdev->dev, res);
+ 	if (IS_ERR(dev->io_base))
+ 		return PTR_ERR(dev->io_base);
  
- 	ret = platform_get_irq(pdev, 0);
- 	if (ret < 0) {
- 		dev_err(&pdev->dev, "failed to get irq\n");
--		return -ENODEV;
-+		goto err_unmap_io;
+ 	irq = platform_get_irq(pdev, 0);
+ 	if (irq < 0) {
+ 		dev_err(&pdev->dev, "failed to get ahb0_int irq\n");
++		my_unmap_release(pdev, dev->io_base);
+ 		return -ENODEV;
  	}
- 	dev->irq_ahb0 = ret;
  
-@@ -743,7 +758,7 @@ static int dim2_probe(struct platform_device *pdev)
+@@ -759,12 +794,14 @@ static int dim2_probe(struct platform_device *pdev)
+ 			       "dim2_ahb0_int", dev);
  	if (ret) {
- 		dev_err(&pdev->dev, "failed to request IRQ: %d, err: %d\n",
- 			dev->irq_ahb0, ret);
--		return ret;
-+		goto err_unmap_io;
+ 		dev_err(&pdev->dev, "failed to request ahb0_int irq %d\n", irq);
++		my_unmap_release(pdev, dev->io_base);
+ 		return ret;
  	}
- 	init_waitqueue_head(&dev->netinfo_waitq);
- 	dev->deliver_netinfo = 0;
-@@ -818,6 +833,10 @@ err_unreg_iface:
+ 
+ 	irq = platform_get_irq(pdev, 1);
+ 	if (irq < 0) {
+ 		dev_err(&pdev->dev, "failed to get mlb_int irq\n");
++		my_unmap_release(pdev, dev->io_base);
+ 		return -ENODEV;
+ 	}
+ 
+@@ -772,6 +809,7 @@ static int dim2_probe(struct platform_device *pdev)
+ 			       "dim2_mlb_int", dev);
+ 	if (ret) {
+ 		dev_err(&pdev->dev, "failed to request mlb_int irq %d\n", irq);
++		my_unmap_release(pdev, dev->io_base);
+ 		return ret;
+ 	}
+ 
+@@ -848,6 +886,7 @@ err_unreg_iface:
  	most_deregister_interface(&dev->most_iface);
  err_stop_thread:
  	kthread_stop(dev->netinfo_task);
-+err_unmap_io:
-+	iounmap(dev->io_base);
-+err_release_mem:
-+	release_mem_region(res->start, resource_size(res));
++	my_unmap_release(pdev, dev->io_base);
  
  	return ret;
  }
-@@ -831,6 +850,7 @@ err_stop_thread:
- static int dim2_remove(struct platform_device *pdev)
- {
- 	struct dim2_hdm *dev = platform_get_drvdata(pdev);
-+	struct resource *res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
- 	struct dim2_platform_data *pdata = pdev->dev.platform_data;
- 	unsigned long flags;
- 
-@@ -844,6 +864,8 @@ static int dim2_remove(struct platform_device *pdev)
+@@ -874,6 +913,7 @@ static int dim2_remove(struct platform_device *pdev)
  	dim2_sysfs_destroy(&dev->bus);
  	most_deregister_interface(&dev->most_iface);
  	kthread_stop(dev->netinfo_task);
-+	iounmap(dev->io_base);
-+	release_mem_region(res->start, resource_size(res));
++	my_unmap_release(pdev, dev->io_base);
  
  	/*
  	 * break link to local platform_device_id struct
