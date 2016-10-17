@@ -254,14 +254,6 @@ int ll_md_blocking_ast(struct ldlm_lock *lock, struct ldlm_lock_desc *desc,
 				       PFID(ll_inode2fid(inode)), rc);
 		}
 
-		if (bits & MDS_INODELOCK_UPDATE) {
-			struct ll_inode_info *lli = ll_i2info(inode);
-
-			spin_lock(&lli->lli_lock);
-			lli->lli_flags &= ~LLIF_MDS_SIZE_LOCK;
-			spin_unlock(&lli->lli_lock);
-		}
-
 		if ((bits & MDS_INODELOCK_UPDATE) && S_ISDIR(inode->i_mode)) {
 			struct ll_inode_info *lli = ll_i2info(inode);
 
@@ -1097,12 +1089,16 @@ out:
 }
 
 static int ll_rename(struct inode *src, struct dentry *src_dchild,
-		     struct inode *tgt, struct dentry *tgt_dchild)
+		     struct inode *tgt, struct dentry *tgt_dchild,
+		     unsigned int flags)
 {
 	struct ptlrpc_request *request = NULL;
 	struct ll_sb_info *sbi = ll_i2sbi(src);
 	struct md_op_data *op_data;
 	int err;
+
+	if (flags)
+		return -EINVAL;
 
 	CDEBUG(D_VFSTRACE,
 	       "VFS Op:oldname=%pd, src_dir="DFID"(%p), newname=%pd, tgt_dir="DFID"(%p)\n",
@@ -1148,14 +1144,11 @@ const struct inode_operations ll_dir_inode_operations = {
 	.rmdir	      = ll_rmdir,
 	.symlink	    = ll_symlink,
 	.link	       = ll_link,
-	.rename	     = ll_rename,
+	.rename		= ll_rename,
 	.setattr	    = ll_setattr,
 	.getattr	    = ll_getattr,
 	.permission	 = ll_inode_permission,
-	.setxattr	   = generic_setxattr,
-	.getxattr	   = generic_getxattr,
 	.listxattr	  = ll_listxattr,
-	.removexattr	= generic_removexattr,
 	.get_acl	    = ll_get_acl,
 };
 
@@ -1163,9 +1156,6 @@ const struct inode_operations ll_special_inode_operations = {
 	.setattr	= ll_setattr,
 	.getattr	= ll_getattr,
 	.permission     = ll_inode_permission,
-	.setxattr       = generic_setxattr,
-	.getxattr       = generic_getxattr,
 	.listxattr      = ll_listxattr,
-	.removexattr    = generic_removexattr,
 	.get_acl	    = ll_get_acl,
 };
