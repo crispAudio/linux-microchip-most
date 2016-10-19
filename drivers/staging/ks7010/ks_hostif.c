@@ -97,11 +97,10 @@ int ks_wlan_do_power_save(struct ks_wlan_private *priv)
 {
 	DPRINTK(4, "psstatus.status=%d\n", atomic_read(&priv->psstatus.status));
 
-	if ((priv->connect_status & CONNECT_STATUS_MASK) == CONNECT_STATUS) {
+	if ((priv->connect_status & CONNECT_STATUS_MASK) == CONNECT_STATUS)
 		hostif_sme_enqueue(priv, SME_POW_MNGMT_REQUEST);
-	} else {
+	else
 		priv->dev_state = DEVICE_STATE_READY;
-	}
 	return 0;
 }
 
@@ -687,15 +686,13 @@ void hostif_mib_set_confirm(struct ks_wlan_private *priv)
 		break;
 	case DOT11_GMK1_TSC:
 		DPRINTK(2, "DOT11_GMK1_TSC:mib_status=%d\n", (int)mib_status);
-		if (atomic_read(&priv->psstatus.snooze_guard)) {
+		if (atomic_read(&priv->psstatus.snooze_guard))
 			atomic_set(&priv->psstatus.snooze_guard, 0);
-		}
 		break;
 	case DOT11_GMK2_TSC:
 		DPRINTK(2, "DOT11_GMK2_TSC:mib_status=%d\n", (int)mib_status);
-		if (atomic_read(&priv->psstatus.snooze_guard)) {
+		if (atomic_read(&priv->psstatus.snooze_guard))
 			atomic_set(&priv->psstatus.snooze_guard, 0);
-		}
 		break;
 	case LOCAL_PMK:
 		DPRINTK(2, "LOCAL_PMK:mib_status=%d\n", (int)mib_status);
@@ -750,6 +747,7 @@ void hostif_start_confirm(struct ks_wlan_private *priv)
 {
 #ifdef WPS
 	union iwreq_data wrqu;
+
 	wrqu.data.length = 0;
 	wrqu.data.flags = 0;
 	wrqu.ap_addr.sa_family = ARPHRD_ETHER;
@@ -771,6 +769,7 @@ void hostif_connect_indication(struct ks_wlan_private *priv)
 	unsigned int old_status = priv->connect_status;
 	struct net_device *netdev = priv->net_dev;
 	union iwreq_data wrqu0;
+
 	connect_code = get_WORD(priv);
 
 	switch (connect_code) {
@@ -910,6 +909,7 @@ static
 void hostif_infrastructure_set_confirm(struct ks_wlan_private *priv)
 {
 	uint16_t result_code;
+
 	DPRINTK(3, "\n");
 	result_code = get_WORD(priv);
 	DPRINTK(3, "result code = %d\n", result_code);
@@ -975,6 +975,7 @@ void hostif_bss_scan_confirm(struct ks_wlan_private *priv)
 	unsigned int result_code;
 	struct net_device *dev = priv->net_dev;
 	union iwreq_data wrqu;
+
 	result_code = get_DWORD(priv);
 	DPRINTK(2, "result=%d :: scan_ind_count=%d\n", result_code,
 		priv->scan_ind_count);
@@ -1872,6 +1873,7 @@ static
 void hostif_sme_set_wep(struct ks_wlan_private *priv, int type)
 {
 	uint32_t val;
+
 	switch (type) {
 	case SME_WEP_INDEX_REQUEST:
 		val = cpu_to_le32((uint32_t) (priv->reg.wep_index));
@@ -2335,6 +2337,7 @@ static
 void hostif_sme_set_key(struct ks_wlan_private *priv, int type)
 {
 	uint32_t val;
+
 	switch (type) {
 	case SME_SET_FLAG:
 		val = cpu_to_le32((uint32_t) (priv->reg.privacy_invoked));
@@ -2430,9 +2433,8 @@ void hostif_sme_execute(struct ks_wlan_private *priv, int event)
 	DPRINTK(3, "event=%d\n", event);
 	switch (event) {
 	case SME_START:
-		if (priv->dev_state == DEVICE_STATE_BOOT) {
+		if (priv->dev_state == DEVICE_STATE_BOOT)
 			hostif_mib_get_request(priv, DOT11_MAC_ADDRESS);
-		}
 		break;
 	case SME_MULTICAST_REQUEST:
 		hostif_sme_multicast_set(priv);
@@ -2477,14 +2479,12 @@ void hostif_sme_execute(struct ks_wlan_private *priv, int event)
 		}
 		break;
 	case SME_GET_MAC_ADDRESS:
-		if (priv->dev_state == DEVICE_STATE_BOOT) {
+		if (priv->dev_state == DEVICE_STATE_BOOT)
 			hostif_mib_get_request(priv, DOT11_PRODUCT_VERSION);
-		}
 		break;
 	case SME_GET_PRODUCT_VERSION:
-		if (priv->dev_state == DEVICE_STATE_BOOT) {
+		if (priv->dev_state == DEVICE_STATE_BOOT)
 			priv->dev_state = DEVICE_STATE_PREINIT;
-		}
 		break;
 	case SME_STOP_REQUEST:
 		hostif_stop_request(priv);
@@ -2563,9 +2563,8 @@ void hostif_sme_execute(struct ks_wlan_private *priv, int event)
 		/* for power save */
 		atomic_set(&priv->psstatus.snooze_guard, 0);
 		atomic_set(&priv->psstatus.confirm_wait, 0);
-		if (priv->dev_state == DEVICE_STATE_PREINIT) {
+		if (priv->dev_state == DEVICE_STATE_PREINIT)
 			priv->dev_state = DEVICE_STATE_INIT;
-		}
 		/* wake_up_interruptible_all(&priv->confirm_wait); */
 		complete(&priv->confirm_wait);
 		break;
