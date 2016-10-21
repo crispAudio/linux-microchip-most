@@ -6,7 +6,7 @@ From: Andrey Shvetsov <andrey.shvetsov@k2l.de>
 diff --git a/drivers/staging/most/aim-network/networking.c b/drivers/staging/most/aim-network/networking.c
 --- a/drivers/staging/most/aim-network/networking.c
 +++ b/drivers/staging/most/aim-network/networking.c
-@@ -358,8 +358,7 @@ static int aim_probe_channel(struct most_interface *iface, int channel_idx,
+@@ -362,8 +362,7 @@ static int aim_probe_channel(struct most_interface *iface, int channel_idx,
  
  	if (nd->tx.linked || nd->rx.linked) {
  		struct net_device *dev =
