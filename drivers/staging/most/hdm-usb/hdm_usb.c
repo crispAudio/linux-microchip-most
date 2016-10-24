@@ -182,6 +182,11 @@ static inline int drci_wr_reg(struct usb_device *dev, u16 reg, u16 data)
 			       5 * HZ);
 }
 
+static inline int start_sync_ep(struct usb_device *usb_dev, u16 ep)
+{
+	return drci_wr_reg(usb_dev, DRCI_REG_BASE + DRCI_COMMAND + ep * 16, 1);
+}
+
 /**
  * get_stream_frame_size - calculate frame size of current configuration
  * @cfg: channel configuration
@@ -695,6 +700,12 @@ static int hdm_configure_channel(struct most_interface *iface, int channel,
 			  - conf->buffer_size;
 exit:
 	mdev->conf[channel] = *conf;
+	if (conf->data_type == MOST_CH_ASYNC) {
+		u16 ep = mdev->ep_address[channel];
+
+		if (start_sync_ep(mdev->usb_device, ep) < 0)
+			dev_warn(dev, "sync for ep%02x failed", ep);
+	}
 	return 0;
 }
 
@@ -978,6 +989,7 @@ static ssize_t store_value(struct most_dci_obj *dci_obj,
 	u16 val;
 	u16 reg_addr;
 	const char *name = attr->attr.name;
+	struct usb_device *usb_dev = dci_obj->usb_device;
 	int err = kstrtou16(buf, 16, &val);
 
 	if (err)
@@ -988,18 +1000,15 @@ static ssize_t store_value(struct most_dci_obj *dci_obj,
 		return count;
 	}
 
-	if (!strcmp(name, "arb_value")) {
-		reg_addr = dci_obj->reg_addr;
-	} else if (!strcmp(name, "sync_ep")) {
-		u16 ep = val;
-
-		reg_addr = DRCI_REG_BASE + DRCI_COMMAND + ep * 16;
-		val = 1;
-	} else if (get_static_reg_addr(ro_regs, name, &reg_addr)) {
+	if (!strcmp(name, "arb_value"))
+		err = drci_wr_reg(usb_dev, dci_obj->reg_addr, val);
+	else if (!strcmp(name, "sync_ep"))
+		err = start_sync_ep(usb_dev, val);
+	else if (!get_static_reg_addr(ro_regs, name, &reg_addr))
+		err = drci_wr_reg(usb_dev, reg_addr, val);
+	else
 		return -EFAULT;
-	}
 
-	err = drci_wr_reg(dci_obj->usb_device, reg_addr, val);
 	if (err < 0)
 		return err;
 
@@ -1111,7 +1120,6 @@ hdm_probe(struct usb_interface *interface, const struct usb_device_id *id)
 	struct most_channel_capability *tmp_cap;
 	struct usb_endpoint_descriptor *ep_desc;
 	int ret = 0;
-	int err;
 
 	if (!mdev)
 		goto exit_ENOMEM;
@@ -1187,13 +1195,6 @@ hdm_probe(struct usb_interface *interface, const struct usb_device_id *id)
 		tmp_cap++;
 		init_usb_anchor(&mdev->busy_urbs[i]);
 		spin_lock_init(&mdev->channel_lock[i]);
-		err = drci_wr_reg(usb_dev,
-				  DRCI_REG_BASE + DRCI_COMMAND +
-				  ep_desc->bEndpointAddress * 16,
-				  1);
-		if (err < 0)
-			dev_warn(dev, "DCI Sync for EP %02x failed",
-				 ep_desc->bEndpointAddress);
 	}
 	dev_notice(dev, "claimed gadget: Vendor=%4.4x ProdID=%4.4x Bus=%02x Device=%02x\n",
 		   le16_to_cpu(usb_dev->descriptor.idVendor),
