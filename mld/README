@@ -5,14 +5,13 @@ https://raw.githubusercontent.com/microchip-ais/linux/mchp-dev/mld/README
 
 See also https://github.com/microchip-ais/linux/tree/mchp-dev/mld
 
-Folow the instructions below to get the needed MOST Linux Driver version:
-(replace $VER by the version you need, such as mchp-dev or mld-1.3.12)
+Follow the instructions below to get the needed MOST Linux Driver version:
 
   $ mkdir mchp-mld
   $ cd mchp-mld
-  $ wget https://raw.githubusercontent.com/microchip-ais/linux/$VER/mld/fetch-mld.bash
+  $ wget https://raw.githubusercontent.com/microchip-ais/linux/mchp-dev/mld/fetch-mld.bash
   $ chmod +x fetch-mld.bash
-  $ ./fetch-mld.bash $VER
+  $ ./fetch-mld.bash <BRANCH-OR-TAG>
 
 At the end of this procedure you will find the directory .src with all needed
 sources and the directory .patches with the backport patches needed to build
@@ -26,9 +25,10 @@ To see the build instructions:
 HISTORY OF CHANGES
 ==================
 
-mchp-dev
---------
+mld-1.4.0
+---------
 
+- usb-hdm: fixed synchronization procedure for the asynchronous endpoints
 - networking-aim: to prevent the non-standard behavior, the networking startup
   call (ifup) remains blocked until the networking interface receives a valid
   MAC address from the INIC (commit 3c3f3af938cd)

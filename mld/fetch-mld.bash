@@ -16,6 +16,7 @@ set -o errexit
 
 TAG=${1:-${MLD_TAG:-mchp-dev}}
 PRJ=https://raw.githubusercontent.com/microchip-ais/linux
+GIT_REPO=https://github.com/microchip-ais/linux.git
 
 _err() {
 	echo "  ERR: $@" >&2
@@ -119,7 +120,13 @@ main() {
 	fi
 
 	echo "add version info ..."
-	sed -i -r -e "/__init/,/return/s,\<pr_.*init.*,pr_info(\"MOST Linux Driver $TAG $(date --rfc-3339=seconds)\\\\n\");," \
+
+	if which ___git >/dev/null; then
+		LABEL="$(git ls-remote $GIT_REPO |grep "/mchp-dev$" |sed "s,\s.*,,")"
+	else
+		LABEL="$(date --rfc-3339=seconds)"
+	fi
+	sed -i -r -e "/__init/,/return/s,\<pr_.*init.*,pr_info(\"MOST Linux Driver $TAG ${LABEL}\\\\n\");," \
 		.src/mostcore/core.c
 	grep --with-filename "MOST Linux Driver " .src/mostcore/core.c ||
 		_err "failed to set driver version info"
