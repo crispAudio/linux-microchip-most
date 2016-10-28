@@ -406,22 +406,24 @@ vchiq_set_conn_state(VCHIQ_STATE_T *state, VCHIQ_CONNSTATE_T newstate)
 }
 
 static inline void
-remote_event_create(REMOTE_EVENT_T *event)
+remote_event_create(VCHIQ_STATE_T *state, REMOTE_EVENT_T *event)
 {
 	event->armed = 0;
 	/* Don't clear the 'fired' flag because it may already have been set
 	** by the other side. */
-	sema_init(event->event, 0);
+	sema_init((struct semaphore *)((char *)state + event->event), 0);
 }
 
 static inline int
-remote_event_wait(REMOTE_EVENT_T *event)
+remote_event_wait(VCHIQ_STATE_T *state, REMOTE_EVENT_T *event)
 {
 	if (!event->fired) {
 		event->armed = 1;
-		dsb();
+		dsb(sy);
 		if (!event->fired) {
-			if (down_interruptible(event->event) != 0) {
+			if (down_interruptible(
+					(struct semaphore *)
+					((char *)state + event->event)) != 0) {
 				event->armed = 0;
 				return 0;
 			}
@@ -435,26 +437,26 @@ remote_event_wait(REMOTE_EVENT_T *event)
 }
 
 static inline void
-remote_event_signal_local(REMOTE_EVENT_T *event)
+remote_event_signal_local(VCHIQ_STATE_T *state, REMOTE_EVENT_T *event)
 {
 	event->armed = 0;
-	up(event->event);
+	up((struct semaphore *)((char *)state + event->event));
 }
 
 static inline void
-remote_event_poll(REMOTE_EVENT_T *event)
+remote_event_poll(VCHIQ_STATE_T *state, REMOTE_EVENT_T *event)
 {
 	if (event->fired && event->armed)
-		remote_event_signal_local(event);
+		remote_event_signal_local(state, event);
 }
 
 void
 remote_event_pollall(VCHIQ_STATE_T *state)
 {
-	remote_event_poll(&state->local->sync_trigger);
-	remote_event_poll(&state->local->sync_release);
-	remote_event_poll(&state->local->trigger);
-	remote_event_poll(&state->local->recycle);
+	remote_event_poll(state, &state->local->sync_trigger);
+	remote_event_poll(state, &state->local->sync_release);
+	remote_event_poll(state, &state->local->trigger);
+	remote_event_poll(state, &state->local->recycle);
 }
 
 /* Round up message sizes so that any space at the end of a slot is always big
@@ -535,7 +537,7 @@ request_poll(VCHIQ_STATE_T *state, VCHIQ_SERVICE_T *service, int poll_type)
 	wmb();
 
 	/* ... and ensure the slot handler runs. */
-	remote_event_signal_local(&state->local->trigger);
+	remote_event_signal_local(state, &state->local->trigger);
 }
 
 /* Called from queue_message, by the slot handler and application threads,
@@ -976,7 +978,7 @@ queue_message_sync(VCHIQ_STATE_T *state, VCHIQ_SERVICE_T *service,
 		(mutex_lock_interruptible(&state->sync_mutex) != 0))
 		return VCHIQ_RETRY;
 
-	remote_event_wait(&local->sync_release);
+	remote_event_wait(state, &local->sync_release);
 
 	rmb();
 
@@ -1687,8 +1689,8 @@ parse_rx_slots(VCHIQ_STATE_T *state)
 					min(64, size));
 		}
 
-		if (((unsigned int)header & VCHIQ_SLOT_MASK) + calc_stride(size)
-			> VCHIQ_SLOT_SIZE) {
+		if (((unsigned long)header & VCHIQ_SLOT_MASK) +
+		    calc_stride(size) > VCHIQ_SLOT_SIZE) {
 			vchiq_log_error(vchiq_core_log_level,
 				"header %pK (msgid %x) - size %x too big for slot",
 				header, (unsigned int)msgid,
@@ -1798,7 +1800,7 @@ parse_rx_slots(VCHIQ_STATE_T *state)
 				bulk = &queue->bulks[
 					BULK_INDEX(queue->remote_insert)];
 				bulk->remote_data =
-					(void *)((int *)header->data)[0];
+					(void *)(long)((int *)header->data)[0];
 				bulk->remote_size = ((int *)header->data)[1];
 				wmb();
 
@@ -1995,7 +1997,7 @@ slot_handler_func(void *v)
 	while (1) {
 		DEBUG_COUNT(SLOT_HANDLER_COUNT);
 		DEBUG_TRACE(SLOT_HANDLER_LINE);
-		remote_event_wait(&local->trigger);
+		remote_event_wait(state, &local->trigger);
 
 		rmb();
 
@@ -2084,7 +2086,7 @@ recycle_func(void *v)
 	VCHIQ_SHARED_STATE_T *local = state->local;
 
 	while (1) {
-		remote_event_wait(&local->recycle);
+		remote_event_wait(state, &local->recycle);
 
 		process_free_queue(state);
 	}
@@ -2107,7 +2109,7 @@ sync_func(void *v)
 		int type;
 		unsigned int localport, remoteport;
 
-		remote_event_wait(&local->sync_trigger);
+		remote_event_wait(state, &local->sync_trigger);
 
 		rmb();
 
@@ -2221,7 +2223,8 @@ get_conn_state_name(VCHIQ_CONNSTATE_T conn_state)
 VCHIQ_SLOT_ZERO_T *
 vchiq_init_slots(void *mem_base, int mem_size)
 {
-	int mem_align = (VCHIQ_SLOT_SIZE - (int)mem_base) & VCHIQ_SLOT_MASK;
+	int mem_align =
+		(int)((VCHIQ_SLOT_SIZE - (long)mem_base) & VCHIQ_SLOT_MASK);
 	VCHIQ_SLOT_ZERO_T *slot_zero =
 		(VCHIQ_SLOT_ZERO_T *)((char *)mem_base + mem_align);
 	int num_slots = (mem_size - mem_align)/VCHIQ_SLOT_SIZE;
@@ -2406,24 +2409,24 @@ vchiq_init_state(VCHIQ_STATE_T *state, VCHIQ_SLOT_ZERO_T *slot_zero,
 	state->data_use_count = 0;
 	state->data_quota = state->slot_queue_available - 1;
 
-	local->trigger.event = &state->trigger_event;
-	remote_event_create(&local->trigger);
+	local->trigger.event = offsetof(VCHIQ_STATE_T, trigger_event);
+	remote_event_create(state, &local->trigger);
 	local->tx_pos = 0;
 
-	local->recycle.event = &state->recycle_event;
-	remote_event_create(&local->recycle);
+	local->recycle.event = offsetof(VCHIQ_STATE_T, recycle_event);
+	remote_event_create(state, &local->recycle);
 	local->slot_queue_recycle = state->slot_queue_available;
 
-	local->sync_trigger.event = &state->sync_trigger_event;
-	remote_event_create(&local->sync_trigger);
+	local->sync_trigger.event = offsetof(VCHIQ_STATE_T, sync_trigger_event);
+	remote_event_create(state, &local->sync_trigger);
 
-	local->sync_release.event = &state->sync_release_event;
-	remote_event_create(&local->sync_release);
+	local->sync_release.event = offsetof(VCHIQ_STATE_T, sync_release_event);
+	remote_event_create(state, &local->sync_release);
 
 	/* At start-of-day, the slot is empty and available */
 	((VCHIQ_HEADER_T *)SLOT_DATA_FROM_INDEX(state, local->slot_sync))->msgid
 		= VCHIQ_MSGID_PADDING;
-	remote_event_signal_local(&local->sync_release);
+	remote_event_signal_local(state, &local->sync_release);
 
 	local->debug[DEBUG_ENTRIES] = DEBUG_MAX;
 
@@ -2437,7 +2440,7 @@ vchiq_init_state(VCHIQ_STATE_T *state, VCHIQ_SLOT_ZERO_T *slot_zero,
 		(void *)state,
 		threadname);
 
-	if (state->slot_handler_thread == NULL) {
+	if (IS_ERR(state->slot_handler_thread)) {
 		vchiq_loud_error_header();
 		vchiq_loud_error("couldn't create thread %s", threadname);
 		vchiq_loud_error_footer();
@@ -2450,7 +2453,7 @@ vchiq_init_state(VCHIQ_STATE_T *state, VCHIQ_SLOT_ZERO_T *slot_zero,
 	state->recycle_thread = kthread_create(&recycle_func,
 		(void *)state,
 		threadname);
-	if (state->recycle_thread == NULL) {
+	if (IS_ERR(state->recycle_thread)) {
 		vchiq_loud_error_header();
 		vchiq_loud_error("couldn't create thread %s", threadname);
 		vchiq_loud_error_footer();
@@ -2463,7 +2466,7 @@ vchiq_init_state(VCHIQ_STATE_T *state, VCHIQ_SLOT_ZERO_T *slot_zero,
 	state->sync_thread = kthread_create(&sync_func,
 		(void *)state,
 		threadname);
-	if (state->sync_thread == NULL) {
+	if (IS_ERR(state->sync_thread)) {
 		vchiq_loud_error_header();
 		vchiq_loud_error("couldn't create thread %s", threadname);
 		vchiq_loud_error_footer();
@@ -3301,7 +3304,7 @@ vchiq_bulk_transfer(VCHIQ_SERVICE_HANDLE_T handle,
 				(dir == VCHIQ_BULK_TRANSMIT) ?
 				VCHIQ_POLL_TXNOTIFY : VCHIQ_POLL_RXNOTIFY);
 	} else {
-		int payload[2] = { (int)bulk->data, bulk->size };
+		int payload[2] = { (int)(long)bulk->data, bulk->size };
 		VCHIQ_ELEMENT_T element = { payload, sizeof(payload) };
 
 		status = queue_message(state, NULL,
@@ -3824,26 +3827,26 @@ VCHIQ_STATUS_T vchiq_send_remote_use_active(VCHIQ_STATE_T *state)
 	return status;
 }
 
-void vchiq_log_dump_mem(const char *label, uint32_t addr, const void *voidMem,
-	size_t numBytes)
+void vchiq_log_dump_mem(const char *label, uint32_t addr, const void *void_mem,
+	size_t num_bytes)
 {
-	const uint8_t  *mem = (const uint8_t *)voidMem;
+	const uint8_t  *mem = (const uint8_t *)void_mem;
 	size_t          offset;
-	char            lineBuf[100];
+	char            line_buf[100];
 	char           *s;
 
-	while (numBytes > 0) {
-		s = lineBuf;
+	while (num_bytes > 0) {
+		s = line_buf;
 
 		for (offset = 0; offset < 16; offset++) {
-			if (offset < numBytes)
+			if (offset < num_bytes)
 				s += snprintf(s, 4, "%02x ", mem[offset]);
 			else
 				s += snprintf(s, 4, "   ");
 		}
 
 		for (offset = 0; offset < 16; offset++) {
-			if (offset < numBytes) {
+			if (offset < num_bytes) {
 				uint8_t ch = mem[offset];
 
 				if ((ch < ' ') || (ch > '~'))
@@ -3855,16 +3858,16 @@ void vchiq_log_dump_mem(const char *label, uint32_t addr, const void *voidMem,
 
 		if ((label != NULL) && (*label != '\0'))
 			vchiq_log_trace(VCHIQ_LOG_TRACE,
-				"%s: %08x: %s", label, addr, lineBuf);
+				"%s: %08x: %s", label, addr, line_buf);
 		else
 			vchiq_log_trace(VCHIQ_LOG_TRACE,
-				"%08x: %s", addr, lineBuf);
+				"%08x: %s", addr, line_buf);
 
 		addr += 16;
 		mem += 16;
-		if (numBytes > 16)
-			numBytes -= 16;
+		if (num_bytes > 16)
+			num_bytes -= 16;
 		else
-			numBytes = 0;
+			num_bytes = 0;
 	}
 }

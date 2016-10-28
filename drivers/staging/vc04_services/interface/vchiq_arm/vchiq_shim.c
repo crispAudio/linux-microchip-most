@@ -172,15 +172,18 @@ int32_t vchi_msg_queue(VCHI_SERVICE_HANDLE_T handle,
 
 	WARN_ON(flags != VCHI_FLAGS_BLOCK_UNTIL_QUEUED);
 
-	status = vchiq_queue_message(service->handle, &element, 1);
-
-	/* vchiq_queue_message() may return VCHIQ_RETRY, so we need to
-	** implement a retry mechanism since this function is supposed
-	** to block until queued
-	*/
-	while (status == VCHIQ_RETRY) {
-		msleep(1);
+	while (1) {
 		status = vchiq_queue_message(service->handle, &element, 1);
+
+		/*
+		 * vchiq_queue_message() may return VCHIQ_RETRY, so we need to
+		 * implement a retry mechanism since this function is supposed
+		 * to block until queued
+		 */
+		if (status != VCHIQ_RETRY)
+			break;
+
+		msleep(1);
 	}
 
 	return vchiq_status_to_vchi(status);
@@ -229,17 +232,18 @@ int32_t vchi_bulk_queue_receive(VCHI_SERVICE_HANDLE_T handle,
 		return vchiq_status_to_vchi(VCHIQ_ERROR);
 	}
 
-	status = vchiq_bulk_receive(service->handle, data_dst, data_size,
-		bulk_handle, mode);
-
-	/* vchiq_bulk_receive() may return VCHIQ_RETRY, so we need to
-	** implement a retry mechanism since this function is supposed
-	** to block until queued
-	*/
-	while (status == VCHIQ_RETRY) {
-		msleep(1);
+	while (1) {
 		status = vchiq_bulk_receive(service->handle, data_dst,
 			data_size, bulk_handle, mode);
+		/*
+		 * vchiq_bulk_receive() may return VCHIQ_RETRY, so we need to
+		 * implement a retry mechanism since this function is supposed
+		 * to block until queued
+		 */
+		if (status != VCHIQ_RETRY)
+			break;
+
+		msleep(1);
 	}
 
 	return vchiq_status_to_vchi(status);
@@ -289,17 +293,19 @@ int32_t vchi_bulk_queue_transmit(VCHI_SERVICE_HANDLE_T handle,
 		return vchiq_status_to_vchi(VCHIQ_ERROR);
 	}
 
-	status = vchiq_bulk_transmit(service->handle, data_src, data_size,
-		bulk_handle, mode);
-
-	/* vchiq_bulk_transmit() may return VCHIQ_RETRY, so we need to
-	** implement a retry mechanism since this function is supposed
-	** to block until queued
-	*/
-	while (status == VCHIQ_RETRY) {
-		msleep(1);
+	while (1) {
 		status = vchiq_bulk_transmit(service->handle, data_src,
 			data_size, bulk_handle, mode);
+
+		/*
+		 * vchiq_bulk_transmit() may return VCHIQ_RETRY, so we need to
+		 * implement a retry mechanism since this function is supposed
+		 * to block until queued
+		 */
+		if (status != VCHIQ_RETRY)
+			break;
+
+		msleep(1);
 	}
 
 	return vchiq_status_to_vchi(status);
@@ -400,8 +406,16 @@ EXPORT_SYMBOL(vchi_msg_queuev);
  ***********************************************************/
 int32_t vchi_held_msg_release(VCHI_HELD_MSG_T *message)
 {
-	vchiq_release_message((VCHIQ_SERVICE_HANDLE_T)message->service,
-		(VCHIQ_HEADER_T *)message->message);
+	/*
+	 * Convert the service field pointer back to an
+	 * VCHIQ_SERVICE_HANDLE_T which is an int.
+	 * This pointer is opaque to everything except
+	 * vchi_msg_hold which simply upcasted the int
+	 * to a pointer.
+	 */
+
+	vchiq_release_message((VCHIQ_SERVICE_HANDLE_T)(long)message->service,
+			      (VCHIQ_HEADER_T *)message->message);
 
 	return 0;
 }
@@ -445,8 +459,16 @@ int32_t vchi_msg_hold(VCHI_SERVICE_HANDLE_T handle,
 	*data = header->data;
 	*msg_size = header->size;
 
+	/*
+	 * upcast the VCHIQ_SERVICE_HANDLE_T which is an int
+	 * to a pointer and stuff it in the held message.
+	 * This pointer is opaque to everything except
+	 * vchi_held_msg_release which simply downcasts it back
+	 * to an int.
+	 */
+
 	message_handle->service =
-		(struct opaque_vchi_service_t *)service->handle;
+		(struct opaque_vchi_service_t *)(long)service->handle;
 	message_handle->message = header;
 
 	return 0;

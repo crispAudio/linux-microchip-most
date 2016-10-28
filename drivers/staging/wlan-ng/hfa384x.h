@@ -286,7 +286,7 @@
 #define		HFA384x_RID_CNFWEPFLAGS		((u16)0xFC28)
 #define		HFA384x_RID_CNFAUTHENTICATION	((u16)0xFC2A)
 #define		HFA384x_RID_CNFROAMINGMODE	((u16)0xFC2D)
-#define		HFA384x_RID_CNFAPBCNint		((u16)0xFC33)
+#define		HFA384x_RID_CNFAPBCNINT		((u16)0xFC33)
 #define		HFA384x_RID_CNFDBMADJUST	((u16)0xFC46)
 #define		HFA384x_RID_CNFWPADATA		((u16)0xFC48)
 #define		HFA384x_RID_CNFBASICRATES	((u16)0xFCB3)
@@ -408,9 +408,9 @@ struct hfa384x_caplevel {
 #define HFA384x_CREATEIBSS_JOINCREATEIBSS          0
 
 /*-- Configuration Record: HostScanRequest (data portion only) --*/
-struct hfa384x_HostScanRequest_data {
-	u16 channelList;
-	u16 txRate;
+struct hfa384x_host_scan_request_data {
+	u16 channel_list;
+	u16 tx_rate;
 	struct hfa384x_bytestr32 ssid;
 } __packed;
 
@@ -428,7 +428,7 @@ struct hfa384x_authenticate_station_data {
 } __packed;
 
 /*-- Configuration Record: WPAData       (data portion only) --*/
-struct hfa384x_WPAData {
+struct hfa384x_wpa_data {
 	u16 datalen;
 	u8 data[0];		/* max 80 */
 } __packed;
@@ -462,9 +462,9 @@ struct hfa384x_commsquality {
 
 /*-- Information Record: dmbcommsquality --*/
 struct hfa384x_dbmcommsquality {
-	u16 CQdbm_currBSS;
-	u16 ASLdbm_currBSS;
-	u16 ANLdbm_currFC;
+	u16 cq_dbm_curr_bss;
+	u16 asl_dbm_curr_bss;
+	u16 anl_dbm_curr_fc;
 } __packed;
 
 /*--------------------------------------------------------------------
@@ -610,7 +610,7 @@ struct hfa384x_rx_frame {
  */
 
 /*--  Inquiry Frame, Diagnose: Communication Tallies --*/
-struct hfa384x_CommTallies16 {
+struct hfa384x_comm_tallies_16 {
 	u16 txunicastframes;
 	u16 txmulticastframes;
 	u16 txfragments;
@@ -688,13 +688,13 @@ struct hfa384x_ch_info_result_sub {
 #define HFA384x_CHINFORESULT_BSSACTIVE	BIT(0)
 #define HFA384x_CHINFORESULT_PCFACTIVE	BIT(1)
 
-struct hfa384x_ChInfoResult {
+struct hfa384x_ch_info_result {
 	u16 scanchannels;
 	struct hfa384x_ch_info_result_sub result[HFA384x_CHINFORESULT_MAX];
 } __packed;
 
 /*--  Inquiry Frame, Diagnose: Host Scan Results & Subfields--*/
-struct hfa384x_HScanResultSub {
+struct hfa384x_hscan_result_sub {
 	u16 chid;
 	u16 anl;
 	u16 sl;
@@ -707,10 +707,10 @@ struct hfa384x_HScanResultSub {
 	u16 atim;
 } __packed;
 
-struct hfa384x_HScanResult {
+struct hfa384x_hscan_result {
 	u16 nresult;
 	u16 rsvd;
-	struct hfa384x_HScanResultSub result[HFA384x_HSCANRESULT_MAX];
+	struct hfa384x_hscan_result_sub result[HFA384x_HSCANRESULT_MAX];
 } __packed;
 
 /*--  Unsolicited Frame, MAC Mgmt: LinkStatus --*/
@@ -723,7 +723,7 @@ struct hfa384x_HScanResult {
 #define HFA384x_LINK_AP_INRANGE		((u16)5)
 #define HFA384x_LINK_ASSOCFAIL		((u16)6)
 
-struct hfa384x_LinkStatus {
+struct hfa384x_link_status {
 	u16 linkstatus;
 } __packed;
 
@@ -744,34 +744,34 @@ struct hfa384x_assoc_status {
 
 /*--  Unsolicited Frame, MAC Mgmt: AuthRequest (AP Only) --*/
 
-struct hfa384x_AuthRequest {
+struct hfa384x_auth_request {
 	u8 sta_addr[ETH_ALEN];
 	u16 algorithm;
 } __packed;
 
 /*--  Unsolicited Frame, MAC Mgmt: PSUserCount (AP Only) --*/
 
-struct hfa384x_PSUserCount {
+struct hfa384x_ps_user_count {
 	u16 usercnt;
 } __packed;
 
-struct hfa384x_KeyIDChanged {
+struct hfa384x_key_id_changed {
 	u8 sta_addr[ETH_ALEN];
 	u16 keyid;
 } __packed;
 
 /*--  Collection of all Inf frames ---------------*/
 union hfa384x_infodata {
-	struct hfa384x_CommTallies16 commtallies16;
+	struct hfa384x_comm_tallies_16 commtallies16;
 	struct hfa384x_comm_tallies_32 commtallies32;
 	struct hfa384x_scan_result scanresult;
-	struct hfa384x_ChInfoResult chinforesult;
-	struct hfa384x_HScanResult hscanresult;
-	struct hfa384x_LinkStatus linkstatus;
+	struct hfa384x_ch_info_result chinforesult;
+	struct hfa384x_hscan_result hscanresult;
+	struct hfa384x_link_status linkstatus;
 	struct hfa384x_assoc_status assocstatus;
-	struct hfa384x_AuthRequest authreq;
-	struct hfa384x_PSUserCount psusercnt;
-	struct hfa384x_KeyIDChanged keyidchanged;
+	struct hfa384x_auth_request authreq;
+	struct hfa384x_ps_user_count psusercnt;
+	struct hfa384x_key_id_changed keyidchanged;
 } __packed;
 
 struct hfa384x_inf_frame {
@@ -1366,7 +1366,7 @@ struct hfa384x {
 	struct {
 		atomic_t done;
 		u8 count;
-		struct hfa384x_ChInfoResult results;
+		struct hfa384x_ch_info_result results;
 	} channel_info;
 
 	struct hfa384x_inf_frame *scanresults;

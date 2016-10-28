@@ -2774,7 +2774,7 @@ void vchiq_platform_conn_state_changed(VCHIQ_STATE_T *state,
 				&vchiq_keepalive_thread_func,
 				(void *)state,
 				threadname);
-			if (arm_state->ka_thread == NULL) {
+			if (IS_ERR(arm_state->ka_thread)) {
 				vchiq_log_error(vchiq_susp_log_level,
 					"vchiq: FATAL: couldn't create thread %s",
 					threadname);
@@ -2794,12 +2794,11 @@ static int vchiq_probe(struct platform_device *pdev)
 	void *ptr_err;
 
 	fw_node = of_parse_phandle(pdev->dev.of_node, "firmware", 0);
-/* Remove comment when booting without Device Tree is no longer supported
 	if (!fw_node) {
 		dev_err(&pdev->dev, "Missing firmware node\n");
 		return -ENOENT;
 	}
-*/
+
 	fw = rpi_firmware_get(fw_node);
 	if (!fw)
 		return -EPROBE_DEFER;
@@ -2884,7 +2883,6 @@ MODULE_DEVICE_TABLE(of, vchiq_of_match);
 static struct platform_driver vchiq_driver = {
 	.driver = {
 		.name = "bcm2835_vchiq",
-		.owner = THIS_MODULE,
 		.of_match_table = vchiq_of_match,
 	},
 	.probe = vchiq_probe,
@@ -2893,4 +2891,5 @@ static struct platform_driver vchiq_driver = {
 module_platform_driver(vchiq_driver);
 
 MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("Videocore VCHIQ driver");
 MODULE_AUTHOR("Broadcom Corporation");
