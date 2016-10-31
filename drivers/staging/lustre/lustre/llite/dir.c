@@ -410,6 +410,8 @@ static int ll_dir_setdirstripe(struct inode *parent, struct lmv_user_md *lump,
 	struct ptlrpc_request *request = NULL;
 	struct md_op_data *op_data;
 	struct ll_sb_info *sbi = ll_i2sbi(parent);
+	struct inode *inode = NULL;
+	struct dentry dentry;
 	int err;
 
 	if (unlikely(lump->lum_magic != LMV_USER_MAGIC))
@@ -418,6 +420,10 @@ static int ll_dir_setdirstripe(struct inode *parent, struct lmv_user_md *lump,
 	CDEBUG(D_VFSTRACE, "VFS Op:inode="DFID"(%p) name %s stripe_offset %d, stripe_count: %u\n",
 	       PFID(ll_inode2fid(parent)), parent, dirname,
 	       (int)lump->lum_stripe_offset, lump->lum_stripe_count);
+
+	if (lump->lum_stripe_count > 1 &&
+	    !(exp_connect_flags(sbi->ll_md_exp) & OBD_CONNECT_DIR_STRIPE))
+		return -EINVAL;
 
 	if (lump->lum_magic != cpu_to_le32(LMV_USER_MAGIC))
 		lustre_swab_lmv_user_md(lump);
@@ -439,8 +445,17 @@ static int ll_dir_setdirstripe(struct inode *parent, struct lmv_user_md *lump,
 			from_kgid(&init_user_ns, current_fsgid()),
 			cfs_curproc_cap_pack(), 0, &request);
 	ll_finish_md_op_data(op_data);
+
+	err = ll_prep_inode(&inode, request, parent->i_sb, NULL);
 	if (err)
 		goto err_exit;
+
+	memset(&dentry, 0, sizeof(dentry));
+	dentry.d_inode = inode;
+
+	err = ll_init_security(&dentry, inode, parent);
+	iput(inode);
+
 err_exit:
 	ptlrpc_req_finished(request);
 	return err;
@@ -822,10 +837,10 @@ static int ll_ioc_copy_end(struct super_block *sb, struct hsm_copy *copy)
 			 * when the file will not be modified for some tunable
 			 * time
 			 */
-			/* we do not notify caller */
 			hpk.hpk_flags &= ~HP_FLAG_RETRY;
+			rc = -EBUSY;
 			/* hpk_errval must be >= 0 */
-			hpk.hpk_errval = EBUSY;
+			hpk.hpk_errval = -rc;
 		}
 	}
 
@@ -1180,6 +1195,7 @@ lmv_out_free:
 		struct lmv_user_md *tmp = NULL;
 		union lmv_mds_md *lmm = NULL;
 		u64 valid = 0;
+		int max_stripe_count;
 		int stripe_count;
 		int mdt_index;
 		int lum_size;
@@ -1191,6 +1207,7 @@ lmv_out_free:
 		if (copy_from_user(&lum, ulmv, sizeof(*ulmv)))
 			return -EFAULT;
 
+		max_stripe_count = lum.lum_stripe_count;
 		/*
 		 * lum_magic will indicate which stripe the ioctl will like
 		 * to get, LMV_MAGIC_V1 is for normal LMV stripe, LMV_USER_MAGIC
@@ -1225,6 +1242,16 @@ lmv_out_free:
 		}
 
 		stripe_count = lmv_mds_md_stripe_count_get(lmm);
+		if (max_stripe_count < stripe_count) {
+			lum.lum_stripe_count = stripe_count;
+			if (copy_to_user(ulmv, &lum, sizeof(lum))) {
+				rc = -EFAULT;
+				goto finish_req;
+			}
+			rc = -E2BIG;
+			goto finish_req;
+		}
+
 		lum_size = lmv_user_md_size(stripe_count, LMV_MAGIC_V1);
 		tmp = kzalloc(lum_size, GFP_NOFS);
 		if (!tmp) {

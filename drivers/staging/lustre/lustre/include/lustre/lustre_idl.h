@@ -192,113 +192,6 @@ struct lu_seq_range_array {
 
 #define LU_SEQ_RANGE_MASK	0x3
 
-static inline unsigned fld_range_type(const struct lu_seq_range *range)
-{
-	return range->lsr_flags & LU_SEQ_RANGE_MASK;
-}
-
-static inline bool fld_range_is_ost(const struct lu_seq_range *range)
-{
-	return fld_range_type(range) == LU_SEQ_RANGE_OST;
-}
-
-static inline bool fld_range_is_mdt(const struct lu_seq_range *range)
-{
-	return fld_range_type(range) == LU_SEQ_RANGE_MDT;
-}
-
-/**
- * This all range is only being used when fld client sends fld query request,
- * but it does not know whether the seq is MDT or OST, so it will send req
- * with ALL type, which means either seq type gotten from lookup can be
- * expected.
- */
-static inline unsigned fld_range_is_any(const struct lu_seq_range *range)
-{
-	return fld_range_type(range) == LU_SEQ_RANGE_ANY;
-}
-
-static inline void fld_range_set_type(struct lu_seq_range *range,
-				      unsigned flags)
-{
-	range->lsr_flags |= flags;
-}
-
-static inline void fld_range_set_mdt(struct lu_seq_range *range)
-{
-	fld_range_set_type(range, LU_SEQ_RANGE_MDT);
-}
-
-static inline void fld_range_set_ost(struct lu_seq_range *range)
-{
-	fld_range_set_type(range, LU_SEQ_RANGE_OST);
-}
-
-static inline void fld_range_set_any(struct lu_seq_range *range)
-{
-	fld_range_set_type(range, LU_SEQ_RANGE_ANY);
-}
-
-/**
- * returns  width of given range \a r
- */
-
-static inline __u64 range_space(const struct lu_seq_range *range)
-{
-	return range->lsr_end - range->lsr_start;
-}
-
-/**
- * initialize range to zero
- */
-
-static inline void range_init(struct lu_seq_range *range)
-{
-	memset(range, 0, sizeof(*range));
-}
-
-/**
- * check if given seq id \a s is within given range \a r
- */
-
-static inline bool range_within(const struct lu_seq_range *range,
-				__u64 s)
-{
-	return s >= range->lsr_start && s < range->lsr_end;
-}
-
-static inline bool range_is_sane(const struct lu_seq_range *range)
-{
-	return (range->lsr_end >= range->lsr_start);
-}
-
-static inline bool range_is_zero(const struct lu_seq_range *range)
-{
-	return (range->lsr_start == 0 && range->lsr_end == 0);
-}
-
-static inline bool range_is_exhausted(const struct lu_seq_range *range)
-
-{
-	return range_space(range) == 0;
-}
-
-/* return 0 if two range have the same location */
-static inline int range_compare_loc(const struct lu_seq_range *r1,
-				    const struct lu_seq_range *r2)
-{
-	return r1->lsr_index != r2->lsr_index ||
-	       r1->lsr_flags != r2->lsr_flags;
-}
-
-#define DRANGE "[%#16.16Lx-%#16.16Lx):%x:%s"
-
-#define PRANGE(range)		\
-	(range)->lsr_start,	\
-	(range)->lsr_end,	\
-	(range)->lsr_index,	\
-	fld_range_is_mdt(range) ? "mdt" : "ost"
-
 /** \defgroup lu_fid lu_fid
  * @{
  */
@@ -848,7 +741,6 @@ static inline bool fid_is_sane(const struct lu_fid *fid)
 }
 
 void lustre_swab_lu_fid(struct lu_fid *fid);
-void lustre_swab_lu_seq_range(struct lu_seq_range *range);
 
 static inline bool lu_fid_eq(const struct lu_fid *f0, const struct lu_fid *f1)
 {
@@ -3122,23 +3014,32 @@ struct llog_gen_rec {
 	struct llog_rec_tail	lgr_tail;
 };
 
-/* On-disk header structure of each log object, stored in little endian order */
-#define LLOG_CHUNK_SIZE	 8192
-#define LLOG_HEADER_SIZE	(96)
-#define LLOG_BITMAP_BYTES       (LLOG_CHUNK_SIZE - LLOG_HEADER_SIZE)
-
-#define LLOG_MIN_REC_SIZE       (24) /* round(llog_rec_hdr + llog_rec_tail) */
-
 /* flags for the logs */
 enum llog_flag {
 	LLOG_F_ZAP_WHEN_EMPTY	= 0x1,
 	LLOG_F_IS_CAT		= 0x2,
 	LLOG_F_IS_PLAIN		= 0x4,
 	LLOG_F_EXT_JOBID        = BIT(3),
+	LLOG_F_IS_FIXSIZE	= BIT(4),
 
+	/*
+	 * Note: Flags covered by LLOG_F_EXT_MASK will be inherited from
+	 * catlog to plain log, so do not add LLOG_F_IS_FIXSIZE here,
+	 * because the catlog record is usually fixed size, but its plain
+	 * log record can be variable
+	 */
 	LLOG_F_EXT_MASK = LLOG_F_EXT_JOBID,
 };
 
+/* On-disk header structure of each log object, stored in little endian order */
+#define LLOG_MIN_CHUNK_SIZE	8192
+#define LLOG_HEADER_SIZE	(96)	/* sizeof (llog_log_hdr) +
+					 * sizeof(llh_tail) - sizeof(llh_bitmap)
+					 */
+#define LLOG_BITMAP_BYTES	(LLOG_MIN_CHUNK_SIZE - LLOG_HEADER_SIZE)
+#define LLOG_MIN_REC_SIZE	(24)	/* round(llog_rec_hdr + llog_rec_tail) */
+
+/* flags for the logs */
 struct llog_log_hdr {
 	struct llog_rec_hdr     llh_hdr;
 	__s64		   llh_timestamp;
@@ -3150,13 +3051,30 @@ struct llog_log_hdr {
 	/* for a catalog the first plain slot is next to it */
 	struct obd_uuid	 llh_tgtuuid;
 	__u32		   llh_reserved[LLOG_HEADER_SIZE / sizeof(__u32) - 23];
+	/* These fields must always be at the end of the llog_log_hdr.
+	 * Note: llh_bitmap size is variable because llog chunk size could be
+	 * bigger than LLOG_MIN_CHUNK_SIZE, i.e. sizeof(llog_log_hdr) > 8192
+	 * bytes, and the real size is stored in llh_hdr.lrh_len, which means
+	 * llh_tail should only be referred by LLOG_HDR_TAIL().
+	 * But this structure is also used by client/server llog interface
+	 * (see llog_client.c), it will be kept in its original way to avoid
+	 * compatibility issue.
+	 */
 	__u32		   llh_bitmap[LLOG_BITMAP_BYTES / sizeof(__u32)];
 	struct llog_rec_tail    llh_tail;
 } __packed;
 
-#define LLOG_BITMAP_SIZE(llh)  (__u32)((llh->llh_hdr.lrh_len -		\
-					llh->llh_bitmap_offset -	\
-					sizeof(llh->llh_tail)) * 8)
+#undef LLOG_HEADER_SIZE
+#undef LLOG_BITMAP_BYTES
+
+#define LLOG_HDR_BITMAP_SIZE(llh) (__u32)((llh->llh_hdr.lrh_len -	\
+					   llh->llh_bitmap_offset -	\
+					   sizeof(llh->llh_tail)) * 8)
+#define LLOG_HDR_BITMAP(llh)	(__u32 *)((char *)(llh) +		\
+					  (llh)->llh_bitmap_offset)
+#define LLOG_HDR_TAIL(llh)	((struct llog_rec_tail *)((char *)llh + \
+							 llh->llh_hdr.lrh_len - \
+							 sizeof(llh->llh_tail)))
 
 /** log cookies are used to reference a specific log file and a record
  * therein

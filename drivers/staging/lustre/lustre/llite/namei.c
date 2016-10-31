@@ -113,12 +113,9 @@ struct inode *ll_iget(struct super_block *sb, ino_t hash,
 	if (inode->i_state & I_NEW) {
 		rc = ll_read_inode2(inode, md);
 		if (!rc && S_ISREG(inode->i_mode) &&
-		    !ll_i2info(inode)->lli_clob) {
-			CDEBUG(D_INODE, "%s: apply lsm %p to inode "DFID"\n",
-			       ll_get_fsname(sb, NULL, 0), md->lsm,
-			       PFID(ll_inode2fid(inode)));
+		    !ll_i2info(inode)->lli_clob)
 			rc = cl_file_inode_init(inode, md);
-		}
+
 		if (rc) {
 			make_bad_inode(inode);
 			unlock_new_inode(inode);
@@ -283,7 +280,7 @@ int ll_md_blocking_ast(struct ldlm_lock *lock, struct ldlm_lock_desc *desc,
 				master_inode = ilookup5(inode->i_sb, hash,
 							ll_test_inode_by_fid,
 							(void *)&lli->lli_pfid);
-				if (master_inode && !IS_ERR(master_inode)) {
+				if (master_inode) {
 					ll_invalidate_negative_children(master_inode);
 					iput(master_inode);
 				}
@@ -793,7 +790,8 @@ static int ll_create_it(struct inode *dir, struct dentry *dentry,
 		return PTR_ERR(inode);
 
 	d_instantiate(dentry, inode);
-	return 0;
+
+	return ll_init_security(dentry, inode, dir);
 }
 
 void ll_update_times(struct ptlrpc_request *request, struct inode *inode)
@@ -888,6 +886,8 @@ again:
 		goto err_exit;
 
 	d_instantiate(dentry, inode);
+
+	err = ll_init_security(dentry, inode, dir);
 err_exit:
 	if (request)
 		ptlrpc_req_finished(request);

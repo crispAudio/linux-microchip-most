@@ -420,9 +420,6 @@ static int mdc_get_lustre_md(struct obd_export *exp,
 	md->body = req_capsule_server_get(pill, &RMF_MDT_BODY);
 
 	if (md->body->mbo_valid & OBD_MD_FLEASIZE) {
-		int lmmsize;
-		struct lov_mds_md *lmm;
-
 		if (!S_ISREG(md->body->mbo_mode)) {
 			CDEBUG(D_INFO,
 			       "OBD_MD_FLEASIZE set, should be a regular file, but is not\n");
@@ -436,17 +433,15 @@ static int mdc_get_lustre_md(struct obd_export *exp,
 			rc = -EPROTO;
 			goto out;
 		}
-		lmmsize = md->body->mbo_eadatasize;
-		lmm = req_capsule_server_sized_get(pill, &RMF_MDT_MD, lmmsize);
-		if (!lmm) {
+
+		md->layout.lb_len = md->body->mbo_eadatasize;
+		md->layout.lb_buf = req_capsule_server_sized_get(pill,
+								 &RMF_MDT_MD,
+								 md->layout.lb_len);
+		if (!md->layout.lb_buf) {
 			rc = -EPROTO;
 			goto out;
 		}
-
-		rc = obd_unpackmd(dt_exp, &md->lsm, lmm, lmmsize);
-		if (rc < 0)
-			goto out;
-
 	} else if (md->body->mbo_valid & OBD_MD_FLDIREA) {
 		int lmvsize;
 		struct lov_mds_md *lmv;
@@ -509,8 +504,6 @@ out:
 #ifdef CONFIG_FS_POSIX_ACL
 		posix_acl_release(md->posix_acl);
 #endif
-		if (md->lsm)
-			obd_free_memmd(dt_exp, &md->lsm);
 	}
 	return rc;
 }
@@ -859,8 +852,10 @@ restart_bulk:
 	req->rq_request_portal = MDS_READPAGE_PORTAL;
 	ptlrpc_at_set_req_timeout(req);
 
-	desc = ptlrpc_prep_bulk_imp(req, npages, 1, BULK_PUT_SINK,
-				    MDS_BULK_PORTAL);
+	desc = ptlrpc_prep_bulk_imp(req, npages, 1,
+				    PTLRPC_BULK_PUT_SINK | PTLRPC_BULK_BUF_KIOV,
+				    MDS_BULK_PORTAL,
+				    &ptlrpc_bulk_kiov_pin_ops);
 	if (!desc) {
 		ptlrpc_request_free(req);
 		return -ENOMEM;
@@ -868,7 +863,7 @@ restart_bulk:
 
 	/* NB req now owns desc and will free it when it gets freed */
 	for (i = 0; i < npages; i++)
-		ptlrpc_prep_bulk_page_pin(desc, pages[i], 0, PAGE_SIZE);
+		desc->bd_frag_ops->add_kiov_frag(desc, pages[i], 0, PAGE_SIZE);
 
 	mdc_readdir_pack(req, offset, PAGE_SIZE * npages, fid);
 
