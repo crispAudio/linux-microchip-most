@@ -86,13 +86,6 @@ struct osc_io {
 };
 
 /**
- * State of transfer for osc.
- */
-struct osc_req {
-	struct cl_req_slice    or_cl;
-};
-
-/**
  * State maintained by osc layer for the duration of a system call.
  */
 struct osc_session {
@@ -102,7 +95,7 @@ struct osc_session {
 #define OTI_PVEC_SIZE 256
 struct osc_thread_info {
 	struct ldlm_res_id      oti_resname;
-	ldlm_policy_data_t      oti_policy;
+	union ldlm_policy_data	oti_policy;
 	struct cl_lock_descr    oti_descr;
 	struct cl_attr	  oti_attr;
 	struct lustre_handle    oti_handle;
@@ -115,6 +108,7 @@ struct osc_thread_info {
 	pgoff_t			oti_next_index;
 	pgoff_t			oti_fn_index; /* first non-overlapped index */
 	struct cl_sync_io	oti_anchor;
+	struct cl_req_attr	oti_req_attr;
 };
 
 struct osc_object {
@@ -381,7 +375,6 @@ extern struct kmem_cache *osc_lock_kmem;
 extern struct kmem_cache *osc_object_kmem;
 extern struct kmem_cache *osc_thread_kmem;
 extern struct kmem_cache *osc_session_kmem;
-extern struct kmem_cache *osc_req_kmem;
 extern struct kmem_cache *osc_extent_kmem;
 
 extern struct lu_device_type osc_device_type;
@@ -395,15 +388,14 @@ int osc_lock_init(const struct lu_env *env,
 		  const struct cl_io *io);
 int osc_io_init(const struct lu_env *env,
 		struct cl_object *obj, struct cl_io *io);
-int osc_req_init(const struct lu_env *env, struct cl_device *dev,
-		 struct cl_req *req);
 struct lu_object *osc_object_alloc(const struct lu_env *env,
 				   const struct lu_object_header *hdr,
 				   struct lu_device *dev);
 int osc_page_init(const struct lu_env *env, struct cl_object *obj,
 		  struct cl_page *page, pgoff_t ind);
 
-void osc_index2policy(ldlm_policy_data_t *policy, const struct cl_object *obj,
+void osc_index2policy(union ldlm_policy_data *policy,
+		      const struct cl_object *obj,
 		      pgoff_t start, pgoff_t end);
 int osc_lvb_print(const struct lu_env *env, void *cookie,
 		  lu_printer_t p, const struct ost_lvb *lvb);
@@ -553,6 +545,16 @@ static inline struct osc_page *oap2osc_page(struct osc_async_page *oap)
 	return (struct osc_page *)container_of(oap, struct osc_page, ops_oap);
 }
 
+static inline struct osc_page *
+osc_cl_page_osc(struct cl_page *page, struct osc_object *osc)
+{
+	const struct cl_page_slice *slice;
+
+	LASSERT(osc);
+	slice = cl_object_page_slice(&osc->oo_cl, page);
+	return cl2osc_page(slice);
+}
+
 static inline struct osc_lock *cl2osc_lock(const struct cl_lock_slice *slice)
 {
 	LINVRNT(osc_is_object(&slice->cls_obj->co_lu));
@@ -614,6 +616,10 @@ struct osc_extent {
 			   oe_rw:1,
 	/** sync extent, queued by osc_queue_sync_pages() */
 				oe_sync:1,
+	/** set if this extent has partial, sync pages.
+	 * Extents with partial page(s) can't merge with others in RPC
+	 */
+				oe_no_merge:1,
 			   oe_srvlock:1,
 			   oe_memalloc:1,
 	/** an ACTIVE extent is going to be truncated, so when this extent

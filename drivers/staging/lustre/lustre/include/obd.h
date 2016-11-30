@@ -263,14 +263,17 @@ struct client_obd {
 	wait_queue_head_t	      cl_destroy_waitq;
 
 	struct mdc_rpc_lock     *cl_rpc_lock;
-	struct mdc_rpc_lock     *cl_close_lock;
 
 	/* modify rpcs in flight
 	 * currently used for metadata only
 	 */
 	spinlock_t		 cl_mod_rpcs_lock;
 	u16			 cl_max_mod_rpcs_in_flight;
-
+	u16			 cl_mod_rpcs_in_flight;
+	u16			 cl_close_rpcs_in_flight;
+	wait_queue_head_t	 cl_mod_rpcs_waitq;
+	unsigned long		*cl_mod_tag_bitmap;
+	struct obd_histogram	 cl_mod_rpcs_hist;
 
 	/* mgc datastruct */
 	atomic_t	     cl_mgc_refcount;
@@ -401,9 +404,9 @@ struct niobuf_local {
 	__u32		lnb_page_offset;
 	__u32		lnb_len;
 	__u32		lnb_flags;
+	int		lnb_rc;
 	struct page	*lnb_page;
 	void		*lnb_data;
-	int		lnb_rc;
 };
 
 #define LUSTRE_FLD_NAME	 "fld"
@@ -504,15 +507,14 @@ struct lvfs_run_ctxt {
 
 struct obd_device {
 	struct obd_type	*obd_type;
-	__u32		   obd_magic;
+	u32			 obd_magic; /* OBD_DEVICE_MAGIC */
+	int			 obd_minor; /* device number: lctl dl */
+	struct lu_device	*obd_lu_dev;
 
 	/* common and UUID name of this device */
-	char		    obd_name[MAX_OBD_NAME];
-	struct obd_uuid	 obd_uuid;
+	struct obd_uuid		 obd_uuid;
+	char			 obd_name[MAX_OBD_NAME];
 
-	struct lu_device       *obd_lu_dev;
-
-	int		     obd_minor;
 	/* bitfield modification is protected by obd_dev_lock */
 	unsigned long obd_attached:1,      /* finished attach */
 		      obd_set_up:1,	/* finished setup */
@@ -536,22 +538,22 @@ struct obd_device {
 	unsigned long obd_recovery_expired:1;
 	/* uuid-export hash body */
 	struct cfs_hash	     *obd_uuid_hash;
-	atomic_t	    obd_refcount;
 	wait_queue_head_t	     obd_refcount_waitq;
 	struct list_head	      obd_exports;
 	struct list_head	      obd_unlinked_exports;
 	struct list_head	      obd_delayed_exports;
+	atomic_t			obd_refcount;
 	int		     obd_num_exports;
 	spinlock_t		obd_nid_lock;
 	struct ldlm_namespace  *obd_namespace;
 	struct ptlrpc_client	obd_ldlm_client; /* XXX OST/MDS only */
 	/* a spinlock is OK for what we do now, may need a semaphore later */
 	spinlock_t		obd_dev_lock; /* protect OBD bitfield above */
-	struct mutex		obd_dev_mutex;
-	__u64			obd_last_committed;
 	spinlock_t		obd_osfs_lock;
 	struct obd_statfs	obd_osfs;       /* locked by obd_osfs_lock */
 	__u64			obd_osfs_age;
+	u64			obd_last_committed;
+	struct mutex		obd_dev_mutex;
 	struct lvfs_run_ctxt	obd_lvfs_ctxt;
 	struct obd_llog_group	obd_olg;	/* default llog group */
 	struct obd_device	*obd_observer;
@@ -565,12 +567,13 @@ struct obd_device {
 		struct lov_obd lov;
 		struct lmv_obd lmv;
 	} u;
-	/* Fields used by LProcFS */
-	unsigned int	   obd_cntr_base;
-	struct lprocfs_stats  *obd_stats;
 
-	unsigned int	   md_cntr_base;
-	struct lprocfs_stats  *md_stats;
+	/* Fields used by LProcFS */
+	struct lprocfs_stats	*obd_stats;
+	unsigned int		 obd_cntr_base;
+
+	struct lprocfs_stats	*md_stats;
+	unsigned int		 md_cntr_base;
 
 	struct dentry		*obd_debugfs_entry;
 	struct dentry		*obd_svc_debugfs_entry;
@@ -582,9 +585,11 @@ struct obd_device {
 	/**
 	 * Ldlm pool part. Save last calculated SLV and Limit.
 	 */
-	rwlock_t		obd_pool_lock;
-	int		    obd_pool_limit;
-	__u64		  obd_pool_slv;
+	rwlock_t		 obd_pool_lock;
+	u64			 obd_pool_slv;
+	int			 obd_pool_limit;
+
+	int			 obd_conn_inprogress;
 
 	/**
 	 * A list of outstanding class_incref()'s against this obd. For
@@ -592,17 +597,8 @@ struct obd_device {
 	 */
 	struct lu_ref	  obd_reference;
 
-	int		       obd_conn_inprogress;
-
 	struct kobject		obd_kobj; /* sysfs object */
 	struct completion	obd_kobj_unregister;
-};
-
-enum obd_cleanup_stage {
-/* Special case hack for MDS LOVs */
-	OBD_CLEANUP_EARLY,
-/* can be directly mapped to .ldto_device_fini() */
-	OBD_CLEANUP_EXPORTS,
 };
 
 /* get/set_info keys */
@@ -635,22 +631,6 @@ enum obd_cleanup_stage {
 #define KEY_CACHE_LRU_SHRINK	"cache_lru_shrink"
 
 struct lu_context;
-
-/* /!\ must be coherent with include/linux/namei.h on patched kernel */
-#define IT_OPEN     (1 << 0)
-#define IT_CREAT    (1 << 1)
-#define IT_READDIR  (1 << 2)
-#define IT_GETATTR  (1 << 3)
-#define IT_LOOKUP   (1 << 4)
-#define IT_UNLINK   (1 << 5)
-#define IT_TRUNC    (1 << 6)
-#define IT_GETXATTR (1 << 7)
-#define IT_EXEC     (1 << 8)
-#define IT_PIN      (1 << 9)
-#define IT_LAYOUT   (1 << 10)
-#define IT_QUOTA_DQACQ (1 << 11)
-#define IT_QUOTA_CONN  (1 << 12)
-#define IT_SETXATTR (1 << 13)
 
 static inline int it_to_lock_mode(struct lookup_intent *it)
 {
@@ -767,8 +747,7 @@ struct obd_ops {
 			      __u32 vallen, void *val,
 			      struct ptlrpc_request_set *set);
 	int (*setup)(struct obd_device *dev, struct lustre_cfg *cfg);
-	int (*precleanup)(struct obd_device *dev,
-			  enum obd_cleanup_stage cleanup_stage);
+	int (*precleanup)(struct obd_device *dev);
 	int (*cleanup)(struct obd_device *dev);
 	int (*process_config)(struct obd_device *dev, u32 len, void *data);
 	int (*postrecov)(struct obd_device *dev);
@@ -808,9 +787,6 @@ struct obd_ops {
 		      struct obd_statfs *osfs, __u64 max_age, __u32 flags);
 	int (*statfs_async)(struct obd_export *exp, struct obd_info *oinfo,
 			    __u64 max_age, struct ptlrpc_request_set *set);
-	int (*unpackmd)(struct obd_export *exp,
-			struct lov_stripe_md **mem_tgt,
-			struct lov_mds_md *disk_src, int disk_len);
 	int (*create)(const struct lu_env *env, struct obd_export *exp,
 		      struct obdo *oa);
 	int (*destroy)(const struct lu_env *env, struct obd_export *exp,
@@ -903,7 +879,7 @@ struct md_ops {
 		      const void *, size_t, umode_t, uid_t, gid_t,
 		      cfs_cap_t, __u64, struct ptlrpc_request **);
 	int (*enqueue)(struct obd_export *, struct ldlm_enqueue_info *,
-		       const ldlm_policy_data_t *,
+		       const union ldlm_policy_data *,
 		       struct lookup_intent *, struct md_op_data *,
 		       struct lustre_handle *, __u64);
 	int (*getattr)(struct obd_export *, struct md_op_data *,
@@ -959,11 +935,11 @@ struct md_ops {
 
 	enum ldlm_mode (*lock_match)(struct obd_export *, __u64,
 				     const struct lu_fid *, enum ldlm_type,
-				     ldlm_policy_data_t *, enum ldlm_mode,
+				     union ldlm_policy_data *, enum ldlm_mode,
 				     struct lustre_handle *);
 
 	int (*cancel_unused)(struct obd_export *, const struct lu_fid *,
-			     ldlm_policy_data_t *, enum ldlm_mode,
+			     union ldlm_policy_data *, enum ldlm_mode,
 			     enum ldlm_cancel_flags flags, void *opaque);
 
 	int (*get_fid_from_lsm)(struct obd_export *,
@@ -978,6 +954,8 @@ struct md_ops {
 	int (*revalidate_lock)(struct obd_export *, struct lookup_intent *,
 			       struct lu_fid *, __u64 *bits);
 
+	int (*unpackmd)(struct obd_export *exp, struct lmv_stripe_md **plsm,
+			const union lmv_mds_md *lmv, size_t lmv_size);
 	/*
 	 * NOTE: If adding ops, add another LPROCFS_MD_OP_INIT() line to
 	 * lprocfs_alloc_md_stats() in obdclass/lprocfs_status.c. Also, add a

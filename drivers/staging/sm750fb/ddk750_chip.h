@@ -87,9 +87,9 @@ struct initchip_param {
 };
 
 logical_chip_type_t sm750_get_chip_type(void);
-void sm750_set_chip_type(unsigned short devId, char revId);
-unsigned int calc_pll_value(unsigned int request, struct  pll_value *pll);
-unsigned int format_pll_reg(struct pll_value *pPLL);
+void sm750_set_chip_type(unsigned short devId, u8 revId);
+unsigned int sm750_calc_pll_value(unsigned int request, struct  pll_value *pll);
+unsigned int sm750_format_pll_reg(struct pll_value *pPLL);
 unsigned int ddk750_get_vm_size(void);
 int ddk750_init_hw(struct initchip_param *);
 

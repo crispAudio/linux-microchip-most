@@ -438,6 +438,10 @@ struct ptlrpc_reply_state {
 	unsigned long	  rs_committed:1;/* the transaction was committed
 					  * and the rs was dispatched
 					  */
+	atomic_t		rs_refcount;	/* number of users */
+	/** Number of locks awaiting client ACK */
+	int			rs_nlocks;
+
 	/** Size of the state */
 	int		    rs_size;
 	/** opcode */
@@ -450,7 +454,6 @@ struct ptlrpc_reply_state {
 	struct ptlrpc_service_part *rs_svcpt;
 	/** Lnet metadata handle for the reply */
 	lnet_handle_md_t       rs_md_h;
-	atomic_t	   rs_refcount;
 
 	/** Context for the service thread */
 	struct ptlrpc_svc_ctx *rs_svc_ctx;
@@ -467,8 +470,6 @@ struct ptlrpc_reply_state {
 	 */
 	struct lustre_msg     *rs_msg;	  /* reply message */
 
-	/** Number of locks awaiting client ACK */
-	int		    rs_nlocks;
 	/** Handles of locks awaiting client reply ACK */
 	struct lustre_handle   rs_locks[RS_MAX_LOCKS];
 	/** Lock modes of locks in \a rs_locks */
@@ -595,6 +596,8 @@ struct ptlrpc_cli_req {
 	union ptlrpc_async_args		 cr_async_args;
 	/** Opaq data for replay and commit callbacks. */
 	void				*cr_cb_data;
+	/** Link to the imp->imp_unreplied_list */
+	struct list_head		 cr_unreplied_list;
 	/**
 	 * Commit callback, called when request is committed and about to be
 	 * freed.
@@ -634,6 +637,7 @@ struct ptlrpc_cli_req {
 #define rq_interpret_reply	rq_cli.cr_reply_interp
 #define rq_async_args		rq_cli.cr_async_args
 #define rq_cb_data		rq_cli.cr_cb_data
+#define rq_unreplied_list	rq_cli.cr_unreplied_list
 #define rq_commit_cb		rq_cli.cr_commit_cb
 #define rq_replay_cb		rq_cli.cr_replay_cb
 
@@ -796,6 +800,8 @@ struct ptlrpc_request {
 	__u64 rq_transno;
 	/** xid */
 	__u64 rq_xid;
+	/** bulk match bits */
+	u64				rq_mbits;
 	/**
 	 * List item to for replay list. Not yet committed requests get linked
 	 * there.
@@ -1208,7 +1214,7 @@ struct ptlrpc_bulk_desc {
 	int		    bd_nob;	  /* # bytes covered */
 	int		    bd_nob_transferred; /* # bytes GOT/PUT */
 
-	__u64		  bd_last_xid;
+	u64			bd_last_mbits;
 
 	struct ptlrpc_cb_id    bd_cbid;	 /* network callback info */
 	lnet_nid_t	     bd_sender;       /* stash event::sender */
@@ -2080,6 +2086,7 @@ void lustre_msg_set_timeout(struct lustre_msg *msg, __u32 timeout);
 void lustre_msg_set_service_time(struct lustre_msg *msg, __u32 service_time);
 void lustre_msg_set_jobid(struct lustre_msg *msg, char *jobid);
 void lustre_msg_set_cksum(struct lustre_msg *msg, __u32 cksum);
+void lustre_msg_set_mbits(struct lustre_msg *msg, u64 mbits);
 
 static inline void
 lustre_shrink_reply(struct ptlrpc_request *req, int segment,

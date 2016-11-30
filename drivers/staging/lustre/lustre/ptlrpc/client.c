@@ -128,12 +128,12 @@ struct ptlrpc_bulk_desc *ptlrpc_new_bulk(unsigned int nfrags,
 		GET_KIOV(desc) = kcalloc(nfrags, sizeof(*GET_KIOV(desc)),
 					 GFP_NOFS);
 		if (!GET_KIOV(desc))
-			goto out;
+			goto free_desc;
 	} else {
 		GET_KVEC(desc) = kcalloc(nfrags, sizeof(*GET_KVEC(desc)),
 					 GFP_NOFS);
 		if (!GET_KVEC(desc))
-			goto out;
+			goto free_desc;
 	}
 
 	spin_lock_init(&desc->bd_lock);
@@ -154,7 +154,8 @@ struct ptlrpc_bulk_desc *ptlrpc_new_bulk(unsigned int nfrags,
 		LNetInvalidateHandle(&desc->bd_mds[i]);
 
 	return desc;
-out:
+free_desc:
+	kfree(desc);
 	return NULL;
 }
 
@@ -652,6 +653,42 @@ static void __ptlrpc_free_req_to_pool(struct ptlrpc_request *request)
 	spin_unlock(&pool->prp_lock);
 }
 
+void ptlrpc_add_unreplied(struct ptlrpc_request *req)
+{
+	struct obd_import	*imp = req->rq_import;
+	struct list_head	*tmp;
+	struct ptlrpc_request	*iter;
+
+	assert_spin_locked(&imp->imp_lock);
+	LASSERT(list_empty(&req->rq_unreplied_list));
+
+	/* unreplied list is sorted by xid in ascending order */
+	list_for_each_prev(tmp, &imp->imp_unreplied_list) {
+		iter = list_entry(tmp, struct ptlrpc_request,
+				  rq_unreplied_list);
+
+		LASSERT(req->rq_xid != iter->rq_xid);
+		if (req->rq_xid < iter->rq_xid)
+			continue;
+		list_add(&req->rq_unreplied_list, &iter->rq_unreplied_list);
+		return;
+	}
+	list_add(&req->rq_unreplied_list, &imp->imp_unreplied_list);
+}
+
+void ptlrpc_assign_next_xid_nolock(struct ptlrpc_request *req)
+{
+	req->rq_xid = ptlrpc_next_xid();
+	ptlrpc_add_unreplied(req);
+}
+
+static inline void ptlrpc_assign_next_xid(struct ptlrpc_request *req)
+{
+	spin_lock(&req->rq_import->imp_lock);
+	ptlrpc_assign_next_xid_nolock(req);
+	spin_unlock(&req->rq_import->imp_lock);
+}
+
 int ptlrpc_request_bufs_pack(struct ptlrpc_request *request,
 			     __u32 version, int opcode, char **bufs,
 			     struct ptlrpc_cli_ctx *ctx)
@@ -701,6 +738,7 @@ int ptlrpc_request_bufs_pack(struct ptlrpc_request *request,
 	ptlrpc_at_set_req_timeout(request);
 
 	lustre_msg_set_opc(request->rq_reqmsg, opcode);
+	ptlrpc_assign_next_xid(request);
 
 	/* Let's setup deadline for req/reply/bulk unlink for opcode. */
 	if (cfs_fail_val == opcode) {
@@ -1191,7 +1229,9 @@ static int ptlrpc_check_status(struct ptlrpc_request *req)
 		lnet_nid_t nid = imp->imp_connection->c_peer.nid;
 		__u32 opc = lustre_msg_get_opc(req->rq_reqmsg);
 
-		if (ptlrpc_console_allow(req))
+		/* -EAGAIN is normal when using POSIX flocks */
+		if (ptlrpc_console_allow(req) &&
+		    !(opc == LDLM_ENQUEUE && err == -EAGAIN))
 			LCONSOLE_ERROR_MSG(0x011, "%s: operation %s to node %s failed: rc = %d\n",
 					   imp->imp_obd->obd_name,
 					   ll_opcode2str(opc),
@@ -1226,6 +1266,24 @@ static void ptlrpc_save_versions(struct ptlrpc_request *req)
 	lustre_msg_set_versions(reqmsg, versions);
 	CDEBUG(D_INFO, "Client save versions [%#llx/%#llx]\n",
 	       versions[0], versions[1]);
+}
+
+__u64 ptlrpc_known_replied_xid(struct obd_import *imp)
+{
+	struct ptlrpc_request *req;
+
+	assert_spin_locked(&imp->imp_lock);
+	if (list_empty(&imp->imp_unreplied_list))
+		return 0;
+
+	req = list_entry(imp->imp_unreplied_list.next, struct ptlrpc_request,
+			 rq_unreplied_list);
+	LASSERTF(req->rq_xid >= 1, "XID:%llu\n", req->rq_xid);
+
+	if (imp->imp_known_replied_xid < req->rq_xid - 1)
+		imp->imp_known_replied_xid = req->rq_xid - 1;
+
+	return req->rq_xid - 1;
 }
 
 /**
@@ -1302,13 +1360,6 @@ static int after_reply(struct ptlrpc_request *req)
 		spin_unlock(&req->rq_lock);
 		req->rq_nr_resend++;
 
-		/* allocate new xid to avoid reply reconstruction */
-		if (!req->rq_bulk) {
-			/* new xid is already allocated for bulk in ptlrpc_check_set() */
-			req->rq_xid = ptlrpc_next_xid();
-			DEBUG_REQ(D_RPCTRACE, req, "Allocating new xid for resend on EINPROGRESS");
-		}
-
 		/* Readjust the timeout for current conditions */
 		ptlrpc_at_set_req_timeout(req);
 		/*
@@ -1321,6 +1372,11 @@ static int after_reply(struct ptlrpc_request *req)
 			req->rq_sent = now + req->rq_timeout;
 		else
 			req->rq_sent = now + req->rq_nr_resend;
+
+		/* Resend for EINPROGRESS will use a new XID */
+		spin_lock(&imp->imp_lock);
+		list_del_init(&req->rq_unreplied_list);
+		spin_unlock(&imp->imp_lock);
 
 		return 0;
 	}
@@ -1435,8 +1491,7 @@ static int after_reply(struct ptlrpc_request *req)
 static int ptlrpc_send_new_req(struct ptlrpc_request *req)
 {
 	struct obd_import *imp = req->rq_import;
-	struct list_head *tmp;
-	u64 min_xid = ~0ULL;
+	u64 min_xid = 0;
 	int rc;
 
 	LASSERT(req->rq_phase == RQ_PHASE_NEW);
@@ -1456,17 +1511,8 @@ static int ptlrpc_send_new_req(struct ptlrpc_request *req)
 
 	spin_lock(&imp->imp_lock);
 
-	/*
-	 * the very first time we assign XID. it's important to assign XID
-	 * and put it on the list atomically, so that the lowest assigned
-	 * XID is always known. this is vital for multislot last_rcvd
-	 */
-	if (req->rq_send_state == LUSTRE_IMP_REPLAY) {
-		LASSERT(req->rq_xid);
-	} else {
-		LASSERT(!req->rq_xid);
-		req->rq_xid = ptlrpc_next_xid();
-	}
+	LASSERT(req->rq_xid);
+	LASSERT(!list_empty(&req->rq_unreplied_list));
 
 	if (!req->rq_generation_set)
 		req->rq_import_generation = imp->imp_generation;
@@ -1498,25 +1544,23 @@ static int ptlrpc_send_new_req(struct ptlrpc_request *req)
 	list_add_tail(&req->rq_list, &imp->imp_sending_list);
 	atomic_inc(&req->rq_import->imp_inflight);
 
-	/* find the lowest unreplied XID */
-	list_for_each(tmp, &imp->imp_delayed_list) {
-		struct ptlrpc_request *r;
-
-		r = list_entry(tmp, struct ptlrpc_request, rq_list);
-		if (r->rq_xid < min_xid)
-			min_xid = r->rq_xid;
-	}
-	list_for_each(tmp, &imp->imp_sending_list) {
-		struct ptlrpc_request *r;
-
-		r = list_entry(tmp, struct ptlrpc_request, rq_list);
-		if (r->rq_xid < min_xid)
-			min_xid = r->rq_xid;
-	}
+	/* find the known replied XID from the unreplied list, CONNECT
+	 * and DISCONNECT requests are skipped to make the sanity check
+	 * on server side happy. see process_req_last_xid().
+	 *
+	 * For CONNECT: Because replay requests have lower XID, it'll
+	 * break the sanity check if CONNECT bump the exp_last_xid on
+	 * server.
+	 *
+	 * For DISCONNECT: Since client will abort inflight RPC before
+	 * sending DISCONNECT, DISCONNECT may carry an XID which higher
+	 * than the inflight RPC.
+	 */
+	if (!ptlrpc_req_is_connect(req) && !ptlrpc_req_is_disconnect(req))
+		min_xid = ptlrpc_known_replied_xid(imp);
 	spin_unlock(&imp->imp_lock);
 
-	if (likely(min_xid != ~0ULL))
-		lustre_msg_set_last_xid(req->rq_reqmsg, min_xid - 1);
+	lustre_msg_set_last_xid(req->rq_reqmsg, min_xid);
 
 	lustre_msg_set_status(req->rq_reqmsg, current_pid());
 
@@ -1800,18 +1844,9 @@ int ptlrpc_check_set(const struct lu_env *env, struct ptlrpc_request_set *set)
 					spin_lock(&req->rq_lock);
 					req->rq_resend = 1;
 					spin_unlock(&req->rq_lock);
-					if (req->rq_bulk) {
-						__u64 old_xid;
-
-						if (!ptlrpc_unregister_bulk(req, 1))
-							continue;
-
-						/* ensure previous bulk fails */
-						old_xid = req->rq_xid;
-						req->rq_xid = ptlrpc_next_xid();
-						CDEBUG(D_HA, "resend bulk old x%llu new x%llu\n",
-						       old_xid, req->rq_xid);
-					}
+					if (req->rq_bulk &&
+					    !ptlrpc_unregister_bulk(req, 1))
+						continue;
 				}
 				/*
 				 * rq_wait_ctx is only touched by ptlrpcd,
@@ -1970,6 +2005,7 @@ interpret:
 			list_del_init(&req->rq_list);
 			atomic_dec(&imp->imp_inflight);
 		}
+		list_del_init(&req->rq_unreplied_list);
 		spin_unlock(&imp->imp_lock);
 
 		atomic_dec(&set->set_remaining);
@@ -2367,6 +2403,7 @@ static void __ptlrpc_free_req(struct ptlrpc_request *request, int locked)
 		if (!locked)
 			spin_lock(&request->rq_import->imp_lock);
 		list_del_init(&request->rq_replay_list);
+		list_del_init(&request->rq_unreplied_list);
 		if (!locked)
 			spin_unlock(&request->rq_import->imp_lock);
 	}
@@ -2662,14 +2699,6 @@ void ptlrpc_resend_req(struct ptlrpc_request *req)
 	req->rq_resend = 1;
 	req->rq_net_err = 0;
 	req->rq_timedout = 0;
-	if (req->rq_bulk) {
-		__u64 old_xid = req->rq_xid;
-
-		/* ensure previous bulk fails */
-		req->rq_xid = ptlrpc_next_xid();
-		CDEBUG(D_HA, "resend bulk old x%llu new x%llu\n",
-		       old_xid, req->rq_xid);
-	}
 	ptlrpc_client_wake_req(req);
 	spin_unlock(&req->rq_lock);
 }
@@ -2711,6 +2740,10 @@ void ptlrpc_retain_replayable_request(struct ptlrpc_request *req,
 		return;
 
 	lustre_msg_add_flags(req->rq_reqmsg, MSG_REPLAY);
+
+	spin_lock(&req->rq_lock);
+	req->rq_resend = 0;
+	spin_unlock(&req->rq_lock);
 
 	LASSERT(imp->imp_replayable);
 	/* Balanced in ptlrpc_free_committed, usually. */
@@ -3063,6 +3096,48 @@ __u64 ptlrpc_next_xid(void)
 	spin_unlock(&ptlrpc_last_xid_lock);
 
 	return next;
+}
+
+/**
+ * If request has a new allocated XID (new request or EINPROGRESS resend),
+ * use this XID as matchbits of bulk, otherwise allocate a new matchbits for
+ * request to ensure previous bulk fails and avoid problems with lost replies
+ * and therefore several transfers landing into the same buffer from different
+ * sending attempts.
+ */
+void ptlrpc_set_bulk_mbits(struct ptlrpc_request *req)
+{
+	struct ptlrpc_bulk_desc *bd = req->rq_bulk;
+
+	LASSERT(bd);
+
+	if (!req->rq_resend) {
+		/* this request has a new xid, just use it as bulk matchbits */
+		req->rq_mbits = req->rq_xid;
+
+	} else { /* needs to generate a new matchbits for resend */
+		u64 old_mbits = req->rq_mbits;
+
+		if ((bd->bd_import->imp_connect_data.ocd_connect_flags &
+		     OBD_CONNECT_BULK_MBITS)) {
+			req->rq_mbits = ptlrpc_next_xid();
+		} else {
+			/* old version transfers rq_xid to peer as matchbits */
+			req->rq_mbits = ptlrpc_next_xid();
+			req->rq_xid = req->rq_mbits;
+		}
+
+		CDEBUG(D_HA, "resend bulk old x%llu new x%llu\n",
+		       old_mbits, req->rq_mbits);
+	}
+
+	/*
+	 * For multi-bulk RPCs, rq_mbits is the last mbits needed for bulks so
+	 * that server can infer the number of bulks that were prepared,
+	 * see LU-1431
+	 */
+	req->rq_mbits += ((bd->bd_iov_count + LNET_MAX_IOV - 1) /
+			  LNET_MAX_IOV) - 1;
 }
 
 /**

@@ -113,10 +113,19 @@ out:
 			   0, 0, LUSTRE_OPC_ANY, NULL);
 }
 
+/**
+ * Perform a close, possibly with a bias.
+ * The meaning of "data" depends on the value of "bias".
+ *
+ * If \a bias is MDS_HSM_RELEASE then \a data is a pointer to the data version.
+ * If \a bias is MDS_CLOSE_LAYOUT_SWAP then \a data is a pointer to the inode to
+ * swap layouts with.
+ */
 static int ll_close_inode_openhandle(struct obd_export *md_exp,
-				     struct inode *inode,
 				     struct obd_client_handle *och,
-				     const __u64 *data_version)
+				     struct inode *inode,
+				     enum mds_op_bias bias,
+				     void *data)
 {
 	struct obd_export *exp = ll_i2mdexp(inode);
 	struct md_op_data *op_data;
@@ -143,12 +152,26 @@ static int ll_close_inode_openhandle(struct obd_export *md_exp,
 	}
 
 	ll_prepare_close(inode, op_data, och);
-	if (data_version) {
-		/* Pass in data_version implies release. */
+	switch (bias) {
+	case MDS_CLOSE_LAYOUT_SWAP:
+		LASSERT(data);
+		op_data->op_bias |= MDS_CLOSE_LAYOUT_SWAP;
+		op_data->op_data_version = 0;
+		op_data->op_lease_handle = och->och_lease_handle;
+		op_data->op_fid2 = *ll_inode2fid(data);
+		break;
+
+	case MDS_HSM_RELEASE:
+		LASSERT(data);
 		op_data->op_bias |= MDS_HSM_RELEASE;
-		op_data->op_data_version = *data_version;
+		op_data->op_data_version = *(__u64 *)data;
 		op_data->op_lease_handle = och->och_lease_handle;
 		op_data->op_attr.ia_valid |= ATTR_SIZE | ATTR_BLOCKS;
+		break;
+
+	default:
+		LASSERT(!data);
+		break;
 	}
 
 	rc = md_close(md_exp, op_data, och->och_mod, &req);
@@ -169,11 +192,12 @@ static int ll_close_inode_openhandle(struct obd_export *md_exp,
 		spin_unlock(&lli->lli_lock);
 	}
 
-	if (rc == 0 && op_data->op_bias & MDS_HSM_RELEASE) {
+	if (op_data->op_bias & (MDS_HSM_RELEASE | MDS_CLOSE_LAYOUT_SWAP) &&
+	    !rc) {
 		struct mdt_body *body;
 
 		body = req_capsule_server_get(&req->rq_pill, &RMF_MDT_BODY);
-		if (!(body->mbo_valid & OBD_MD_FLRELEASED))
+		if (!(body->mbo_valid & OBD_MD_CLOSE_INTENT_EXECED))
 			rc = -EBUSY;
 	}
 
@@ -227,7 +251,7 @@ int ll_md_real_close(struct inode *inode, fmode_t fmode)
 		 * be closed.
 		 */
 		rc = ll_close_inode_openhandle(ll_i2sbi(inode)->ll_md_exp,
-					       inode, och, NULL);
+					       och, inode, 0, NULL);
 	}
 
 	return rc;
@@ -241,7 +265,9 @@ static int ll_md_close(struct obd_export *md_exp, struct inode *inode,
 	int lockmode;
 	__u64 flags = LDLM_FL_BLOCK_GRANTED | LDLM_FL_TEST_LOCK;
 	struct lustre_handle lockh;
-	ldlm_policy_data_t policy = {.l_inodebits = {MDS_INODELOCK_OPEN} };
+	union ldlm_policy_data policy = {
+		.l_inodebits = { MDS_INODELOCK_OPEN }
+	};
 	int rc = 0;
 
 	/* clear group lock, if present */
@@ -263,7 +289,8 @@ static int ll_md_close(struct obd_export *md_exp, struct inode *inode,
 	}
 
 	if (fd->fd_och) {
-		rc = ll_close_inode_openhandle(md_exp, inode, fd->fd_och, NULL);
+		rc = ll_close_inode_openhandle(md_exp, fd->fd_och, inode, 0,
+					       NULL);
 		fd->fd_och = NULL;
 		goto out;
 	}
@@ -816,7 +843,7 @@ out_close:
 		it.it_lock_mode = 0;
 		och->och_lease_handle.cookie = 0ULL;
 	}
-	rc2 = ll_close_inode_openhandle(sbi->ll_md_exp, inode, och, NULL);
+	rc2 = ll_close_inode_openhandle(sbi->ll_md_exp, och, inode, 0, NULL);
 	if (rc2 < 0)
 		CERROR("%s: error closing file "DFID": %d\n",
 		       ll_get_fsname(inode->i_sb, NULL, 0),
@@ -827,6 +854,69 @@ out_release_it:
 out:
 	kfree(och);
 	return ERR_PTR(rc);
+}
+
+/**
+ * Check whether a layout swap can be done between two inodes.
+ *
+ * \param[in] inode1  First inode to check
+ * \param[in] inode2  Second inode to check
+ *
+ * \retval 0 on success, layout swap can be performed between both inodes
+ * \retval negative error code if requirements are not met
+ */
+static int ll_check_swap_layouts_validity(struct inode *inode1,
+					  struct inode *inode2)
+{
+	if (!S_ISREG(inode1->i_mode) || !S_ISREG(inode2->i_mode))
+		return -EINVAL;
+
+	if (inode_permission(inode1, MAY_WRITE) ||
+	    inode_permission(inode2, MAY_WRITE))
+		return -EPERM;
+
+	if (inode1->i_sb != inode2->i_sb)
+		return -EXDEV;
+
+	return 0;
+}
+
+static int ll_swap_layouts_close(struct obd_client_handle *och,
+				 struct inode *inode, struct inode *inode2)
+{
+	const struct lu_fid *fid1 = ll_inode2fid(inode);
+	const struct lu_fid *fid2;
+	int rc;
+
+	CDEBUG(D_INODE, "%s: biased close of file " DFID "\n",
+	       ll_get_fsname(inode->i_sb, NULL, 0), PFID(fid1));
+
+	rc = ll_check_swap_layouts_validity(inode, inode2);
+	if (rc < 0)
+		goto out_free_och;
+
+	/* We now know that inode2 is a lustre inode */
+	fid2 = ll_inode2fid(inode2);
+
+	rc = lu_fid_cmp(fid1, fid2);
+	if (!rc) {
+		rc = -EINVAL;
+		goto out_free_och;
+	}
+
+	/*
+	 * Close the file and swap layouts between inode & inode2.
+	 * NB: lease lock handle is released in mdc_close_layout_swap_pack()
+	 * because we still need it to pack l_remote_handle to MDT.
+	 */
+	rc = ll_close_inode_openhandle(ll_i2sbi(inode)->ll_md_exp, och, inode,
+				       MDS_CLOSE_LAYOUT_SWAP, inode2);
+
+	och = NULL; /* freed in ll_close_inode_openhandle() */
+
+out_free_och:
+	kfree(och);
+	return rc;
 }
 
 /**
@@ -856,7 +946,7 @@ static int ll_lease_close(struct obd_client_handle *och, struct inode *inode,
 		*lease_broken = cancelled;
 
 	return ll_close_inode_openhandle(ll_i2sbi(inode)->ll_md_exp,
-					 inode, och, NULL);
+					 och, inode, 0, NULL);
 }
 
 int ll_merge_attr(const struct lu_env *env, struct inode *inode)
@@ -1014,11 +1104,9 @@ restart:
 
 			range_locked = true;
 		}
-		down_read(&lli->lli_trunc_sem);
 		ll_cl_add(file, env, io);
 		rc = cl_io_loop(env, io);
 		ll_cl_remove(file, env);
-		up_read(&lli->lli_trunc_sem);
 		if (range_locked) {
 			CDEBUG(D_VFSTRACE, "Range unlock [%llu, %llu]\n",
 			       range.rl_node.in_extent.start,
@@ -1415,7 +1503,7 @@ int ll_release_openhandle(struct inode *inode, struct lookup_intent *it)
 	ll_och_fill(ll_i2sbi(inode)->ll_md_exp, it, och);
 
 	rc = ll_close_inode_openhandle(ll_i2sbi(inode)->ll_md_exp,
-				       inode, och, NULL);
+				       och, inode, 0, NULL);
 out:
 	/* this one is in place of ll_file_open */
 	if (it_disposition(it, DISP_ENQ_OPEN_REF)) {
@@ -1584,11 +1672,11 @@ restart:
  */
 int ll_hsm_release(struct inode *inode)
 {
-	struct cl_env_nest nest;
 	struct lu_env *env;
 	struct obd_client_handle *och = NULL;
 	__u64 data_version = 0;
 	int rc;
+	int refcheck;
 
 	CDEBUG(D_INODE, "%s: Releasing file "DFID".\n",
 	       ll_get_fsname(inode->i_sb, NULL, 0),
@@ -1605,21 +1693,21 @@ int ll_hsm_release(struct inode *inode)
 	if (rc != 0)
 		goto out;
 
-	env = cl_env_nested_get(&nest);
+	env = cl_env_get(&refcheck);
 	if (IS_ERR(env)) {
 		rc = PTR_ERR(env);
 		goto out;
 	}
 
 	ll_merge_attr(env, inode);
-	cl_env_nested_put(&nest, env);
+	cl_env_put(env, &refcheck);
 
 	/* Release the file.
 	 * NB: lease lock handle is released in mdc_hsm_release_pack() because
 	 * we still need it to pack l_remote_handle to MDT.
 	 */
-	rc = ll_close_inode_openhandle(ll_i2sbi(inode)->ll_md_exp, inode, och,
-				       &data_version);
+	rc = ll_close_inode_openhandle(ll_i2sbi(inode)->ll_md_exp, och, inode,
+				       MDS_HSM_RELEASE, &data_version);
 	och = NULL;
 
 out:
@@ -1630,10 +1718,12 @@ out:
 }
 
 struct ll_swap_stack {
-	struct iattr		 ia1, ia2;
-	__u64			 dv1, dv2;
-	struct inode		*inode1, *inode2;
-	bool			 check_dv1, check_dv2;
+	u64		dv1;
+	u64		dv2;
+	struct inode   *inode1;
+	struct inode   *inode2;
+	bool		check_dv1;
+	bool		check_dv2;
 };
 
 static int ll_swap_layouts(struct file *file1, struct file *file2,
@@ -1653,21 +1743,9 @@ static int ll_swap_layouts(struct file *file1, struct file *file2,
 	llss->inode1 = file_inode(file1);
 	llss->inode2 = file_inode(file2);
 
-	if (!S_ISREG(llss->inode2->i_mode)) {
-		rc = -EINVAL;
+	rc = ll_check_swap_layouts_validity(llss->inode1, llss->inode2);
+	if (rc < 0)
 		goto free;
-	}
-
-	if (inode_permission(llss->inode1, MAY_WRITE) ||
-	    inode_permission(llss->inode2, MAY_WRITE)) {
-		rc = -EPERM;
-		goto free;
-	}
-
-	if (llss->inode2->i_sb != llss->inode1->i_sb) {
-		rc = -EXDEV;
-		goto free;
-	}
 
 	/* we use 2 bool because it is easier to swap than 2 bits */
 	if (lsl->sl_flags & SWAP_LAYOUTS_CHECK_DV1)
@@ -1681,10 +1759,8 @@ static int ll_swap_layouts(struct file *file1, struct file *file2,
 	llss->dv2 = lsl->sl_dv2;
 
 	rc = lu_fid_cmp(ll_inode2fid(llss->inode1), ll_inode2fid(llss->inode2));
-	if (rc == 0) /* same file, done! */ {
-		rc = 0;
+	if (!rc) /* same file, done! */
 		goto free;
-	}
 
 	if (rc < 0) { /* sequentialize it */
 		swap(llss->inode1, llss->inode2);
@@ -1704,19 +1780,6 @@ static int ll_swap_layouts(struct file *file1, struct file *file2,
 			ll_put_grouplock(llss->inode1, file1, gid);
 			goto free;
 		}
-	}
-
-	/* to be able to restore mtime and atime after swap
-	 * we need to first save them
-	 */
-	if (lsl->sl_flags &
-	    (SWAP_LAYOUTS_KEEP_MTIME | SWAP_LAYOUTS_KEEP_ATIME)) {
-		llss->ia1.ia_mtime = llss->inode1->i_mtime;
-		llss->ia1.ia_atime = llss->inode1->i_atime;
-		llss->ia1.ia_valid = ATTR_MTIME | ATTR_ATIME;
-		llss->ia2.ia_mtime = llss->inode2->i_mtime;
-		llss->ia2.ia_atime = llss->inode2->i_atime;
-		llss->ia2.ia_valid = ATTR_MTIME | ATTR_ATIME;
 	}
 
 	/* ultimate check, before swapping the layouts we check if
@@ -1766,39 +1829,6 @@ putgl:
 	if (gid != 0) {
 		ll_put_grouplock(llss->inode2, file2, gid);
 		ll_put_grouplock(llss->inode1, file1, gid);
-	}
-
-	/* rc can be set from obd_iocontrol() or from a GOTO(putgl, ...) */
-	if (rc != 0)
-		goto free;
-
-	/* clear useless flags */
-	if (!(lsl->sl_flags & SWAP_LAYOUTS_KEEP_MTIME)) {
-		llss->ia1.ia_valid &= ~ATTR_MTIME;
-		llss->ia2.ia_valid &= ~ATTR_MTIME;
-	}
-
-	if (!(lsl->sl_flags & SWAP_LAYOUTS_KEEP_ATIME)) {
-		llss->ia1.ia_valid &= ~ATTR_ATIME;
-		llss->ia2.ia_valid &= ~ATTR_ATIME;
-	}
-
-	/* update time if requested */
-	rc = 0;
-	if (llss->ia2.ia_valid != 0) {
-		inode_lock(llss->inode1);
-		rc = ll_setattr(file1->f_path.dentry, &llss->ia2);
-		inode_unlock(llss->inode1);
-	}
-
-	if (llss->ia1.ia_valid != 0) {
-		int rc1;
-
-		inode_lock(llss->inode2);
-		rc1 = ll_setattr(file2->f_path.dentry, &llss->ia1);
-		inode_unlock(llss->inode2);
-		if (rc == 0)
-			rc = rc1;
 	}
 
 free:
@@ -1957,16 +1987,46 @@ ll_file_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				   sizeof(struct lustre_swap_layouts)))
 			return -EFAULT;
 
-		if ((file->f_flags & O_ACCMODE) == 0) /* O_RDONLY */
+		if ((file->f_flags & O_ACCMODE) == O_RDONLY)
 			return -EPERM;
 
 		file2 = fget(lsl.sl_fd);
 		if (!file2)
 			return -EBADF;
 
-		rc = -EPERM;
-		if ((file2->f_flags & O_ACCMODE) != 0) /* O_WRONLY or O_RDWR */
+		/* O_WRONLY or O_RDWR */
+		if ((file2->f_flags & O_ACCMODE) == O_RDONLY) {
+			rc = -EPERM;
+			goto out;
+		}
+
+		if (lsl.sl_flags & SWAP_LAYOUTS_CLOSE) {
+			struct obd_client_handle *och = NULL;
+			struct ll_inode_info *lli;
+			struct inode *inode2;
+
+			if (lsl.sl_flags != SWAP_LAYOUTS_CLOSE) {
+				rc = -EINVAL;
+				goto out;
+			}
+
+			lli = ll_i2info(inode);
+			mutex_lock(&lli->lli_och_mutex);
+			if (fd->fd_lease_och) {
+				och = fd->fd_lease_och;
+				fd->fd_lease_och = NULL;
+			}
+			mutex_unlock(&lli->lli_och_mutex);
+			if (!och) {
+				rc = -ENOLCK;
+				goto out;
+			}
+			inode2 = file_inode(file2);
+			rc = ll_swap_layouts_close(och, inode, inode2);
+		} else {
 			rc = ll_swap_layouts(file, file2, &lsl);
+		}
+out:
 		fput(file2);
 		return rc;
 	}
@@ -2268,17 +2328,17 @@ static int ll_flush(struct file *file, fl_owner_t id)
 int cl_sync_file_range(struct inode *inode, loff_t start, loff_t end,
 		       enum cl_fsync_mode mode, int ignore_layout)
 {
-	struct cl_env_nest nest;
 	struct lu_env *env;
 	struct cl_io *io;
 	struct cl_fsync_io *fio;
 	int result;
+	int refcheck;
 
 	if (mode != CL_FSYNC_NONE && mode != CL_FSYNC_LOCAL &&
 	    mode != CL_FSYNC_DISCARD && mode != CL_FSYNC_ALL)
 		return -EINVAL;
 
-	env = cl_env_nested_get(&nest);
+	env = cl_env_get(&refcheck);
 	if (IS_ERR(env))
 		return PTR_ERR(env);
 
@@ -2301,7 +2361,7 @@ int cl_sync_file_range(struct inode *inode, loff_t start, loff_t end,
 	if (result == 0)
 		result = fio->fi_nr_written;
 	cl_io_fini(env, io);
-	cl_env_nested_put(&nest, env);
+	cl_env_put(env, &refcheck);
 
 	return result;
 }
@@ -2328,9 +2388,11 @@ int ll_fsync(struct file *file, loff_t start, loff_t end, int datasync)
 		lli->lli_async_rc = 0;
 		if (rc == 0)
 			rc = err;
-		err = lov_read_and_clear_async_rc(lli->lli_clob);
-		if (rc == 0)
-			rc = err;
+		if (lli->lli_clob) {
+			err = lov_read_and_clear_async_rc(lli->lli_clob);
+			if (rc == 0)
+				rc = err;
+		}
 	}
 
 	err = md_sync(ll_i2sbi(inode)->ll_md_exp, ll_inode2fid(inode), &req);
@@ -2367,7 +2429,7 @@ ll_file_flock(struct file *file, int cmd, struct file_lock *file_lock)
 	};
 	struct md_op_data *op_data;
 	struct lustre_handle lockh = {0};
-	ldlm_policy_data_t flock = { {0} };
+	union ldlm_policy_data flock = { { 0 } };
 	int fl_type = file_lock->fl_type;
 	__u64 flags = 0;
 	int rc;
@@ -2616,7 +2678,7 @@ int ll_have_md_lock(struct inode *inode, __u64 *bits,
 		    enum ldlm_mode l_req_mode)
 {
 	struct lustre_handle lockh;
-	ldlm_policy_data_t policy;
+	union ldlm_policy_data policy;
 	enum ldlm_mode mode = (l_req_mode == LCK_MINMODE) ?
 			      (LCK_CR | LCK_CW | LCK_PR | LCK_PW) : l_req_mode;
 	struct lu_fid *fid;
@@ -2657,7 +2719,7 @@ enum ldlm_mode ll_take_md_lock(struct inode *inode, __u64 bits,
 			       struct lustre_handle *lockh, __u64 flags,
 			       enum ldlm_mode mode)
 {
-	ldlm_policy_data_t policy = { .l_inodebits = {bits} };
+	union ldlm_policy_data policy = { .l_inodebits = { bits } };
 	struct lu_fid *fid;
 
 	fid = &ll_i2info(inode)->lli_fid;
@@ -2672,6 +2734,13 @@ static int ll_inode_revalidate_fini(struct inode *inode, int rc)
 	/* Already unlinked. Just update nlink and return success */
 	if (rc == -ENOENT) {
 		clear_nlink(inode);
+		/* If it is striped directory, and there is bad stripe
+		 * Let's revalidate the dentry again, instead of returning
+		 * error
+		 */
+		if (S_ISDIR(inode->i_mode) && ll_i2info(inode)->lli_lsm_md)
+			return 0;
+
 		/* This path cannot be hit for regular files unless in
 		 * case of obscure races, so no need to validate size.
 		 */
@@ -3149,14 +3218,14 @@ int ll_layout_conf(struct inode *inode, const struct cl_object_conf *conf)
 {
 	struct ll_inode_info *lli = ll_i2info(inode);
 	struct cl_object *obj = lli->lli_clob;
-	struct cl_env_nest nest;
 	struct lu_env *env;
 	int rc;
+	int refcheck;
 
 	if (!obj)
 		return 0;
 
-	env = cl_env_nested_get(&nest);
+	env = cl_env_get(&refcheck);
 	if (IS_ERR(env))
 		return PTR_ERR(env);
 
@@ -3190,7 +3259,7 @@ int ll_layout_conf(struct inode *inode, const struct cl_object_conf *conf)
 		ll_layout_version_set(lli, cl.cl_layout_gen);
 	}
 out:
-	cl_env_nested_put(&nest, env);
+	cl_env_put(env, &refcheck);
 	return rc;
 }
 

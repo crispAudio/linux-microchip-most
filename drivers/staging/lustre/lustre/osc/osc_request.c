@@ -68,7 +68,6 @@ struct osc_brw_async_args {
 	struct client_obd *aa_cli;
 	struct list_head	 aa_oaps;
 	struct list_head	 aa_exts;
-	struct cl_req     *aa_clerq;
 };
 
 struct osc_async_args {
@@ -1603,8 +1602,6 @@ static int brw_interpret(const struct lu_env *env,
 	LASSERT(list_empty(&aa->aa_exts));
 	LASSERT(list_empty(&aa->aa_oaps));
 
-	cl_req_completion(env, aa->aa_clerq, rc < 0 ? rc :
-			  req->rq_bulk->bd_nob_transferred);
 	osc_release_ppga(aa->aa_ppga, aa->aa_page_count);
 	ptlrpc_lprocfs_brw(req, req->rq_bulk->bd_nob_transferred);
 
@@ -1657,9 +1654,7 @@ int osc_build_rpc(const struct lu_env *env, struct client_obd *cli,
 	struct osc_brw_async_args *aa = NULL;
 	struct obdo *oa = NULL;
 	struct osc_async_page *oap;
-	struct osc_async_page *tmp;
-	struct cl_req *clerq = NULL;
-	enum cl_req_type crt = (cmd & OBD_BRW_WRITE) ? CRT_WRITE : CRT_READ;
+	struct osc_object *obj = NULL;
 	struct cl_req_attr *crattr = NULL;
 	u64 starting_offset = OBD_OBJECT_EOF;
 	u64 ending_offset = 0;
@@ -1667,6 +1662,7 @@ int osc_build_rpc(const struct lu_env *env, struct client_obd *cli,
 	int mem_tight = 0;
 	int page_count = 0;
 	bool soft_sync = false;
+	bool interrupted = false;
 	int i;
 	int rc;
 	struct ost_body *body;
@@ -1678,31 +1674,14 @@ int osc_build_rpc(const struct lu_env *env, struct client_obd *cli,
 	list_for_each_entry(ext, ext_list, oe_link) {
 		LASSERT(ext->oe_state == OES_RPC);
 		mem_tight |= ext->oe_memalloc;
-		list_for_each_entry(oap, &ext->oe_pages, oap_pending_item) {
-			++page_count;
-			list_add_tail(&oap->oap_rpc_item, &rpc_list);
-			if (starting_offset > oap->oap_obj_off)
-				starting_offset = oap->oap_obj_off;
-			else
-				LASSERT(oap->oap_page_off == 0);
-			if (ending_offset < oap->oap_obj_off + oap->oap_count)
-				ending_offset = oap->oap_obj_off +
-						oap->oap_count;
-			else
-				LASSERT(oap->oap_page_off + oap->oap_count ==
-					PAGE_SIZE);
-		}
+		page_count += ext->oe_nr_pages;
+		if (!obj)
+			obj = ext->oe_obj;
 	}
 
 	soft_sync = osc_over_unstable_soft_limit(cli);
 	if (mem_tight)
 		mpflag = cfs_memory_pressure_get_and_set();
-
-	crattr = kzalloc(sizeof(*crattr), GFP_NOFS);
-	if (!crattr) {
-		rc = -ENOMEM;
-		goto out;
-	}
 
 	pga = kcalloc(page_count, sizeof(*pga), GFP_NOFS);
 	if (!pga) {
@@ -1717,40 +1696,43 @@ int osc_build_rpc(const struct lu_env *env, struct client_obd *cli,
 	}
 
 	i = 0;
-	list_for_each_entry(oap, &rpc_list, oap_rpc_item) {
-		struct cl_page *page = oap2cl_page(oap);
+	list_for_each_entry(ext, ext_list, oe_link) {
+		list_for_each_entry(oap, &ext->oe_pages, oap_pending_item) {
+			if (mem_tight)
+				oap->oap_brw_flags |= OBD_BRW_MEMALLOC;
+			if (soft_sync)
+				oap->oap_brw_flags |= OBD_BRW_SOFT_SYNC;
+			pga[i] = &oap->oap_brw_page;
+			pga[i]->off = oap->oap_obj_off + oap->oap_page_off;
+			i++;
 
-		if (!clerq) {
-			clerq = cl_req_alloc(env, page, crt,
-					     1 /* only 1-object rpcs for now */);
-			if (IS_ERR(clerq)) {
-				rc = PTR_ERR(clerq);
-				goto out;
-			}
+			list_add_tail(&oap->oap_rpc_item, &rpc_list);
+			if (starting_offset == OBD_OBJECT_EOF ||
+			    starting_offset > oap->oap_obj_off)
+				starting_offset = oap->oap_obj_off;
+			else
+				LASSERT(!oap->oap_page_off);
+			if (ending_offset < oap->oap_obj_off + oap->oap_count)
+				ending_offset = oap->oap_obj_off +
+						oap->oap_count;
+			else
+				LASSERT(oap->oap_page_off + oap->oap_count ==
+					PAGE_SIZE);
+			if (oap->oap_interrupted)
+				interrupted = true;
 		}
-		if (mem_tight)
-			oap->oap_brw_flags |= OBD_BRW_MEMALLOC;
-		if (soft_sync)
-			oap->oap_brw_flags |= OBD_BRW_SOFT_SYNC;
-		pga[i] = &oap->oap_brw_page;
-		pga[i]->off = oap->oap_obj_off + oap->oap_page_off;
-		CDEBUG(0, "put page %p index %lu oap %p flg %x to pga\n",
-		       pga[i]->pg, oap->oap_page->index, oap,
-		       pga[i]->flag);
-		i++;
-		cl_req_page_add(env, clerq, page);
 	}
 
-	/* always get the data for the obdo for the rpc */
-	LASSERT(clerq);
+	/* first page in the list */
+	oap = list_entry(rpc_list.next, typeof(*oap), oap_rpc_item);
+
+	crattr = &osc_env_info(env)->oti_req_attr;
+	memset(crattr, 0, sizeof(*crattr));
+	crattr->cra_type = (cmd & OBD_BRW_WRITE) ? CRT_WRITE : CRT_READ;
+	crattr->cra_flags = ~0ULL;
+	crattr->cra_page = oap2cl_page(oap);
 	crattr->cra_oa = oa;
-	cl_req_attr_set(env, clerq, crattr, ~0ULL);
-
-	rc = cl_req_prep(env, clerq);
-	if (rc != 0) {
-		CERROR("cl_req_prep failed: %d\n", rc);
-		goto out;
-	}
+	cl_req_attr_set(env, osc2cl(obj), crattr);
 
 	sort_brw_pages(pga, page_count);
 	rc = osc_brw_prep_request(cmd, cli, oa, page_count, pga, &req, 1, 0);
@@ -1762,8 +1744,10 @@ int osc_build_rpc(const struct lu_env *env, struct client_obd *cli,
 	req->rq_commit_cb = brw_commit;
 	req->rq_interpret_reply = brw_interpret;
 
-	if (mem_tight != 0)
-		req->rq_memalloc = 1;
+	req->rq_memalloc = mem_tight != 0;
+	oap->oap_request = ptlrpc_request_addref(req);
+	if (interrupted && !req->rq_intr)
+		ptlrpc_mark_interrupted(req);
 
 	/* Need to update the timestamps after the request is built in case
 	 * we race with setattr (locally or in queue at OST).  If OST gets
@@ -1773,9 +1757,8 @@ int osc_build_rpc(const struct lu_env *env, struct client_obd *cli,
 	 */
 	body = req_capsule_client_get(&req->rq_pill, &RMF_OST_BODY);
 	crattr->cra_oa = &body->oa;
-	cl_req_attr_set(env, clerq, crattr,
-			OBD_MD_FLMTIME | OBD_MD_FLCTIME | OBD_MD_FLATIME);
-
+	crattr->cra_flags = OBD_MD_FLMTIME | OBD_MD_FLCTIME | OBD_MD_FLATIME;
+	cl_req_attr_set(env, osc2cl(obj), crattr);
 	lustre_msg_set_jobid(req->rq_reqmsg, crattr->cra_jobid);
 
 	CLASSERT(sizeof(*aa) <= sizeof(req->rq_async_args));
@@ -1784,24 +1767,6 @@ int osc_build_rpc(const struct lu_env *env, struct client_obd *cli,
 	list_splice_init(&rpc_list, &aa->aa_oaps);
 	INIT_LIST_HEAD(&aa->aa_exts);
 	list_splice_init(ext_list, &aa->aa_exts);
-	aa->aa_clerq = clerq;
-
-	/* queued sync pages can be torn down while the pages
-	 * were between the pending list and the rpc
-	 */
-	tmp = NULL;
-	list_for_each_entry(oap, &aa->aa_oaps, oap_rpc_item) {
-		/* only one oap gets a request reference */
-		if (!tmp)
-			tmp = oap;
-		if (oap->oap_interrupted && !req->rq_intr) {
-			CDEBUG(D_INODE, "oap %p in req %p interrupted\n",
-			       oap, req);
-			ptlrpc_mark_interrupted(req);
-		}
-	}
-	if (tmp)
-		tmp->oap_request = ptlrpc_request_addref(req);
 
 	spin_lock(&cli->cl_loi_list_lock);
 	starting_offset >>= PAGE_SHIFT;
@@ -1823,6 +1788,7 @@ int osc_build_rpc(const struct lu_env *env, struct client_obd *cli,
 	DEBUG_REQ(D_INODE, req, "%d pages, aa %p. now %ur/%dw in flight",
 		  page_count, aa, cli->cl_r_in_flight,
 		  cli->cl_w_in_flight);
+	OBD_FAIL_TIMEOUT(OBD_FAIL_OSC_DELAY_IO, cfs_fail_val);
 
 	ptlrpcd_add_req(req);
 	rc = 0;
@@ -1830,8 +1796,6 @@ int osc_build_rpc(const struct lu_env *env, struct client_obd *cli,
 out:
 	if (mem_tight != 0)
 		cfs_memory_pressure_restore(mpflag);
-
-	kfree(crattr);
 
 	if (rc != 0) {
 		LASSERT(!req);
@@ -1848,8 +1812,6 @@ out:
 			list_del_init(&ext->oe_link);
 			osc_extent_finish(env, ext, 0, rc);
 		}
-		if (clerq && !IS_ERR(clerq))
-			cl_req_completion(env, clerq, rc);
 	}
 	return rc;
 }
@@ -1991,7 +1953,7 @@ struct ptlrpc_request_set *PTLRPCD_SET = (void *)1;
  * release locks just after they are obtained.
  */
 int osc_enqueue_base(struct obd_export *exp, struct ldlm_res_id *res_id,
-		     __u64 *flags, ldlm_policy_data_t *policy,
+		     __u64 *flags, union ldlm_policy_data *policy,
 		     struct ost_lvb *lvb, int kms_valid,
 		     osc_enqueue_upcall_f upcall, void *cookie,
 		     struct ldlm_enqueue_info *einfo,
@@ -2142,7 +2104,7 @@ no_match:
 }
 
 int osc_match_base(struct obd_export *exp, struct ldlm_res_id *res_id,
-		   __u32 type, ldlm_policy_data_t *policy, __u32 mode,
+		   __u32 type, union ldlm_policy_data *policy, __u32 mode,
 		   __u64 *flags, void *data, struct lustre_handle *lockh,
 		   int unref)
 {
@@ -2727,47 +2689,33 @@ out_ptlrpcd:
 	return rc;
 }
 
-static int osc_precleanup(struct obd_device *obd, enum obd_cleanup_stage stage)
+static int osc_precleanup(struct obd_device *obd)
 {
-	switch (stage) {
-	case OBD_CLEANUP_EARLY: {
-		struct obd_import *imp;
+	struct client_obd *cli = &obd->u.cli;
 
-		imp = obd->u.cli.cl_import;
-		CDEBUG(D_HA, "Deactivating import %s\n", obd->obd_name);
-		/* ptlrpc_abort_inflight to stop an mds_lov_synchronize */
-		ptlrpc_deactivate_import(imp);
-		spin_lock(&imp->imp_lock);
-		imp->imp_pingable = 0;
-		spin_unlock(&imp->imp_lock);
-		break;
+	/* LU-464
+	 * for echo client, export may be on zombie list, wait for
+	 * zombie thread to cull it, because cli.cl_import will be
+	 * cleared in client_disconnect_export():
+	 *   class_export_destroy() -> obd_cleanup() ->
+	 *   echo_device_free() -> echo_client_cleanup() ->
+	 *   obd_disconnect() -> osc_disconnect() ->
+	 *   client_disconnect_export()
+	 */
+	obd_zombie_barrier();
+	if (cli->cl_writeback_work) {
+		ptlrpcd_destroy_work(cli->cl_writeback_work);
+		cli->cl_writeback_work = NULL;
 	}
-	case OBD_CLEANUP_EXPORTS: {
-		struct client_obd *cli = &obd->u.cli;
-		/* LU-464
-		 * for echo client, export may be on zombie list, wait for
-		 * zombie thread to cull it, because cli.cl_import will be
-		 * cleared in client_disconnect_export():
-		 *   class_export_destroy() -> obd_cleanup() ->
-		 *   echo_device_free() -> echo_client_cleanup() ->
-		 *   obd_disconnect() -> osc_disconnect() ->
-		 *   client_disconnect_export()
-		 */
-		obd_zombie_barrier();
-		if (cli->cl_writeback_work) {
-			ptlrpcd_destroy_work(cli->cl_writeback_work);
-			cli->cl_writeback_work = NULL;
-		}
-		if (cli->cl_lru_work) {
-			ptlrpcd_destroy_work(cli->cl_lru_work);
-			cli->cl_lru_work = NULL;
-		}
-		obd_cleanup_client_import(obd);
-		ptlrpc_lprocfs_unregister_obd(obd);
-		lprocfs_obd_cleanup(obd);
-		break;
-		}
+
+	if (cli->cl_lru_work) {
+		ptlrpcd_destroy_work(cli->cl_lru_work);
+		cli->cl_lru_work = NULL;
 	}
+
+	obd_cleanup_client_import(obd);
+	ptlrpc_lprocfs_unregister_obd(obd);
+	lprocfs_obd_cleanup(obd);
 	return 0;
 }
 
@@ -2844,7 +2792,6 @@ static struct obd_ops osc_obd_ops = {
 };
 
 extern struct lu_kmem_descr osc_caches[];
-extern struct lock_class_key osc_ast_guard_class;
 
 static int __init osc_init(void)
 {

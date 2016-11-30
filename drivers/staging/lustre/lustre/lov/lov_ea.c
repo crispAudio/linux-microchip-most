@@ -81,7 +81,7 @@ struct lov_stripe_md *lsm_alloc_plain(u16 stripe_count)
 	size_t oinfo_ptrs_size, lsm_size;
 	struct lov_stripe_md *lsm;
 	struct lov_oinfo     *loi;
-	unsigned int i;
+	int i;
 
 	LASSERT(stripe_count <= LOV_MAX_STRIPE_COUNT);
 
@@ -177,17 +177,21 @@ static int lsm_unpackmd_common(struct lov_obd *lov,
 		if (lov_oinfo_is_dummy(loi))
 			continue;
 
-		if (loi->loi_ost_idx >= lov->desc.ld_tgt_count) {
-			CERROR("OST index %d more than OST count %d\n",
+		if (loi->loi_ost_idx >= lov->desc.ld_tgt_count &&
+		    !lov2obd(lov)->obd_process_conf) {
+			CERROR("%s: OST index %d more than OST count %d\n",
+			       (char *)lov->desc.ld_uuid.uuid,
 			       loi->loi_ost_idx, lov->desc.ld_tgt_count);
 			lov_dump_lmm_v1(D_WARNING, lmm);
 			return -EINVAL;
 		}
 
 		if (!lov->lov_tgts[loi->loi_ost_idx]) {
-			CERROR("OST index %d missing\n", loi->loi_ost_idx);
+			CERROR("%s: OST index %d missing\n",
+			       (char *)lov->desc.ld_uuid.uuid,
+			       loi->loi_ost_idx);
 			lov_dump_lmm_v1(D_WARNING, lmm);
-			return -EINVAL;
+			continue;
 		}
 
 		tgt_bytes = lov_tgt_maxbytes(lov->lov_tgts[loi->loi_ost_idx]);

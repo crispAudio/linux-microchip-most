@@ -191,7 +191,8 @@ static int client_common_fill_super(struct super_block *sb, char *md, char *dt,
 				  OBD_CONNECT_FLOCK_DEAD |
 				  OBD_CONNECT_DISP_STRIPE | OBD_CONNECT_LFSCK |
 				  OBD_CONNECT_OPEN_BY_FID |
-				  OBD_CONNECT_DIR_STRIPE;
+				  OBD_CONNECT_DIR_STRIPE |
+				  OBD_CONNECT_BULK_MBITS;
 
 	if (sbi->ll_flags & LL_SBI_LRU_RESIZE)
 		data->ocd_connect_flags |= OBD_CONNECT_LRU_RESIZE;
@@ -352,7 +353,9 @@ static int client_common_fill_super(struct super_block *sb, char *md, char *dt,
 				  OBD_CONNECT_64BITHASH | OBD_CONNECT_MAXBYTES |
 				  OBD_CONNECT_EINPROGRESS |
 				  OBD_CONNECT_JOBSTATS | OBD_CONNECT_LVB_TYPE |
-				  OBD_CONNECT_LAYOUTLOCK | OBD_CONNECT_PINGLESS;
+				  OBD_CONNECT_LAYOUTLOCK |
+				  OBD_CONNECT_PINGLESS | OBD_CONNECT_LFSCK |
+				  OBD_CONNECT_BULK_MBITS;
 
 	if (!OBD_FAIL_CHECK(OBD_FAIL_OSC_CONNECT_CKSUM)) {
 		/* OBD_CONNECT_CKSUM should always be set, even if checksums are
@@ -717,6 +720,18 @@ static int ll_options(char *options, int *flags)
 			*flags &= ~tmp;
 			goto next;
 		}
+		tmp = ll_set_opt("context", s1, 1);
+		if (tmp)
+			goto next;
+		tmp = ll_set_opt("fscontext", s1, 1);
+		if (tmp)
+			goto next;
+		tmp = ll_set_opt("defcontext", s1, 1);
+		if (tmp)
+			goto next;
+		tmp = ll_set_opt("rootcontext", s1, 1);
+		if (tmp)
+			goto next;
 		tmp = ll_set_opt("user_fid2path", s1, LL_SBI_USER_FID2PATH);
 		if (tmp) {
 			*flags |= tmp;
@@ -1043,7 +1058,7 @@ struct inode *ll_inode_from_resource_lock(struct ldlm_lock *lock)
 	return inode;
 }
 
-static void ll_dir_clear_lsm_md(struct inode *inode)
+void ll_dir_clear_lsm_md(struct inode *inode)
 {
 	struct ll_inode_info *lli = ll_i2info(inode);
 
@@ -1191,16 +1206,44 @@ static int ll_update_lsm_md(struct inode *inode, struct lustre_md *md)
 
 	/* set the directory layout */
 	if (!lli->lli_lsm_md) {
+		struct cl_attr *attr;
+
 		rc = ll_init_lsm_md(inode, md);
 		if (rc)
 			return rc;
 
-		lli->lli_lsm_md = lsm;
 		/*
 		 * set lsm_md to NULL, so the following free lustre_md
 		 * will not free this lsm
 		 */
 		md->lmv = NULL;
+		lli->lli_lsm_md = lsm;
+
+		attr = kzalloc(sizeof(*attr), GFP_NOFS);
+		if (!attr)
+			return -ENOMEM;
+
+		/* validate the lsm */
+		rc = md_merge_attr(ll_i2mdexp(inode), lsm, attr,
+				   ll_md_blocking_ast);
+		if (rc) {
+			kfree(attr);
+			return rc;
+		}
+
+		if (md->body->mbo_valid & OBD_MD_FLNLINK)
+			md->body->mbo_nlink = attr->cat_nlink;
+		if (md->body->mbo_valid & OBD_MD_FLSIZE)
+			md->body->mbo_size = attr->cat_size;
+		if (md->body->mbo_valid & OBD_MD_FLATIME)
+			md->body->mbo_atime = attr->cat_atime;
+		if (md->body->mbo_valid & OBD_MD_FLCTIME)
+			md->body->mbo_ctime = attr->cat_ctime;
+		if (md->body->mbo_valid & OBD_MD_FLMTIME)
+			md->body->mbo_mtime = attr->cat_mtime;
+
+		kfree(attr);
+
 		CDEBUG(D_INODE, "Set lsm %p magic %x to "DFID"\n", lsm,
 		       lsm->lsm_md_magic, PFID(ll_inode2fid(inode)));
 		return 0;
@@ -1524,11 +1567,7 @@ int ll_setattr_raw(struct dentry *dentry, struct iattr *attr, bool hsm_import)
 		 * setting times to past, but it is necessary due to possible
 		 * time de-synchronization between MDT inode and OST objects
 		 */
-		if (attr->ia_valid & ATTR_SIZE)
-			down_write(&lli->lli_trunc_sem);
 		rc = cl_setattr_ost(ll_i2info(inode)->lli_clob, attr, 0);
-		if (attr->ia_valid & ATTR_SIZE)
-			up_write(&lli->lli_trunc_sem);
 	}
 out:
 	if (op_data)

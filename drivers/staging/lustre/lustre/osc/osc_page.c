@@ -109,7 +109,8 @@ int osc_page_cache_add(const struct lu_env *env,
 	return result;
 }
 
-void osc_index2policy(ldlm_policy_data_t *policy, const struct cl_object *obj,
+void osc_index2policy(union ldlm_policy_data *policy,
+		      const struct cl_object *obj,
 		      pgoff_t start, pgoff_t end)
 {
 	memset(policy, 0, sizeof(*policy));
@@ -644,15 +645,15 @@ long osc_lru_shrink(const struct lu_env *env, struct client_obd *cli,
 
 long osc_lru_reclaim(struct client_obd *cli)
 {
-	struct cl_env_nest nest;
 	struct lu_env *env;
 	struct cl_client_cache *cache = cli->cl_cache;
 	int max_scans;
+	int refcheck;
 	long rc = 0;
 
 	LASSERT(cache);
 
-	env = cl_env_nested_get(&nest);
+	env = cl_env_get(&refcheck);
 	if (IS_ERR(env))
 		return 0;
 
@@ -704,7 +705,7 @@ long osc_lru_reclaim(struct client_obd *cli)
 	spin_unlock(&cache->ccc_lru_lock);
 
 out:
-	cl_env_nested_put(&nest, env);
+	cl_env_put(env, &refcheck);
 	CDEBUG(D_CACHE, "%s: cli %p freed %ld pages.\n",
 	       cli->cl_import->imp_obd->obd_name, cli, rc);
 	return rc;

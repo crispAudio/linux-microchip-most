@@ -537,13 +537,14 @@ static inline void ostid_set_id(struct ost_id *oi, __u64 oid)
 {
 	if (fid_seq_is_mdt0(oi->oi.oi_seq)) {
 		if (oid >= IDIF_MAX_OID) {
-			CERROR("Bad %llu to set " DOSTID "\n", oid, POSTID(oi));
+			CERROR("Too large OID %#llx to set MDT0 " DOSTID "\n",
+			       oid, POSTID(oi));
 			return;
 		}
 		oi->oi.oi_id = oid;
 	} else if (fid_is_idif(&oi->oi_fid)) {
 		if (oid >= IDIF_MAX_OID) {
-			CERROR("Bad %llu to set "DOSTID"\n",
+			CERROR("Too large OID %#llx to set IDIF " DOSTID "\n",
 			       oid, POSTID(oi));
 			return;
 		}
@@ -569,7 +570,7 @@ static inline int fid_set_id(struct lu_fid *fid, __u64 oid)
 
 	if (fid_is_idif(fid)) {
 		if (oid >= IDIF_MAX_OID) {
-			CERROR("Too large OID %#llx to set IDIF "DFID"\n",
+			CERROR("Too large OID %#llx to set IDIF " DFID "\n",
 			       (unsigned long long)oid, PFID(fid));
 			return -EBADF;
 		}
@@ -578,7 +579,7 @@ static inline int fid_set_id(struct lu_fid *fid, __u64 oid)
 		fid->f_ver = oid >> 48;
 	} else {
 		if (oid >= OBIF_MAX_OID) {
-			CERROR("Too large OID %#llx to set REG "DFID"\n",
+			CERROR("Too large OID %#llx to set REG " DFID "\n",
 			       (unsigned long long)oid, PFID(fid));
 			return -EBADF;
 		}
@@ -1006,8 +1007,11 @@ struct ptlrpc_body_v3 {
 	__u64 pb_slv;
 	/* VBR: pre-versions */
 	__u64 pb_pre_versions[PTLRPC_NUM_VERSIONS];
+	__u64 pb_mbits; /**< match bits for bulk request */
 	/* padding for future needs */
-	__u64 pb_padding[4];
+	__u64 pb_padding64_0;
+	__u64 pb_padding64_1;
+	__u64 pb_padding64_2;
 	char  pb_jobid[LUSTRE_JOBID_SIZE];
 };
 
@@ -1036,8 +1040,11 @@ struct ptlrpc_body_v2 {
 	__u64 pb_slv;
 	/* VBR: pre-versions */
 	__u64 pb_pre_versions[PTLRPC_NUM_VERSIONS];
+	__u64 pb_mbits; /**< unused in V2 */
 	/* padding for future needs */
-	__u64 pb_padding[4];
+	__u64 pb_padding64_0;
+	__u64 pb_padding64_1;
+	__u64 pb_padding64_2;
 };
 
 void lustre_swab_ptlrpc_body(struct ptlrpc_body *pb);
@@ -1182,6 +1189,12 @@ void lustre_swab_ptlrpc_body(struct ptlrpc_body *pb);
 						       *  RPCs in parallel
 						       */
 #define OBD_CONNECT_DIR_STRIPE	 0x400000000000000ULL/* striped DNE dir */
+#define OBD_CONNECT_SUBTREE	 0x800000000000000ULL /* fileset mount */
+#define OBD_CONNECT_LOCK_AHEAD	 0x1000000000000000ULL /* lock ahead */
+/** bulk matchbits is sent within ptlrpc_body */
+#define OBD_CONNECT_BULK_MBITS	 0x2000000000000000ULL
+#define OBD_CONNECT_OBDOPACK	 0x4000000000000000ULL /* compact OUT obdo */
+#define OBD_CONNECT_FLAGS2	 0x8000000000000000ULL /* second flags word */
 
 /* XXX README XXX:
  * Please DO NOT add flag values here before first ensuring that this same
@@ -1237,7 +1250,7 @@ struct obd_connect_data {
 	__u16 ocd_maxmodrpcs;	/* Maximum modify RPCs in parallel */
 	__u16 padding0;		/* added 2.1.0. also fix lustre_swab_connect */
 	__u32 padding1;		/* added 2.1.0. also fix lustre_swab_connect */
-	__u64 padding2;	  /* added 2.1.0. also fix lustre_swab_connect */
+	__u64 ocd_connect_flags2;
 	__u64 padding3;	  /* added 2.1.0. also fix lustre_swab_connect */
 	__u64 padding4;	  /* added 2.1.0. also fix lustre_swab_connect */
 	__u64 padding5;	  /* added 2.1.0. also fix lustre_swab_connect */
@@ -1595,7 +1608,9 @@ lov_mds_md_max_stripe_count(size_t buf_size, __u32 lmm_magic)
 /*	OBD_MD_FLRMTRGETFACL (0x0008000000000000ULL) lfs rgetfacl, obsolete */
 
 #define OBD_MD_FLDATAVERSION (0x0010000000000000ULL) /* iversion sum */
-#define OBD_MD_FLRELEASED    (0x0020000000000000ULL) /* file released */
+#define OBD_MD_CLOSE_INTENT_EXECED (0x0020000000000000ULL) /* close intent
+							    * executed
+							    */
 
 #define OBD_MD_DEFAULT_MEA   (0x0040000000000000ULL) /* default MEA */
 
@@ -1913,16 +1928,19 @@ enum {
 #define MDS_STATUS_CONN 1
 #define MDS_STATUS_LOV 2
 
-#define LUSTRE_BFLAG_UNCOMMITTED_WRITES   0x1
-
 /* these should be identical to their EXT4_*_FL counterparts, they are
  * redefined here only to avoid dragging in fs/ext4/ext4.h
  */
 #define LUSTRE_SYNC_FL	 0x00000008 /* Synchronous updates */
 #define LUSTRE_IMMUTABLE_FL    0x00000010 /* Immutable file */
 #define LUSTRE_APPEND_FL       0x00000020 /* writes to file may only append */
+#define LUSTRE_NODUMP_FL	0x00000040 /* do not dump file */
 #define LUSTRE_NOATIME_FL      0x00000080 /* do not update atime */
+#define LUSTRE_INDEX_FL		0x00001000 /* hash-indexed directory */
 #define LUSTRE_DIRSYNC_FL      0x00010000 /* dirsync behaviour (dir only) */
+#define LUSTRE_TOPDIR_FL	0x00020000 /* Top of directory hierarchies*/
+#define LUSTRE_DIRECTIO_FL	0x00100000 /* Use direct i/o */
+#define LUSTRE_INLINE_DATA_FL	0x10000000 /* Inode has inline data. */
 
 /* Convert wire LUSTRE_*_FL to corresponding client local VFS S_* values
  * for the client inode i_flags.  The LUSTRE_*_FL are the Lustre wire
@@ -1975,7 +1993,7 @@ struct mdt_body {
 	__u32	mbo_mode;
 	__u32	mbo_uid;
 	__u32	mbo_gid;
-	__u32	mbo_flags;
+	__u32	mbo_flags;	/* LUSTRE_*_FL file attributes */
 	__u32	mbo_rdev;
 	__u32	mbo_nlink;	/* #bytes to read in the case of MDS_READPAGE */
 	__u32	mbo_unused2;	/* was "generation" until 2.4.0 */
@@ -2127,6 +2145,7 @@ enum mds_op_bias {
 	MDS_OWNEROVERRIDE	= 1 << 11,
 	MDS_HSM_RELEASE		= 1 << 12,
 	MDS_RENAME_MIGRATE	= BIT(13),
+	MDS_CLOSE_LAYOUT_SWAP   = BIT(14),
 };
 
 /* instance of mdt_reint_rec */
@@ -2608,17 +2627,35 @@ struct ldlm_flock_wire {
  * on the resource type.
  */
 
-typedef union {
+union ldlm_wire_policy_data {
 	struct ldlm_extent l_extent;
 	struct ldlm_flock_wire l_flock;
 	struct ldlm_inodebits l_inodebits;
-} ldlm_wire_policy_data_t;
+};
 
 union ldlm_gl_desc {
 	struct ldlm_gl_lquota_desc	lquota_desc;
 };
 
 void lustre_swab_gl_desc(union ldlm_gl_desc *);
+
+enum ldlm_intent_flags {
+	IT_OPEN		= BIT(0),
+	IT_CREAT	= BIT(1),
+	IT_OPEN_CREAT	= BIT(1) | BIT(0),
+	IT_READDIR	= BIT(2),
+	IT_GETATTR	= BIT(3),
+	IT_LOOKUP	= BIT(4),
+	IT_UNLINK	= BIT(5),
+	IT_TRUNC	= BIT(6),
+	IT_GETXATTR	= BIT(7),
+	IT_EXEC		= BIT(8),
+	IT_PIN		= BIT(9),
+	IT_LAYOUT	= BIT(10),
+	IT_QUOTA_DQACQ	= BIT(11),
+	IT_QUOTA_CONN	= BIT(12),
+	IT_SETXATTR	= BIT(13),
+};
 
 struct ldlm_intent {
 	__u64 opc;
@@ -2636,7 +2673,7 @@ struct ldlm_lock_desc {
 	struct ldlm_resource_desc l_resource;
 	enum ldlm_mode l_req_mode;
 	enum ldlm_mode l_granted_mode;
-	ldlm_wire_policy_data_t l_policy_data;
+	union ldlm_wire_policy_data l_policy_data;
 };
 
 #define LDLM_LOCKREQ_HANDLES 2

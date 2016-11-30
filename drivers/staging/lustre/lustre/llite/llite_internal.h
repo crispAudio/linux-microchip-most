@@ -662,8 +662,6 @@ enum {
 	LPROC_LL_WRITE_BYTES,
 	LPROC_LL_BRW_READ,
 	LPROC_LL_BRW_WRITE,
-	LPROC_LL_OSC_READ,
-	LPROC_LL_OSC_WRITE,
 	LPROC_LL_IOCTL,
 	LPROC_LL_OPEN,
 	LPROC_LL_RELEASE,
@@ -787,6 +785,7 @@ int ll_fill_super(struct super_block *sb, struct vfsmount *mnt);
 void ll_put_super(struct super_block *sb);
 void ll_kill_super(struct super_block *sb);
 struct inode *ll_inode_from_resource_lock(struct ldlm_lock *lock);
+void ll_dir_clear_lsm_md(struct inode *inode);
 void ll_clear_inode(struct inode *inode);
 int ll_setattr_raw(struct dentry *dentry, struct iattr *attr, bool hsm_import);
 int ll_setattr(struct dentry *de, struct iattr *attr);
@@ -906,7 +905,7 @@ static inline struct vvp_io_args *ll_env_args(const struct lu_env *env)
 
 int ll_teardown_mmaps(struct address_space *mapping, __u64 first, __u64 last);
 int ll_file_mmap(struct file *file, struct vm_area_struct *vma);
-void policy_from_vma(ldlm_policy_data_t *policy, struct vm_area_struct *vma,
+void policy_from_vma(union ldlm_policy_data *policy, struct vm_area_struct *vma,
 		     unsigned long addr, size_t count);
 struct vm_area_struct *our_vma(struct mm_struct *mm, unsigned long addr,
 			       size_t count);
@@ -1213,15 +1212,6 @@ struct ll_dio_pages {
 	/** # of pages in the array. */
 	int	   ldp_nr;
 };
-
-static inline void cl_stats_tally(struct cl_device *dev, enum cl_req_type crt,
-				  int rc)
-{
-	int opc = (crt == CRT_READ) ? LPROC_LL_OSC_READ :
-				      LPROC_LL_OSC_WRITE;
-
-	ll_stats_ops_tally(ll_s2sbi(cl2vvp_dev(dev)->vdv_sb), opc, rc);
-}
 
 ssize_t ll_direct_rw_pages(const struct lu_env *env, struct cl_io *io,
 			   int rw, struct inode *inode,

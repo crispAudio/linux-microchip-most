@@ -904,6 +904,39 @@ static int ptlrpc_connect_set_flags(struct obd_import *imp,
 }
 
 /**
+ * Add all replay requests back to unreplied list before start replay,
+ * so that we can make sure the known replied XID is always increased
+ * only even if when replaying requests.
+ */
+static void ptlrpc_prepare_replay(struct obd_import *imp)
+{
+	struct ptlrpc_request *req;
+
+	if (imp->imp_state != LUSTRE_IMP_REPLAY ||
+	    imp->imp_resend_replay)
+		return;
+
+	/*
+	 * If the server was restart during repaly, the requests may
+	 * have been added to the unreplied list in former replay.
+	 */
+	spin_lock(&imp->imp_lock);
+
+	list_for_each_entry(req, &imp->imp_committed_list, rq_replay_list) {
+		if (list_empty(&req->rq_unreplied_list))
+			ptlrpc_add_unreplied(req);
+	}
+
+	list_for_each_entry(req, &imp->imp_replay_list, rq_replay_list) {
+		if (list_empty(&req->rq_unreplied_list))
+			ptlrpc_add_unreplied(req);
+	}
+
+	imp->imp_known_replied_xid = ptlrpc_known_replied_xid(imp);
+	spin_unlock(&imp->imp_lock);
+}
+
+/**
  * interpret_reply callback for connect RPCs.
  * Looks into returned status of connect operation and decides
  * what to do with the import - i.e enter recovery, promote it to
@@ -972,6 +1005,16 @@ static int ptlrpc_connect_interpret(const struct lu_env *env,
 
 	spin_unlock(&imp->imp_lock);
 
+	if (!exp) {
+		/* This could happen if export is cleaned during the
+		 * connect attempt
+		 */
+		CERROR("%s: missing export after connect\n",
+		       imp->imp_obd->obd_name);
+		rc = -ENODEV;
+		goto out;
+	}
+
 	/* check that server granted subset of flags we asked for. */
 	if ((ocd->ocd_connect_flags & imp->imp_connect_flags_orig) !=
 	    ocd->ocd_connect_flags) {
@@ -982,15 +1025,6 @@ static int ptlrpc_connect_interpret(const struct lu_env *env,
 		goto out;
 	}
 
-	if (!exp) {
-		/* This could happen if export is cleaned during the
-		 * connect attempt
-		 */
-		CERROR("%s: missing export after connect\n",
-		       imp->imp_obd->obd_name);
-		rc = -ENODEV;
-		goto out;
-	}
 	old_connect_flags = exp_connect_flags(exp);
 	exp->exp_connect_data = *ocd;
 	imp->imp_obd->obd_self_export->exp_connect_data = *ocd;
@@ -1129,6 +1163,7 @@ static int ptlrpc_connect_interpret(const struct lu_env *env,
 		imp->imp_remote_handle =
 				*lustre_msg_get_handle(request->rq_repmsg);
 		imp->imp_last_replay_transno = 0;
+		imp->imp_replay_cursor = &imp->imp_committed_list;
 		IMPORT_SET_STATE(imp, LUSTRE_IMP_REPLAY);
 	} else {
 		DEBUG_REQ(D_HA, request, "%s: evicting (reconnect/recover flags not set: %x)",
@@ -1152,6 +1187,7 @@ static int ptlrpc_connect_interpret(const struct lu_env *env,
 	}
 
 finish:
+	ptlrpc_prepare_replay(imp);
 	rc = ptlrpc_import_recovery_state_machine(imp);
 	if (rc == -ENOTCONN) {
 		CDEBUG(D_HA, "evicted/aborted by %s@%s during recovery; invalidating and reconnecting\n",
