@@ -660,7 +660,7 @@ static ssize_t show_description(struct most_inst_obj *instance_obj,
 			instance_obj->iface->description);
 }
 
-static ssize_t show_interface(struct most_inst_obj *instance_obj,
+static ssize_t interface_show(struct most_inst_obj *instance_obj,
 			      struct most_inst_attribute *attr,
 			      char *buf)
 {
@@ -691,7 +691,9 @@ static ssize_t show_interface(struct most_inst_obj *instance_obj,
 	static MOST_INST_ATTR(value, 0444, show_##value, NULL)
 
 create_inst_attribute(description);
-create_inst_attribute(interface);
+
+static struct most_inst_attribute most_inst_attr_interface =
+	__ATTR_RO(interface);
 
 static struct attribute *most_inst_def_attrs[] = {
 	&most_inst_attr_description.attr,
