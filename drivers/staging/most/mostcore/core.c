@@ -256,7 +256,7 @@ static void most_channel_release(struct kobject *kobj)
 	kfree(c);
 }
 
-static ssize_t show_available_directions(struct most_c_obj *c,
+static ssize_t available_directions_show(struct most_c_obj *c,
 					 struct most_c_attr *attr,
 					 char *buf)
 {
@@ -271,7 +271,7 @@ static ssize_t show_available_directions(struct most_c_obj *c,
 	return strlen(buf);
 }
 
-static ssize_t show_available_datatypes(struct most_c_obj *c,
+static ssize_t available_datatypes_show(struct most_c_obj *c,
 					struct most_c_attr *attr,
 					char *buf)
 {
@@ -290,10 +290,9 @@ static ssize_t show_available_datatypes(struct most_c_obj *c,
 	return strlen(buf);
 }
 
-static
-ssize_t show_number_of_packet_buffers(struct most_c_obj *c,
-				      struct most_c_attr *attr,
-				      char *buf)
+static ssize_t number_of_packet_buffers_show(struct most_c_obj *c,
+					     struct most_c_attr *attr,
+					     char *buf)
 {
 	unsigned int i = c->channel_id;
 
@@ -301,10 +300,9 @@ ssize_t show_number_of_packet_buffers(struct most_c_obj *c,
 			c->iface->channel_vector[i].num_buffers_packet);
 }
 
-static
-ssize_t show_number_of_stream_buffers(struct most_c_obj *c,
-				      struct most_c_attr *attr,
-				      char *buf)
+static ssize_t number_of_stream_buffers_show(struct most_c_obj *c,
+					     struct most_c_attr *attr,
+					     char *buf)
 {
 	unsigned int i = c->channel_id;
 
@@ -312,10 +310,9 @@ ssize_t show_number_of_stream_buffers(struct most_c_obj *c,
 			c->iface->channel_vector[i].num_buffers_streaming);
 }
 
-static
-ssize_t show_size_of_packet_buffer(struct most_c_obj *c,
-				   struct most_c_attr *attr,
-				   char *buf)
+static ssize_t size_of_packet_buffer_show(struct most_c_obj *c,
+					  struct most_c_attr *attr,
+					  char *buf)
 {
 	unsigned int i = c->channel_id;
 
@@ -323,10 +320,9 @@ ssize_t show_size_of_packet_buffer(struct most_c_obj *c,
 			c->iface->channel_vector[i].buffer_size_packet);
 }
 
-static
-ssize_t show_size_of_stream_buffer(struct most_c_obj *c,
-				   struct most_c_attr *attr,
-				   char *buf)
+static ssize_t size_of_stream_buffer_show(struct most_c_obj *c,
+					  struct most_c_attr *attr,
+					  char *buf)
 {
 	unsigned int i = c->channel_id;
 
@@ -334,7 +330,7 @@ ssize_t show_size_of_stream_buffer(struct most_c_obj *c,
 			c->iface->channel_vector[i].buffer_size_streaming);
 }
 
-static ssize_t show_channel_starving(struct most_c_obj *c,
+static ssize_t channel_starving_show(struct most_c_obj *c,
 				     struct most_c_attr *attr,
 				     char *buf)
 {
@@ -342,7 +338,7 @@ static ssize_t show_channel_starving(struct most_c_obj *c,
 }
 
 #define create_show_channel_attribute(val) \
-	static MOST_CHNL_ATTR(val, 0444, show_##val, NULL)
+	static struct most_c_attr most_chnl_attr_##val = __ATTR_RO(val)
 
 create_show_channel_attribute(available_directions);
 create_show_channel_attribute(available_datatypes);
