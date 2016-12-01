@@ -562,9 +562,6 @@ create_most_c_obj(const char *name, struct kobject *parent)
 /*		     ___	       ___
  *		     ___I N S T A N C E___
  */
-#define MOST_INST_ATTR(_name, _mode, _show, _store) \
-		struct most_inst_attribute most_inst_attr_##_name = \
-		__ATTR(_name, _mode, _show, _store)
 
 static struct list_head instance_list;
 
@@ -652,7 +649,7 @@ static void most_inst_release(struct kobject *kobj)
 	kfree(inst);
 }
 
-static ssize_t show_description(struct most_inst_obj *instance_obj,
+static ssize_t description_show(struct most_inst_obj *instance_obj,
 				struct most_inst_attribute *attr,
 				char *buf)
 {
@@ -687,10 +684,8 @@ static ssize_t interface_show(struct most_inst_obj *instance_obj,
 	return snprintf(buf, PAGE_SIZE, "unknown\n");
 }
 
-#define create_inst_attribute(value) \
-	static MOST_INST_ATTR(value, 0444, show_##value, NULL)
-
-create_inst_attribute(description);
+static struct most_inst_attribute most_inst_attr_description =
+	__ATTR_RO(description);
 
 static struct most_inst_attribute most_inst_attr_interface =
 	__ATTR_RO(interface);
