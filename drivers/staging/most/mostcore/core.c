@@ -127,10 +127,6 @@ struct most_c_attr {
 
 #define to_channel_attr(a) container_of(a, struct most_c_attr, attr)
 
-#define MOST_CHNL_ATTR(_name, _mode, _show, _store) \
-		struct most_c_attr most_chnl_attr_##_name = \
-		__ATTR(_name, _mode, _show, _store)
-
 /**
  * channel_attr_show - show function of channel object
  * @kobj: pointer to its kobject
@@ -348,14 +344,14 @@ create_show_channel_attribute(size_of_stream_buffer);
 create_show_channel_attribute(size_of_packet_buffer);
 create_show_channel_attribute(channel_starving);
 
-static ssize_t show_set_number_of_buffers(struct most_c_obj *c,
+static ssize_t set_number_of_buffers_show(struct most_c_obj *c,
 					  struct most_c_attr *attr,
 					  char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%d\n", c->cfg.num_buffers);
 }
 
-static ssize_t store_set_number_of_buffers(struct most_c_obj *c,
+static ssize_t set_number_of_buffers_store(struct most_c_obj *c,
 					   struct most_c_attr *attr,
 					   const char *buf,
 					   size_t count)
@@ -367,14 +363,14 @@ static ssize_t store_set_number_of_buffers(struct most_c_obj *c,
 	return count;
 }
 
-static ssize_t show_set_buffer_size(struct most_c_obj *c,
+static ssize_t set_buffer_size_show(struct most_c_obj *c,
 				    struct most_c_attr *attr,
 				    char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%d\n", c->cfg.buffer_size);
 }
 
-static ssize_t store_set_buffer_size(struct most_c_obj *c,
+static ssize_t set_buffer_size_store(struct most_c_obj *c,
 				     struct most_c_attr *attr,
 				     const char *buf,
 				     size_t count)
@@ -386,7 +382,7 @@ static ssize_t store_set_buffer_size(struct most_c_obj *c,
 	return count;
 }
 
-static ssize_t show_set_direction(struct most_c_obj *c,
+static ssize_t set_direction_show(struct most_c_obj *c,
 				  struct most_c_attr *attr,
 				  char *buf)
 {
@@ -397,7 +393,7 @@ static ssize_t show_set_direction(struct most_c_obj *c,
 	return snprintf(buf, PAGE_SIZE, "unconfigured\n");
 }
 
-static ssize_t store_set_direction(struct most_c_obj *c,
+static ssize_t set_direction_store(struct most_c_obj *c,
 				   struct most_c_attr *attr,
 				   const char *buf,
 				   size_t count)
@@ -417,7 +413,7 @@ static ssize_t store_set_direction(struct most_c_obj *c,
 	return count;
 }
 
-static ssize_t show_set_datatype(struct most_c_obj *c,
+static ssize_t set_datatype_show(struct most_c_obj *c,
 				 struct most_c_attr *attr,
 				 char *buf)
 {
@@ -430,7 +426,7 @@ static ssize_t show_set_datatype(struct most_c_obj *c,
 	return snprintf(buf, PAGE_SIZE, "unconfigured\n");
 }
 
-static ssize_t store_set_datatype(struct most_c_obj *c,
+static ssize_t set_datatype_store(struct most_c_obj *c,
 				  struct most_c_attr *attr,
 				  const char *buf,
 				  size_t count)
@@ -451,14 +447,14 @@ static ssize_t store_set_datatype(struct most_c_obj *c,
 	return count;
 }
 
-static ssize_t show_set_subbuffer_size(struct most_c_obj *c,
+static ssize_t set_subbuffer_size_show(struct most_c_obj *c,
 				       struct most_c_attr *attr,
 				       char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%d\n", c->cfg.subbuffer_size);
 }
 
-static ssize_t store_set_subbuffer_size(struct most_c_obj *c,
+static ssize_t set_subbuffer_size_store(struct most_c_obj *c,
 					struct most_c_attr *attr,
 					const char *buf,
 					size_t count)
@@ -470,14 +466,14 @@ static ssize_t store_set_subbuffer_size(struct most_c_obj *c,
 	return count;
 }
 
-static ssize_t show_set_packets_per_xact(struct most_c_obj *c,
+static ssize_t set_packets_per_xact_show(struct most_c_obj *c,
 					 struct most_c_attr *attr,
 					 char *buf)
 {
 	return snprintf(buf, PAGE_SIZE, "%d\n", c->cfg.packets_per_xact);
 }
 
-static ssize_t store_set_packets_per_xact(struct most_c_obj *c,
+static ssize_t set_packets_per_xact_store(struct most_c_obj *c,
 					  struct most_c_attr *attr,
 					  const char *buf,
 					  size_t count)
@@ -490,7 +486,7 @@ static ssize_t store_set_packets_per_xact(struct most_c_obj *c,
 }
 
 #define create_channel_attribute(value) \
-	static MOST_CHNL_ATTR(value, 0644, show_##value, store_##value)
+	static struct most_c_attr most_chnl_attr_##value = __ATTR_RW(value)
 
 create_channel_attribute(set_buffer_size);
 create_channel_attribute(set_number_of_buffers);
