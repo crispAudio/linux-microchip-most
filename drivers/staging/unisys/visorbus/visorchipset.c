@@ -29,7 +29,7 @@
 #include "visorbus_private.h"
 #include "vmcallinterface.h"
 
-#define CURRENT_FILE_PC VISOR_CHIPSET_PC_visorchipset_main_c
+#define CURRENT_FILE_PC VISOR_BUS_PC_visorchipset_c
 
 #define POLLJIFFIES_CONTROLVMCHANNEL_FAST   1
 #define POLLJIFFIES_CONTROLVMCHANNEL_SLOW 100
@@ -188,7 +188,7 @@ static ssize_t toolaction_show(struct device *dev,
 	visorchannel_read(controlvm_channel,
 			  offsetof(struct spar_controlvm_channel_protocol,
 				   tool_action), &tool_action, sizeof(u8));
-	return scnprintf(buf, PAGE_SIZE, "%u\n", tool_action);
+	return sprintf(buf, "%u\n", tool_action);
 }
 
 static ssize_t toolaction_store(struct device *dev,
@@ -223,8 +223,7 @@ static ssize_t boottotool_show(struct device *dev,
 			  offsetof(struct spar_controlvm_channel_protocol,
 				   efi_spar_ind), &efi_spar_indication,
 			  sizeof(struct efi_spar_indication));
-	return scnprintf(buf, PAGE_SIZE, "%u\n",
-			 efi_spar_indication.boot_to_tool);
+	return sprintf(buf, "%u\n", efi_spar_indication.boot_to_tool);
 }
 
 static ssize_t boottotool_store(struct device *dev,
@@ -259,7 +258,7 @@ static ssize_t error_show(struct device *dev, struct device_attribute *attr,
 			  offsetof(struct spar_controlvm_channel_protocol,
 				   installation_error),
 			  &error, sizeof(u32));
-	return scnprintf(buf, PAGE_SIZE, "%i\n", error);
+	return sprintf(buf, "%i\n", error);
 }
 
 static ssize_t error_store(struct device *dev, struct device_attribute *attr,
@@ -292,7 +291,7 @@ static ssize_t textid_show(struct device *dev, struct device_attribute *attr,
 		 offsetof(struct spar_controlvm_channel_protocol,
 			  installation_text_id),
 		 &text_id, sizeof(u32));
-	return scnprintf(buf, PAGE_SIZE, "%i\n", text_id);
+	return sprintf(buf, "%i\n", text_id);
 }
 
 static ssize_t textid_store(struct device *dev, struct device_attribute *attr,
@@ -324,7 +323,7 @@ static ssize_t remaining_steps_show(struct device *dev,
 			  offsetof(struct spar_controlvm_channel_protocol,
 				   installation_remaining_steps),
 			  &remaining_steps, sizeof(u16));
-	return scnprintf(buf, PAGE_SIZE, "%hu\n", remaining_steps);
+	return sprintf(buf, "%hu\n", remaining_steps);
 }
 
 static ssize_t remaining_steps_store(struct device *dev,
@@ -353,60 +352,12 @@ parser_id_get(struct parser_context *ctx)
 {
 	struct spar_controlvm_parameters_header *phdr = NULL;
 
-	if (!ctx)
-		return NULL_UUID_LE;
 	phdr = (struct spar_controlvm_parameters_header *)(ctx->data);
 	return phdr->id;
 }
 
-/*
- * Describes the state from the perspective of which controlvm messages have
- * been received for a bus or device.
- */
-
-enum PARSER_WHICH_STRING {
-	PARSERSTRING_INITIATOR,
-	PARSERSTRING_TARGET,
-	PARSERSTRING_CONNECTION,
-	PARSERSTRING_NAME, /* TODO: only PARSERSTRING_NAME is used ? */
-};
-
-static void
-parser_param_start(struct parser_context *ctx,
-		   enum PARSER_WHICH_STRING which_string)
-{
-	struct spar_controlvm_parameters_header *phdr = NULL;
-
-	if (!ctx)
-		return;
-
-	phdr = (struct spar_controlvm_parameters_header *)(ctx->data);
-	switch (which_string) {
-	case PARSERSTRING_INITIATOR:
-		ctx->curr = ctx->data + phdr->initiator_offset;
-		ctx->bytes_remaining = phdr->initiator_length;
-		break;
-	case PARSERSTRING_TARGET:
-		ctx->curr = ctx->data + phdr->target_offset;
-		ctx->bytes_remaining = phdr->target_length;
-		break;
-	case PARSERSTRING_CONNECTION:
-		ctx->curr = ctx->data + phdr->connection_offset;
-		ctx->bytes_remaining = phdr->connection_length;
-		break;
-	case PARSERSTRING_NAME:
-		ctx->curr = ctx->data + phdr->name_offset;
-		ctx->bytes_remaining = phdr->name_length;
-		break;
-	default:
-		break;
-	}
-}
-
 static void parser_done(struct parser_context *ctx)
 {
-	if (!ctx)
-		return;
 	controlvm_payload_bytes_buffered -= ctx->param_bytes;
 	kfree(ctx);
 }
@@ -420,8 +371,6 @@ parser_string_get(struct parser_context *ctx)
 	void *value = NULL;
 	int i;
 
-	if (!ctx)
-		return NULL;
 	pscan = ctx->curr;
 	nscan = ctx->bytes_remaining;
 	if (nscan == 0)
@@ -442,6 +391,17 @@ parser_string_get(struct parser_context *ctx)
 		memcpy(value, pscan, value_length);
 	((u8 *)(value))[value_length] = '\0';
 	return value;
+}
+
+static void *
+parser_name_get(struct parser_context *ctx)
+{
+	struct spar_controlvm_parameters_header *phdr = NULL;
+
+	phdr = (struct spar_controlvm_parameters_header *)(ctx->data);
+	ctx->curr = ctx->data + phdr->name_offset;
+	ctx->bytes_remaining = phdr->name_length;
+	return parser_string_get(ctx);
 }
 
 struct visor_busdev {
@@ -519,14 +479,14 @@ chipset_init(struct controlvm_message *inmsg)
 	int rc = CONTROLVM_RESP_SUCCESS;
 	int res = 0;
 
-	POSTCODE_LINUX_2(CHIPSET_INIT_ENTRY_PC, POSTCODE_SEVERITY_INFO);
+	POSTCODE_LINUX(CHIPSET_INIT_ENTRY_PC, 0, 0, DIAG_SEVERITY_PRINT);
 	if (chipset_inited) {
-		rc = -CONTROLVM_RESP_ERROR_ALREADY_DONE;
+		rc = -CONTROLVM_RESP_ALREADY_DONE;
 		res = -EIO;
 		goto out_respond;
 	}
 	chipset_inited = 1;
-	POSTCODE_LINUX_2(CHIPSET_INIT_EXIT_PC, POSTCODE_SEVERITY_INFO);
+	POSTCODE_LINUX(CHIPSET_INIT_EXIT_PC, 0, 0, DIAG_SEVERITY_PRINT);
 
 	/*
 	 * Set features to indicate we support parahotplug (if Command
@@ -591,15 +551,15 @@ save_crash_message(struct controlvm_message *msg, enum crash_obj_type typ)
 					 saved_crash_message_count),
 				&local_crash_msg_count, sizeof(u16));
 	if (err) {
-		POSTCODE_LINUX_2(CRASH_DEV_CTRL_RD_FAILURE_PC,
-				 POSTCODE_SEVERITY_ERR);
+		POSTCODE_LINUX(CRASH_DEV_CTRL_RD_FAILURE_PC, 0, 0,
+			       DIAG_SEVERITY_ERR);
 		return err;
 	}
 
 	if (local_crash_msg_count != CONTROLVM_CRASHMSG_MAX) {
-		POSTCODE_LINUX_3(CRASH_DEV_COUNT_FAILURE_PC,
-				 local_crash_msg_count,
-				 POSTCODE_SEVERITY_ERR);
+		POSTCODE_LINUX(CRASH_DEV_COUNT_FAILURE_PC, 0,
+			       local_crash_msg_count,
+			       DIAG_SEVERITY_ERR);
 		return -EIO;
 	}
 
@@ -608,32 +568,38 @@ save_crash_message(struct controlvm_message *msg, enum crash_obj_type typ)
 					 saved_crash_message_offset),
 				&local_crash_msg_offset, sizeof(u32));
 	if (err) {
-		POSTCODE_LINUX_2(CRASH_DEV_CTRL_RD_FAILURE_PC,
-				 POSTCODE_SEVERITY_ERR);
+		POSTCODE_LINUX(CRASH_DEV_CTRL_RD_FAILURE_PC, 0, 0,
+			       DIAG_SEVERITY_ERR);
 		return err;
 	}
 
-	if (typ == CRASH_BUS) {
-		err = visorchannel_write(controlvm_channel,
-					 local_crash_msg_offset,
-					 msg,
-					sizeof(struct controlvm_message));
-		if (err) {
-			POSTCODE_LINUX_2(SAVE_MSG_BUS_FAILURE_PC,
-					 POSTCODE_SEVERITY_ERR);
-			return err;
-		}
-	} else {
+	switch (typ) {
+	case CRASH_DEV:
 		local_crash_msg_offset += sizeof(struct controlvm_message);
 		err = visorchannel_write(controlvm_channel,
 					 local_crash_msg_offset,
 					 msg,
 					 sizeof(struct controlvm_message));
 		if (err) {
-			POSTCODE_LINUX_2(SAVE_MSG_DEV_FAILURE_PC,
-					 POSTCODE_SEVERITY_ERR);
+			POSTCODE_LINUX(SAVE_MSG_DEV_FAILURE_PC, 0, 0,
+				       DIAG_SEVERITY_ERR);
 			return err;
 		}
+		break;
+	case CRASH_BUS:
+		err = visorchannel_write(controlvm_channel,
+					 local_crash_msg_offset,
+					 msg,
+					 sizeof(struct controlvm_message));
+		if (err) {
+			POSTCODE_LINUX(SAVE_MSG_BUS_FAILURE_PC, 0, 0,
+				       DIAG_SEVERITY_ERR);
+			return err;
+		}
+		break;
+	default:
+		pr_info("Invalid crash_obj_type\n");
+		break;
 	}
 	return 0;
 }
@@ -702,16 +668,16 @@ bus_create(struct controlvm_message *inmsg)
 
 	bus_info = visorbus_get_device_by_id(bus_no, BUS_ROOT_DEVICE, NULL);
 	if (bus_info && (bus_info->state.created == 1)) {
-		POSTCODE_LINUX_3(BUS_CREATE_FAILURE_PC, bus_no,
-				 POSTCODE_SEVERITY_ERR);
+		POSTCODE_LINUX(BUS_CREATE_FAILURE_PC, 0, bus_no,
+			       DIAG_SEVERITY_ERR);
 		err = -EEXIST;
 		goto err_respond;
 	}
 
 	bus_info = kzalloc(sizeof(*bus_info), GFP_KERNEL);
 	if (!bus_info) {
-		POSTCODE_LINUX_3(BUS_CREATE_FAILURE_PC, bus_no,
-				 POSTCODE_SEVERITY_ERR);
+		POSTCODE_LINUX(BUS_CREATE_FAILURE_PC, 0, bus_no,
+			       DIAG_SEVERITY_ERR);
 		err = -ENOMEM;
 		goto err_respond;
 	}
@@ -720,18 +686,21 @@ bus_create(struct controlvm_message *inmsg)
 	bus_info->chipset_bus_no = bus_no;
 	bus_info->chipset_dev_no = BUS_ROOT_DEVICE;
 
-	POSTCODE_LINUX_3(BUS_CREATE_ENTRY_PC, bus_no, POSTCODE_SEVERITY_INFO);
+	POSTCODE_LINUX(BUS_CREATE_ENTRY_PC, 0, bus_no, DIAG_SEVERITY_PRINT);
 
-	if (uuid_le_cmp(cmd->create_bus.bus_inst_uuid, spar_siovm_uuid) == 0)
-		save_crash_message(inmsg, CRASH_BUS);
+	if (uuid_le_cmp(cmd->create_bus.bus_inst_uuid, spar_siovm_uuid) == 0) {
+		err = save_crash_message(inmsg, CRASH_BUS);
+		if (err)
+			goto err_free_bus_info;
+	}
 
 	if (inmsg->hdr.flags.response_expected == 1) {
 		pmsg_hdr = kzalloc(sizeof(*pmsg_hdr),
 				   GFP_KERNEL);
 		if (!pmsg_hdr) {
-			POSTCODE_LINUX_4(MALLOC_FAILURE_PC, cmd,
-					 bus_info->chipset_bus_no,
-					 POSTCODE_SEVERITY_ERR);
+			POSTCODE_LINUX(MALLOC_FAILURE_PC, cmd,
+				       bus_info->chipset_bus_no,
+				       DIAG_SEVERITY_ERR);
 			err = -ENOMEM;
 			goto err_free_bus_info;
 		}
@@ -747,8 +716,8 @@ bus_create(struct controlvm_message *inmsg)
 					   cmd->create_bus.bus_data_type_uuid);
 
 	if (!visorchannel) {
-		POSTCODE_LINUX_3(BUS_CREATE_FAILURE_PC, bus_no,
-				 POSTCODE_SEVERITY_ERR);
+		POSTCODE_LINUX(BUS_CREATE_FAILURE_PC, 0, bus_no,
+			       DIAG_SEVERITY_ERR);
 		err = -ENOMEM;
 		goto err_free_pending_msg;
 	}
@@ -757,7 +726,7 @@ bus_create(struct controlvm_message *inmsg)
 	/* Response will be handled by chipset_bus_create */
 	chipset_bus_create(bus_info);
 
-	POSTCODE_LINUX_3(BUS_CREATE_EXIT_PC, bus_no, POSTCODE_SEVERITY_INFO);
+	POSTCODE_LINUX(BUS_CREATE_EXIT_PC, 0, bus_no, DIAG_SEVERITY_PRINT);
 	return 0;
 
 err_free_pending_msg:
@@ -798,9 +767,9 @@ bus_destroy(struct controlvm_message *inmsg)
 	if (inmsg->hdr.flags.response_expected == 1) {
 		pmsg_hdr = kzalloc(sizeof(*pmsg_hdr), GFP_KERNEL);
 		if (!pmsg_hdr) {
-			POSTCODE_LINUX_4(MALLOC_FAILURE_PC, cmd,
-					 bus_info->chipset_bus_no,
-					 POSTCODE_SEVERITY_ERR);
+			POSTCODE_LINUX(MALLOC_FAILURE_PC, cmd,
+				       bus_info->chipset_bus_no,
+				       DIAG_SEVERITY_ERR);
 			err = -ENOMEM;
 			goto err_respond;
 		}
@@ -830,23 +799,23 @@ bus_configure(struct controlvm_message *inmsg,
 	int err = 0;
 
 	bus_no = cmd->configure_bus.bus_no;
-	POSTCODE_LINUX_3(BUS_CONFIGURE_ENTRY_PC, bus_no,
-			 POSTCODE_SEVERITY_INFO);
+	POSTCODE_LINUX(BUS_CONFIGURE_ENTRY_PC, 0, bus_no,
+		       DIAG_SEVERITY_PRINT);
 
 	bus_info = visorbus_get_device_by_id(bus_no, BUS_ROOT_DEVICE, NULL);
 	if (!bus_info) {
-		POSTCODE_LINUX_3(BUS_CONFIGURE_FAILURE_PC, bus_no,
-				 POSTCODE_SEVERITY_ERR);
+		POSTCODE_LINUX(BUS_CONFIGURE_FAILURE_PC, 0, bus_no,
+			       DIAG_SEVERITY_ERR);
 		err = -EINVAL;
 		goto err_respond;
 	} else if (bus_info->state.created == 0) {
-		POSTCODE_LINUX_3(BUS_CONFIGURE_FAILURE_PC, bus_no,
-				 POSTCODE_SEVERITY_ERR);
+		POSTCODE_LINUX(BUS_CONFIGURE_FAILURE_PC, 0, bus_no,
+			       DIAG_SEVERITY_ERR);
 		err = -EINVAL;
 		goto err_respond;
 	} else if (bus_info->pending_msg_hdr) {
-		POSTCODE_LINUX_3(BUS_CONFIGURE_FAILURE_PC, bus_no,
-				 POSTCODE_SEVERITY_ERR);
+		POSTCODE_LINUX(BUS_CONFIGURE_FAILURE_PC, 0, bus_no,
+			       DIAG_SEVERITY_ERR);
 		err = -EIO;
 		goto err_respond;
 	}
@@ -857,12 +826,13 @@ bus_configure(struct controlvm_message *inmsg,
 	if (err)
 		goto err_respond;
 
-	bus_info->partition_uuid = parser_id_get(parser_ctx);
-	parser_param_start(parser_ctx, PARSERSTRING_NAME);
-	bus_info->name = parser_string_get(parser_ctx);
+	if (parser_ctx) {
+		bus_info->partition_uuid = parser_id_get(parser_ctx);
+		bus_info->name = parser_name_get(parser_ctx);
+	}
 
-	POSTCODE_LINUX_3(BUS_CONFIGURE_EXIT_PC, bus_no,
-			 POSTCODE_SEVERITY_INFO);
+	POSTCODE_LINUX(BUS_CONFIGURE_EXIT_PC, 0, bus_no,
+		       DIAG_SEVERITY_PRINT);
 
 	if (inmsg->hdr.flags.response_expected == 1)
 		bus_responder(inmsg->hdr.id, &inmsg->hdr, err);
@@ -874,7 +844,7 @@ err_respond:
 	return err;
 }
 
-static void
+static int
 my_device_create(struct controlvm_message *inmsg)
 {
 	struct controlvm_message_packet *cmd = &inmsg->cmd;
@@ -884,37 +854,37 @@ my_device_create(struct controlvm_message *inmsg)
 	struct visor_device *dev_info = NULL;
 	struct visor_device *bus_info;
 	struct visorchannel *visorchannel;
-	int rc = CONTROLVM_RESP_SUCCESS;
+	int err;
 
 	bus_info = visorbus_get_device_by_id(bus_no, BUS_ROOT_DEVICE, NULL);
 	if (!bus_info) {
-		POSTCODE_LINUX_4(DEVICE_CREATE_FAILURE_PC, dev_no, bus_no,
-				 POSTCODE_SEVERITY_ERR);
-		rc = -CONTROLVM_RESP_ERROR_BUS_INVALID;
-		goto out_respond;
+		POSTCODE_LINUX(DEVICE_CREATE_FAILURE_PC, dev_no, bus_no,
+			       DIAG_SEVERITY_ERR);
+		err = -ENODEV;
+		goto err_respond;
 	}
 
 	if (bus_info->state.created == 0) {
-		POSTCODE_LINUX_4(DEVICE_CREATE_FAILURE_PC, dev_no, bus_no,
-				 POSTCODE_SEVERITY_ERR);
-		rc = -CONTROLVM_RESP_ERROR_BUS_INVALID;
-		goto out_respond;
+		POSTCODE_LINUX(DEVICE_CREATE_FAILURE_PC, dev_no, bus_no,
+			       DIAG_SEVERITY_ERR);
+		err = -EINVAL;
+		goto err_respond;
 	}
 
 	dev_info = visorbus_get_device_by_id(bus_no, dev_no, NULL);
 	if (dev_info && (dev_info->state.created == 1)) {
-		POSTCODE_LINUX_4(DEVICE_CREATE_FAILURE_PC, dev_no, bus_no,
-				 POSTCODE_SEVERITY_ERR);
-		rc = -CONTROLVM_RESP_ERROR_ALREADY_DONE;
-		goto out_respond;
+		POSTCODE_LINUX(DEVICE_CREATE_FAILURE_PC, dev_no, bus_no,
+			       DIAG_SEVERITY_ERR);
+		err = -EEXIST;
+		goto err_respond;
 	}
 
 	dev_info = kzalloc(sizeof(*dev_info), GFP_KERNEL);
 	if (!dev_info) {
-		POSTCODE_LINUX_4(DEVICE_CREATE_FAILURE_PC, dev_no, bus_no,
-				 POSTCODE_SEVERITY_ERR);
-		rc = -CONTROLVM_RESP_ERROR_KMALLOC_FAILED;
-		goto out_respond;
+		POSTCODE_LINUX(DEVICE_CREATE_FAILURE_PC, dev_no, bus_no,
+			       DIAG_SEVERITY_ERR);
+		err = -ENOMEM;
+		goto err_respond;
 	}
 
 	dev_info->chipset_bus_no = bus_no;
@@ -924,8 +894,8 @@ my_device_create(struct controlvm_message *inmsg)
 	/* not sure where the best place to set the 'parent' */
 	dev_info->device.parent = &bus_info->device;
 
-	POSTCODE_LINUX_4(DEVICE_CREATE_ENTRY_PC, dev_no, bus_no,
-			 POSTCODE_SEVERITY_INFO);
+	POSTCODE_LINUX(DEVICE_CREATE_ENTRY_PC, dev_no, bus_no,
+		       DIAG_SEVERITY_PRINT);
 
 	visorchannel =
 	       visorchannel_create_with_lock(cmd->create_device.channel_addr,
@@ -934,22 +904,25 @@ my_device_create(struct controlvm_message *inmsg)
 					     cmd->create_device.data_type_uuid);
 
 	if (!visorchannel) {
-		POSTCODE_LINUX_4(DEVICE_CREATE_FAILURE_PC, dev_no, bus_no,
-				 POSTCODE_SEVERITY_ERR);
-		rc = -CONTROLVM_RESP_ERROR_KMALLOC_FAILED;
-		goto out_free_dev_info;
+		POSTCODE_LINUX(DEVICE_CREATE_FAILURE_PC, dev_no, bus_no,
+			       DIAG_SEVERITY_ERR);
+		err = -ENOMEM;
+		goto err_free_dev_info;
 	}
 	dev_info->visorchannel = visorchannel;
 	dev_info->channel_type_guid = cmd->create_device.data_type_uuid;
 	if (uuid_le_cmp(cmd->create_device.data_type_uuid,
-			spar_vhba_channel_protocol_uuid) == 0)
-		save_crash_message(inmsg, CRASH_DEV);
+			spar_vhba_channel_protocol_uuid) == 0) {
+		err = save_crash_message(inmsg, CRASH_DEV);
+		if (err)
+			goto err_free_dev_info;
+	}
 
 	if (inmsg->hdr.flags.response_expected == 1) {
 		pmsg_hdr = kzalloc(sizeof(*pmsg_hdr), GFP_KERNEL);
 		if (!pmsg_hdr) {
-			rc = -CONTROLVM_RESP_ERROR_KMALLOC_FAILED;
-			goto out_free_dev_info;
+			err = -ENOMEM;
+			goto err_free_dev_info;
 		}
 
 		memcpy(pmsg_hdr, &inmsg->hdr,
@@ -958,19 +931,20 @@ my_device_create(struct controlvm_message *inmsg)
 	}
 	/* Chipset_device_create will send response */
 	chipset_device_create(dev_info);
-	POSTCODE_LINUX_4(DEVICE_CREATE_EXIT_PC, dev_no, bus_no,
-			 POSTCODE_SEVERITY_INFO);
-	return;
+	POSTCODE_LINUX(DEVICE_CREATE_EXIT_PC, dev_no, bus_no,
+		       DIAG_SEVERITY_PRINT);
+	return 0;
 
-out_free_dev_info:
+err_free_dev_info:
 	kfree(dev_info);
 
-out_respond:
+err_respond:
 	if (inmsg->hdr.flags.response_expected == 1)
-		device_responder(inmsg->hdr.id, &inmsg->hdr, rc);
+		device_responder(inmsg->hdr.id, &inmsg->hdr, err);
+	return err;
 }
 
-static void
+static int
 my_device_changestate(struct controlvm_message *inmsg)
 {
 	struct controlvm_message_packet *cmd = &inmsg->cmd;
@@ -979,30 +953,30 @@ my_device_changestate(struct controlvm_message *inmsg)
 	u32 dev_no = cmd->device_change_state.dev_no;
 	struct spar_segment_state state = cmd->device_change_state.state;
 	struct visor_device *dev_info;
-	int rc = CONTROLVM_RESP_SUCCESS;
+	int err;
 
 	dev_info = visorbus_get_device_by_id(bus_no, dev_no, NULL);
 	if (!dev_info) {
-		POSTCODE_LINUX_4(DEVICE_CHANGESTATE_FAILURE_PC, dev_no, bus_no,
-				 POSTCODE_SEVERITY_ERR);
-		rc = -CONTROLVM_RESP_ERROR_DEVICE_INVALID;
+		POSTCODE_LINUX(DEVICE_CHANGESTATE_FAILURE_PC, dev_no, bus_no,
+			       DIAG_SEVERITY_ERR);
+		err = -ENODEV;
 		goto err_respond;
 	}
 	if (dev_info->state.created == 0) {
-		POSTCODE_LINUX_4(DEVICE_CHANGESTATE_FAILURE_PC, dev_no, bus_no,
-				 POSTCODE_SEVERITY_ERR);
-		rc = -CONTROLVM_RESP_ERROR_DEVICE_INVALID;
+		POSTCODE_LINUX(DEVICE_CHANGESTATE_FAILURE_PC, dev_no, bus_no,
+			       DIAG_SEVERITY_ERR);
+		err = -EINVAL;
 		goto err_respond;
 	}
 	if (dev_info->pending_msg_hdr) {
 		/* only non-NULL if dev is still waiting on a response */
-		rc = -CONTROLVM_RESP_ERROR_MESSAGE_ID_INVALID_FOR_CLIENT;
+		err = -EIO;
 		goto err_respond;
 	}
 	if (inmsg->hdr.flags.response_expected == 1) {
 		pmsg_hdr = kzalloc(sizeof(*pmsg_hdr), GFP_KERNEL);
 		if (!pmsg_hdr) {
-			rc = -CONTROLVM_RESP_ERROR_KMALLOC_FAILED;
+			err = -ENOMEM;
 			goto err_respond;
 		}
 
@@ -1023,15 +997,15 @@ my_device_changestate(struct controlvm_message *inmsg)
 		 * Response will be sent from chipset_device_pause.
 		 */
 		chipset_device_pause(dev_info);
-
-	return;
+	return 0;
 
 err_respond:
 	if (inmsg->hdr.flags.response_expected == 1)
-		device_responder(inmsg->hdr.id, &inmsg->hdr, rc);
+		device_responder(inmsg->hdr.id, &inmsg->hdr, err);
+	return err;
 }
 
-static void
+static int
 my_device_destroy(struct controlvm_message *inmsg)
 {
 	struct controlvm_message_packet *cmd = &inmsg->cmd;
@@ -1039,27 +1013,27 @@ my_device_destroy(struct controlvm_message *inmsg)
 	u32 bus_no = cmd->destroy_device.bus_no;
 	u32 dev_no = cmd->destroy_device.dev_no;
 	struct visor_device *dev_info;
-	int rc = CONTROLVM_RESP_SUCCESS;
+	int err;
 
 	dev_info = visorbus_get_device_by_id(bus_no, dev_no, NULL);
 	if (!dev_info) {
-		rc = -CONTROLVM_RESP_ERROR_DEVICE_INVALID;
+		err = -ENODEV;
 		goto err_respond;
 	}
 	if (dev_info->state.created == 0) {
-		rc = -CONTROLVM_RESP_ERROR_ALREADY_DONE;
+		err = -EINVAL;
 		goto err_respond;
 	}
 
 	if (dev_info->pending_msg_hdr) {
 		/* only non-NULL if dev is still waiting on a response */
-		rc = -CONTROLVM_RESP_ERROR_MESSAGE_ID_INVALID_FOR_CLIENT;
+		err = -EIO;
 		goto err_respond;
 	}
 	if (inmsg->hdr.flags.response_expected == 1) {
 		pmsg_hdr = kzalloc(sizeof(*pmsg_hdr), GFP_KERNEL);
 		if (!pmsg_hdr) {
-			rc = -CONTROLVM_RESP_ERROR_KMALLOC_FAILED;
+			err = -ENOMEM;
 			goto err_respond;
 		}
 
@@ -1069,11 +1043,12 @@ my_device_destroy(struct controlvm_message *inmsg)
 	}
 
 	chipset_device_destroy(dev_info);
-	return;
+	return 0;
 
 err_respond:
 	if (inmsg->hdr.flags.response_expected == 1)
-		device_responder(inmsg->hdr.id, &inmsg->hdr, rc);
+		device_responder(inmsg->hdr.id, &inmsg->hdr, err);
+	return err;
 }
 
 /**
@@ -1097,14 +1072,14 @@ initialize_controlvm_payload_info(u64 phys_addr, u64 offset, u32 bytes,
 	u8 *payload = NULL;
 
 	if (!info)
-		return -CONTROLVM_RESP_ERROR_PAYLOAD_INVALID;
+		return -CONTROLVM_RESP_PAYLOAD_INVALID;
 
 	if ((offset == 0) || (bytes == 0))
-		return -CONTROLVM_RESP_ERROR_PAYLOAD_INVALID;
+		return -CONTROLVM_RESP_PAYLOAD_INVALID;
 
 	payload = memremap(phys_addr + offset, bytes, MEMREMAP_WB);
 	if (!payload)
-		return -CONTROLVM_RESP_ERROR_IOREMAP_FAILED;
+		return -CONTROLVM_RESP_IOREMAP_FAILED;
 
 	memset(info, 0, sizeof(struct visor_controlvm_payload_info));
 	info->offset = offset;
@@ -1135,16 +1110,16 @@ initialize_controlvm_payload(void)
 			      offsetof(struct spar_controlvm_channel_protocol,
 				       request_payload_offset),
 			      &payload_offset, sizeof(payload_offset)) < 0) {
-		POSTCODE_LINUX_2(CONTROLVM_INIT_FAILURE_PC,
-				 POSTCODE_SEVERITY_ERR);
+		POSTCODE_LINUX(CONTROLVM_INIT_FAILURE_PC, 0, 0,
+			       DIAG_SEVERITY_ERR);
 		return;
 	}
 	if (visorchannel_read(controlvm_channel,
 			      offsetof(struct spar_controlvm_channel_protocol,
 				       request_payload_bytes),
 			      &payload_bytes, sizeof(payload_bytes)) < 0) {
-		POSTCODE_LINUX_2(CONTROLVM_INIT_FAILURE_PC,
-				 POSTCODE_SEVERITY_ERR);
+		POSTCODE_LINUX(CONTROLVM_INIT_FAILURE_PC, 0, 0,
+			       DIAG_SEVERITY_ERR);
 		return;
 	}
 	initialize_controlvm_payload_info(phys_addr,
@@ -1153,23 +1128,24 @@ initialize_controlvm_payload(void)
 }
 
 /*
- * The general parahotplug flow works as follows. The visorchipset
- * driver receives a DEVICE_CHANGESTATE message from Command
- * specifying a physical device to enable or disable. The CONTROLVM
- * message handler calls parahotplug_process_message, which then adds
- * the message to a global list and kicks off a udev event which
- * causes a user level script to enable or disable the specified
- * device. The udev script then writes to
- * /proc/visorchipset/parahotplug, which causes parahotplug_proc_write
- * to get called, at which point the appropriate CONTROLVM message is
- * retrieved from the list and responded to.
+ * The general parahotplug flow works as follows. The visorchipset receives
+ * a DEVICE_CHANGESTATE message from Command specifying a physical device
+ * to enable or disable. The CONTROLVM message handler calls
+ * parahotplug_process_message, which then adds the message to a global list
+ * and kicks off a udev event which causes a user level script to enable or
+ * disable the specified device. The udev script then writes to
+ * /sys/devices/platform/visorchipset/parahotplug, which causes the
+ * parahotplug store functions to get called, at which point the
+ * appropriate CONTROLVM message is retrieved from the list and responded
+ * to.
  */
 
 #define PARAHOTPLUG_TIMEOUT_MS 2000
 
 /**
- * parahotplug_next_id() - generate unique int to match an outstanding CONTROLVM
- *                         message with a udev script /proc response
+ * parahotplug_next_id() - generate unique int to match an outstanding
+ *                         CONTROLVM message with a udev script /sys
+ *                         response
  *
  * Return: a unique integer value
  */
@@ -1236,7 +1212,7 @@ static DEFINE_SPINLOCK(parahotplug_request_list_lock);	/* lock for above */
  * @id:     the id of the request
  * @active: indicates whether the request is assigned to active partition
  *
- * Called from the /proc handler, which means the user script has
+ * Called from the /sys handler, which means the user script has
  * finished the enable/disable. Find the matching identifier, and
  * respond to the CONTROLVM message with success.
  *
@@ -1433,7 +1409,7 @@ parahotplug_process_message(struct controlvm_message *inmsg)
 		 *
 		 * devices are automatically enabled at
 		 * initialization.
-		*/
+		 */
 		parahotplug_request_kickoff(req);
 		controlvm_respond_physdev_changestate
 			(&inmsg->hdr,
@@ -1564,7 +1540,7 @@ setup_crash_devices_work_queue(struct work_struct *work)
 	u32 local_crash_msg_offset;
 	u16 local_crash_msg_count;
 
-	POSTCODE_LINUX_2(CRASH_DEV_ENTRY_PC, POSTCODE_SEVERITY_INFO);
+	POSTCODE_LINUX(CRASH_DEV_ENTRY_PC, 0, 0, DIAG_SEVERITY_PRINT);
 
 	/* send init chipset msg */
 	msg.hdr.id = CONTROLVM_CHIPSET_INIT;
@@ -1578,15 +1554,15 @@ setup_crash_devices_work_queue(struct work_struct *work)
 			      offsetof(struct spar_controlvm_channel_protocol,
 				       saved_crash_message_count),
 			      &local_crash_msg_count, sizeof(u16)) < 0) {
-		POSTCODE_LINUX_2(CRASH_DEV_CTRL_RD_FAILURE_PC,
-				 POSTCODE_SEVERITY_ERR);
+		POSTCODE_LINUX(CRASH_DEV_CTRL_RD_FAILURE_PC, 0, 0,
+			       DIAG_SEVERITY_ERR);
 		return;
 	}
 
 	if (local_crash_msg_count != CONTROLVM_CRASHMSG_MAX) {
-		POSTCODE_LINUX_3(CRASH_DEV_COUNT_FAILURE_PC,
-				 local_crash_msg_count,
-				 POSTCODE_SEVERITY_ERR);
+		POSTCODE_LINUX(CRASH_DEV_COUNT_FAILURE_PC, 0,
+			       local_crash_msg_count,
+			       DIAG_SEVERITY_ERR);
 		return;
 	}
 
@@ -1595,8 +1571,8 @@ setup_crash_devices_work_queue(struct work_struct *work)
 			      offsetof(struct spar_controlvm_channel_protocol,
 				       saved_crash_message_offset),
 			      &local_crash_msg_offset, sizeof(u32)) < 0) {
-		POSTCODE_LINUX_2(CRASH_DEV_CTRL_RD_FAILURE_PC,
-				 POSTCODE_SEVERITY_ERR);
+		POSTCODE_LINUX(CRASH_DEV_CTRL_RD_FAILURE_PC, 0, 0,
+			       DIAG_SEVERITY_ERR);
 		return;
 	}
 
@@ -1605,8 +1581,8 @@ setup_crash_devices_work_queue(struct work_struct *work)
 			      local_crash_msg_offset,
 			      &local_crash_bus_msg,
 			      sizeof(struct controlvm_message)) < 0) {
-		POSTCODE_LINUX_2(CRASH_DEV_RD_BUS_FAIULRE_PC,
-				 POSTCODE_SEVERITY_ERR);
+		POSTCODE_LINUX(CRASH_DEV_RD_BUS_FAILURE_PC, 0, 0,
+			       DIAG_SEVERITY_ERR);
 		return;
 	}
 
@@ -1616,8 +1592,8 @@ setup_crash_devices_work_queue(struct work_struct *work)
 			      sizeof(struct controlvm_message),
 			      &local_crash_dev_msg,
 			      sizeof(struct controlvm_message)) < 0) {
-		POSTCODE_LINUX_2(CRASH_DEV_RD_DEV_FAIULRE_PC,
-				 POSTCODE_SEVERITY_ERR);
+		POSTCODE_LINUX(CRASH_DEV_RD_DEV_FAILURE_PC, 0, 0,
+			       DIAG_SEVERITY_ERR);
 		return;
 	}
 
@@ -1625,8 +1601,8 @@ setup_crash_devices_work_queue(struct work_struct *work)
 	if (local_crash_bus_msg.cmd.create_bus.channel_addr) {
 		bus_create(&local_crash_bus_msg);
 	} else {
-		POSTCODE_LINUX_2(CRASH_DEV_BUS_NULL_FAILURE_PC,
-				 POSTCODE_SEVERITY_ERR);
+		POSTCODE_LINUX(CRASH_DEV_BUS_NULL_FAILURE_PC, 0, 0,
+			       DIAG_SEVERITY_ERR);
 		return;
 	}
 
@@ -1634,11 +1610,11 @@ setup_crash_devices_work_queue(struct work_struct *work)
 	if (local_crash_dev_msg.cmd.create_device.channel_addr) {
 		my_device_create(&local_crash_dev_msg);
 	} else {
-		POSTCODE_LINUX_2(CRASH_DEV_DEV_NULL_FAILURE_PC,
-				 POSTCODE_SEVERITY_ERR);
+		POSTCODE_LINUX(CRASH_DEV_DEV_NULL_FAILURE_PC, 0, 0,
+			       DIAG_SEVERITY_ERR);
 		return;
 	}
-	POSTCODE_LINUX_2(CRASH_DEV_EXIT_PC, POSTCODE_SEVERITY_INFO);
+	POSTCODE_LINUX(CRASH_DEV_EXIT_PC, 0, 0, DIAG_SEVERITY_PRINT);
 }
 
 void
@@ -1846,8 +1822,7 @@ parser_init_byte_stream(u64 addr, u32 bytes, bool local, bool *retry)
 	int allocbytes = sizeof(struct parser_context) + bytes;
 	struct parser_context *ctx;
 
-	if (retry)
-		*retry = false;
+	*retry = false;
 
 	/*
 	 * alloc an 0 extra byte to ensure payload is
@@ -1856,14 +1831,12 @@ parser_init_byte_stream(u64 addr, u32 bytes, bool local, bool *retry)
 	allocbytes++;
 	if ((controlvm_payload_bytes_buffered + bytes)
 	    > MAX_CONTROLVM_PAYLOAD_BYTES) {
-		if (retry)
-			*retry = true;
+		*retry = true;
 		return NULL;
 	}
 	ctx = kzalloc(allocbytes, GFP_KERNEL | __GFP_NORETRY);
 	if (!ctx) {
-		if (retry)
-			*retry = true;
+		*retry = true;
 		return NULL;
 	}
 
@@ -2001,8 +1974,7 @@ handle_command(struct controlvm_message inmsg, u64 channel_addr)
 	default:
 		if (inmsg.hdr.flags.response_expected)
 			controlvm_respond
-				(&inmsg.hdr,
-				 -CONTROLVM_RESP_ERROR_MESSAGE_ID_UNKNOWN);
+				(&inmsg.hdr, -CONTROLVM_RESP_ID_UNKNOWN);
 		break;
 	}
 
@@ -2057,7 +2029,7 @@ parahotplug_process_list(void)
 		if (req->msg.hdr.flags.response_expected)
 			controlvm_respond_physdev_changestate(
 				&req->msg.hdr,
-				CONTROLVM_RESP_ERROR_DEVICE_UDEV_TIMEOUT,
+				CONTROLVM_RESP_DEVICE_UDEV_TIMEOUT,
 				req->msg.cmd.device_change_state.state);
 		parahotplug_request_destroy(req);
 	}
@@ -2174,11 +2146,12 @@ visorchipset_init(struct acpi_device *acpi_device)
 
 	visorchipset_platform_device.dev.devt = major_dev;
 	if (platform_device_register(&visorchipset_platform_device) < 0) {
-		POSTCODE_LINUX_2(DEVICE_REGISTER_FAILURE_PC, DIAG_SEVERITY_ERR);
+		POSTCODE_LINUX(DEVICE_REGISTER_FAILURE_PC, 0, 0,
+			       DIAG_SEVERITY_ERR);
 		err = -ENODEV;
 		goto error_cancel_work;
 	}
-	POSTCODE_LINUX_2(CHIPSET_INIT_SUCCESS_PC, POSTCODE_SEVERITY_INFO);
+	POSTCODE_LINUX(CHIPSET_INIT_SUCCESS_PC, 0, 0, DIAG_SEVERITY_PRINT);
 
 	err = visorbus_init();
 	if (err < 0)
@@ -2200,14 +2173,14 @@ error_destroy_channel:
 	visorchannel_destroy(controlvm_channel);
 
 error:
-	POSTCODE_LINUX_3(CHIPSET_INIT_FAILURE_PC, err, POSTCODE_SEVERITY_ERR);
+	POSTCODE_LINUX(CHIPSET_INIT_FAILURE_PC, 0, err, DIAG_SEVERITY_ERR);
 	return err;
 }
 
 static int
 visorchipset_exit(struct acpi_device *acpi_device)
 {
-	POSTCODE_LINUX_2(DRIVER_EXIT_PC, POSTCODE_SEVERITY_INFO);
+	POSTCODE_LINUX(DRIVER_EXIT_PC, 0, 0, DIAG_SEVERITY_PRINT);
 
 	visorbus_exit();
 
@@ -2218,7 +2191,7 @@ visorchipset_exit(struct acpi_device *acpi_device)
 
 	visorchipset_file_cleanup(visorchipset_platform_device.dev.devt);
 	platform_device_unregister(&visorchipset_platform_device);
-	POSTCODE_LINUX_2(DRIVER_EXIT_PC, POSTCODE_SEVERITY_INFO);
+	POSTCODE_LINUX(DRIVER_EXIT_PC, 0, 0, DIAG_SEVERITY_PRINT);
 
 	return 0;
 }
@@ -2276,7 +2249,7 @@ static void exit_unisys(void)
 	acpi_bus_unregister_driver(&unisys_acpi_driver);
 }
 
-module_param_named(major, visorchipset_major, int, S_IRUGO);
+module_param_named(major, visorchipset_major, int, 0444);
 MODULE_PARM_DESC(visorchipset_major,
 		 "major device number to use for the device node");
 

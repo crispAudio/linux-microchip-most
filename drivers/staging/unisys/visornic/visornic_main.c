@@ -461,10 +461,9 @@ visornic_disable_with_timeout(struct net_device *netdev, const int timeout)
 		if (devdata->enab_dis_acked)
 			break;
 		if (devdata->server_down || devdata->server_change_state) {
-			spin_unlock_irqrestore(&devdata->priv_lock, flags);
 			dev_dbg(&netdev->dev, "%s server went away\n",
 				__func__);
-			return -EIO;
+			break;
 		}
 		set_current_state(TASK_INTERRUPTIBLE);
 		spin_unlock_irqrestore(&devdata->priv_lock, flags);
@@ -572,6 +571,8 @@ visornic_enable_with_timeout(struct net_device *netdev, const int timeout)
 	unsigned long flags;
 	int wait = 0;
 
+	napi_enable(&devdata->napi);
+
 	/* NOTE: the other end automatically unposts the rcv buffers when it
 	 * gets a disable.
 	 */
@@ -595,7 +596,6 @@ visornic_enable_with_timeout(struct net_device *netdev, const int timeout)
 	/* send enable and wait for ack -- don't hold lock when sending enable
 	 * because if the queue is full, insert might sleep.
 	 */
-	napi_enable(&devdata->napi);
 	send_enbdis(netdev, 1, devdata);
 
 	spin_lock_irqsave(&devdata->priv_lock, flags);
@@ -604,10 +604,9 @@ visornic_enable_with_timeout(struct net_device *netdev, const int timeout)
 		if (devdata->enab_dis_acked)
 			break;
 		if (devdata->server_down || devdata->server_change_state) {
-			spin_unlock_irqrestore(&devdata->priv_lock, flags);
 			dev_dbg(&netdev->dev, "%s server went away\n",
 				__func__);
-			return -EIO;
+			break;
 		}
 		set_current_state(TASK_INTERRUPTIBLE);
 		spin_unlock_irqrestore(&devdata->priv_lock, flags);
@@ -791,7 +790,7 @@ visornic_xmit(struct sk_buff *skb, struct net_device *netdev)
 	 * pointing to
 	 */
 	firstfraglen = skb->len - skb->data_len;
-	if (firstfraglen < ETH_HEADER_SIZE) {
+	if (firstfraglen < ETH_HLEN) {
 		spin_unlock_irqrestore(&devdata->priv_lock, flags);
 		devdata->busy_cnt++;
 		dev_err(&netdev->dev,
@@ -864,7 +863,7 @@ visornic_xmit(struct sk_buff *skb, struct net_device *netdev)
 	/* copy ethernet header from first frag into ocmdrsp
 	 * - everything else will be pass in frags & DMA'ed
 	 */
-	memcpy(cmdrsp->net.xmt.ethhdr, skb->data, ETH_HEADER_SIZE);
+	memcpy(cmdrsp->net.xmt.ethhdr, skb->data, ETH_HLEN);
 	/* copy frags info - from skb->data we need to only provide access
 	 * beyond eth header
 	 */
@@ -2016,8 +2015,6 @@ static int visornic_resume(struct visor_device *dev,
 	 * TODO: State transitions
 	 */
 	mod_timer(&devdata->irq_poll_timer, msecs_to_jiffies(2));
-
-	init_rcv_bufs(netdev, devdata);
 
 	rtnl_lock();
 	dev_open(netdev);

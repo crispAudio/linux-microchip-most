@@ -43,6 +43,7 @@
 #include "lustre_fld.h"
 #include "lustre_handles.h"
 #include "lustre_intent.h"
+#include "cl_object.h"
 
 #define MAX_OBD_DEVICES 8192
 
@@ -75,6 +76,8 @@ static inline void loi_init(struct lov_oinfo *loi)
 
 struct lov_stripe_md;
 struct obd_info;
+
+int lov_read_and_clear_async_rc(struct cl_object *clob);
 
 typedef int (*obd_enqueue_update_f)(void *cookie, int rc);
 
@@ -247,15 +250,42 @@ struct client_obd {
 	struct obd_histogram     cl_read_offset_hist;
 	struct obd_histogram     cl_write_offset_hist;
 
-	/* lru for osc caching pages */
+	/* LRU for osc caching pages */
 	struct cl_client_cache	*cl_cache;
-	struct list_head	 cl_lru_osc; /* member of cl_cache->ccc_lru */
+	/** member of cl_cache->ccc_lru */
+	struct list_head	 cl_lru_osc;
+	/** # of available LRU slots left in the per-OSC cache.
+	 * Available LRU slots are shared by all OSCs of the same file system,
+	 * therefore this is a pointer to cl_client_cache::ccc_lru_left.
+	 */
 	atomic_long_t		*cl_lru_left;
+	/** # of busy LRU pages. A page is considered busy if it's in writeback
+	 * queue, or in transfer. Busy pages can't be discarded so they are not
+	 * in LRU cache.
+	 */
 	atomic_long_t		 cl_lru_busy;
+	/** # of LRU pages in the cache for this client_obd */
 	atomic_long_t		 cl_lru_in_list;
+	/** # of threads are shrinking LRU cache. To avoid contention, it's not
+	 * allowed to have multiple threads shrinking LRU cache.
+	 */
 	atomic_t		 cl_lru_shrinkers;
-	struct list_head	 cl_lru_list; /* lru page list */
-	spinlock_t		 cl_lru_list_lock; /* page list protector */
+	/** The time when this LRU cache was last used. */
+	time64_t		 cl_lru_last_used;
+	/** stats: how many reclaims have happened for this client_obd.
+	 * reclaim and shrink - shrink is async, voluntarily rebalancing;
+	 * reclaim is sync, initiated by IO thread when the LRU slots are
+	 * in shortage.
+	 */
+	u64			 cl_lru_reclaim;
+	/** List of LRU pages for this client_obd */
+	struct list_head	 cl_lru_list;
+	/** Lock for LRU page list */
+	spinlock_t		 cl_lru_list_lock;
+	/** # of unstable pages in this client_obd.
+	 * An unstable page is a page state that WRITE RPC has finished but
+	 * the transaction has NOT yet committed.
+	 */
 	atomic_long_t		 cl_unstable_count;
 
 	/* number of in flight destroy rpcs is limited to max_rpcs_in_flight */
@@ -862,7 +892,7 @@ struct obd_client_handle {
 	struct md_open_data	*och_mod;
 	struct lustre_handle	 och_lease_handle; /* open lock for lease */
 	__u32			 och_magic;
-	int			 och_flags;
+	fmode_t			 och_flags;
 };
 
 #define OBD_CLIENT_HANDLE_MAGIC 0xd15ea5ed

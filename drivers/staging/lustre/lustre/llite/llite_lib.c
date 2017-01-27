@@ -224,6 +224,10 @@ static int client_common_fill_super(struct super_block *sb, char *md, char *dt,
 	/* real client */
 	data->ocd_connect_flags |= OBD_CONNECT_REAL;
 
+	/* always ping even if server suppress_pings */
+	if (sbi->ll_flags & LL_SBI_ALWAYS_PING)
+		data->ocd_connect_flags &= ~OBD_CONNECT_PINGLESS;
+
 	data->ocd_brw_size = MD_MAX_BRW_SIZE;
 
 	err = obd_connect(NULL, &sbi->ll_md_exp, obd, &sbi->ll_sb_uuid,
@@ -372,6 +376,10 @@ static int client_common_fill_super(struct super_block *sb, char *md, char *dt,
 	}
 
 	data->ocd_connect_flags |= OBD_CONNECT_LRU_RESIZE;
+
+	/* always ping even if server suppress_pings */
+	if (sbi->ll_flags & LL_SBI_ALWAYS_PING)
+		data->ocd_connect_flags &= ~OBD_CONNECT_PINGLESS;
 
 	CDEBUG(D_RPCTRACE, "ocd_connect_flags: %#llx ocd_version: %d ocd_grant: %d\n",
 	       data->ocd_connect_flags,
@@ -786,6 +794,11 @@ static int ll_options(char *options, int *flags)
 		tmp = ll_set_opt("noverbose", s1, LL_SBI_VERBOSE);
 		if (tmp) {
 			*flags &= ~tmp;
+			goto next;
+		}
+		tmp = ll_set_opt("always_ping", s1, LL_SBI_ALWAYS_PING);
+		if (tmp) {
+			*flags |= tmp;
 			goto next;
 		}
 		LCONSOLE_ERROR_MSG(0x152, "Unknown option '%s', won't mount.\n",
@@ -1532,9 +1545,6 @@ int ll_setattr_raw(struct dentry *dentry, struct iattr *attr, bool hsm_import)
 			 * modified, flag it.
 			 */
 			attr->ia_valid |= MDS_OPEN_OWNEROVERRIDE;
-			spin_lock(&lli->lli_lock);
-			lli->lli_flags |= LLIF_DATA_MODIFIED;
-			spin_unlock(&lli->lli_lock);
 			op_data->op_bias |= MDS_DATA_MODIFIED;
 		}
 	}
@@ -1544,13 +1554,6 @@ int ll_setattr_raw(struct dentry *dentry, struct iattr *attr, bool hsm_import)
 	rc = ll_md_setattr(dentry, op_data);
 	if (rc)
 		goto out;
-
-	/* RPC to MDT is sent, cancel data modification flag */
-	if (op_data->op_bias & MDS_DATA_MODIFIED) {
-		spin_lock(&lli->lli_lock);
-		lli->lli_flags &= ~LLIF_DATA_MODIFIED;
-		spin_unlock(&lli->lli_lock);
-	}
 
 	if (!S_ISREG(inode->i_mode) || file_is_released) {
 		rc = 0;
@@ -1822,7 +1825,7 @@ int ll_update_inode(struct inode *inode, struct lustre_md *md)
 
 	if (body->mbo_valid & OBD_MD_TSTATE) {
 		if (body->mbo_t_state & MS_RESTORE)
-			lli->lli_flags |= LLIF_FILE_RESTORING;
+			set_bit(LLIF_FILE_RESTORING, &lli->lli_flags);
 	}
 
 	return 0;
@@ -2331,18 +2334,12 @@ struct md_op_data *ll_prep_md_op_data(struct md_op_data *op_data,
 	op_data->op_fsuid = from_kuid(&init_user_ns, current_fsuid());
 	op_data->op_fsgid = from_kgid(&init_user_ns, current_fsgid());
 	op_data->op_cap = cfs_curproc_cap_pack();
-	op_data->op_bias = 0;
-	op_data->op_cli_flags = 0;
 	if ((opc == LUSTRE_OPC_CREATE) && name &&
 	    filename_is_volatile(name, namelen, &op_data->op_mds))
 		op_data->op_bias |= MDS_CREATE_VOLATILE;
 	else
 		op_data->op_mds = 0;
 	op_data->op_data = data;
-
-	/* When called by ll_setattr_raw, file is i1. */
-	if (ll_i2info(i1)->lli_flags & LLIF_DATA_MODIFIED)
-		op_data->op_bias |= MDS_DATA_MODIFIED;
 
 	return op_data;
 }
@@ -2376,6 +2373,9 @@ int ll_show_options(struct seq_file *seq, struct dentry *dentry)
 
 	if (sbi->ll_flags & LL_SBI_USER_FID2PATH)
 		seq_puts(seq, ",user_fid2path");
+
+	if (sbi->ll_flags & LL_SBI_ALWAYS_PING)
+		seq_puts(seq, ",always_ping");
 
 	return 0;
 }

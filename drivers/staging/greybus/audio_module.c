@@ -134,7 +134,7 @@ static int gbaudio_request_stream(struct gbaudio_module_info *module,
 				  struct gb_audio_streaming_event_request *req)
 {
 	dev_warn(module->dev, "Audio Event received: cport: %u, event: %u\n",
-		 req->data_cport, req->event);
+		 le16_to_cpu(req->data_cport), req->event);
 
 	return 0;
 }
@@ -207,10 +207,8 @@ static int gb_audio_add_data_connection(struct gbaudio_module_info *gbmodule,
 	struct gbaudio_data_connection *dai;
 
 	dai = devm_kzalloc(gbmodule->dev, sizeof(*dai), GFP_KERNEL);
-	if (!dai) {
-		dev_err(gbmodule->dev, "DAI Malloc failure\n");
+	if (!dai)
 		return -ENOMEM;
-	}
 
 	connection = gb_connection_create_offloaded(bundle,
 					le16_to_cpu(cport_desc->id),

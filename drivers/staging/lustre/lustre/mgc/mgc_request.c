@@ -38,11 +38,13 @@
 #define D_MGC D_CONFIG /*|D_WARNING*/
 
 #include <linux/module.h>
-#include "../include/obd_class.h"
-#include "../include/lustre_dlm.h"
+
 #include "../include/lprocfs_status.h"
-#include "../include/lustre_log.h"
+#include "../include/lustre_dlm.h"
 #include "../include/lustre_disk.h"
+#include "../include/lustre_log.h"
+#include "../include/lustre_swab.h"
+#include "../include/obd_class.h"
 
 #include "mgc_internal.h"
 
@@ -373,7 +375,7 @@ out_err:
 	return rc;
 }
 
-DEFINE_MUTEX(llog_process_lock);
+static DEFINE_MUTEX(llog_process_lock);
 
 /** Stop watching for updates on this log.
  */

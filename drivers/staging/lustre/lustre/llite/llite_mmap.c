@@ -215,11 +215,8 @@ static int ll_page_mkwrite0(struct vm_area_struct *vma, struct page *vmpage,
 			result = -EAGAIN;
 		}
 
-		if (result == 0) {
-			spin_lock(&lli->lli_lock);
-			lli->lli_flags |= LLIF_DATA_MODIFIED;
-			spin_unlock(&lli->lli_lock);
-		}
+		if (!result)
+			set_bit(LLIF_DATA_MODIFIED, &lli->lli_flags);
 	}
 
 out_io:
@@ -372,6 +369,7 @@ static int ll_page_mkwrite(struct vm_area_struct *vma, struct vm_fault *vmf)
 	bool retry;
 	int result;
 
+	file_update_time(vma->vm_file);
 	do {
 		retry = false;
 		result = ll_page_mkwrite0(vma, vmf->page, &retry);

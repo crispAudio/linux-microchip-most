@@ -1490,7 +1490,7 @@ kiblnd_launch_tx(lnet_ni_t *ni, struct kib_tx *tx, lnet_nid_t nid)
 int
 kiblnd_send(lnet_ni_t *ni, void *private, lnet_msg_t *lntmsg)
 {
-	lnet_hdr_t *hdr = &lntmsg->msg_hdr;
+	struct lnet_hdr *hdr = &lntmsg->msg_hdr;
 	int type = lntmsg->msg_type;
 	lnet_process_id_t target = lntmsg->msg_target;
 	int target_is_router = lntmsg->msg_target_is_router;
@@ -3269,14 +3269,14 @@ kiblnd_disconnect_conn(struct kib_conn *conn)
 #define KIB_RECONN_HIGH_RACE	10
 /**
  * Allow connd to take a break and handle other things after consecutive
- * reconnection attemps.
+ * reconnection attempts.
  */
 #define KIB_RECONN_BREAK	100
 
 int
 kiblnd_connd(void *arg)
 {
-	spinlock_t *lock= &kiblnd_data.kib_connd_lock;
+	spinlock_t *lock = &kiblnd_data.kib_connd_lock;
 	wait_queue_t wait;
 	unsigned long flags;
 	struct kib_conn *conn;

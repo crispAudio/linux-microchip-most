@@ -97,20 +97,20 @@ struct ll_grouplock {
 	unsigned long	 lg_gid;
 };
 
-enum lli_flags {
+enum ll_file_flags {
 	/* File data is modified. */
-	LLIF_DATA_MODIFIED	= BIT(0),
+	LLIF_DATA_MODIFIED	= 0,
 	/* File is being restored */
-	LLIF_FILE_RESTORING	= BIT(1),
+	LLIF_FILE_RESTORING	= 1,
 	/* Xattr cache is attached to the file */
-	LLIF_XATTR_CACHE	= BIT(2),
+	LLIF_XATTR_CACHE	= 2,
 };
 
 struct ll_inode_info {
 	__u32				lli_inode_magic;
-	__u32				lli_flags;
 
 	spinlock_t			lli_lock;
+	unsigned long			lli_flags;
 	struct posix_acl		*lli_posix_acl;
 
 	/* identifying fields for both metadata and data stacks. */
@@ -391,6 +391,8 @@ enum stats_track_type {
 #define LL_SBI_USER_FID2PATH  0x40000 /* allow fid2path by unprivileged users */
 #define LL_SBI_XATTR_CACHE    0x80000 /* support for xattr cache */
 #define LL_SBI_NOROOTSQUASH	0x100000 /* do not apply root squash */
+#define LL_SBI_ALWAYS_PING	0x200000 /* always ping even if server
+					  * suppress_pings */
 
 #define LL_SBI_FLAGS {	\
 	"nolck",	\
@@ -414,6 +416,7 @@ enum stats_track_type {
 	"user_fid2path",\
 	"xattr_cache",	\
 	"norootsquash",	\
+	"always_ping",	\
 }
 
 /*
@@ -740,14 +743,12 @@ int ll_file_open(struct inode *inode, struct file *file);
 int ll_file_release(struct inode *inode, struct file *file);
 int ll_release_openhandle(struct inode *, struct lookup_intent *);
 int ll_md_real_close(struct inode *inode, fmode_t fmode);
-void ll_pack_inode2opdata(struct inode *inode, struct md_op_data *op_data,
-			  struct lustre_handle *fh);
 int ll_getattr(struct vfsmount *mnt, struct dentry *de, struct kstat *stat);
 struct posix_acl *ll_get_acl(struct inode *inode, int type);
 int ll_migrate(struct inode *parent, struct file *file, int mdtidx,
 	       const char *name, int namelen);
 int ll_get_fid_by_name(struct inode *parent, const char *name,
-		       int namelen, struct lu_fid *fid);
+		       int namelen, struct lu_fid *fid, struct inode **inode);
 int ll_inode_permission(struct inode *inode, int mask);
 
 int ll_lov_setstripe_ea_info(struct inode *inode, struct dentry *dentry,
@@ -768,7 +769,6 @@ int ll_hsm_release(struct inode *inode);
 
 /* llite/dcache.c */
 
-int ll_d_init(struct dentry *de);
 extern const struct dentry_operations ll_d_ops;
 void ll_intent_drop_lock(struct lookup_intent *);
 void ll_intent_release(struct lookup_intent *);
@@ -1007,8 +1007,11 @@ const struct xattr_handler *get_xattr_type(const char *name);
  */
 int cl_sb_init(struct super_block *sb);
 int cl_sb_fini(struct super_block *sb);
-void ll_io_init(struct cl_io *io, const struct file *file, int write);
 
+enum ras_update_flags {
+	LL_RAS_HIT  = 0x1,
+	LL_RAS_MMAP = 0x2
+};
 void ll_ra_count_put(struct ll_sb_info *sbi, unsigned long len);
 void ll_ra_stats_inc(struct inode *inode, enum ra_stat which);
 
@@ -1144,7 +1147,7 @@ dentry_may_statahead(struct inode *dir, struct dentry *dentry)
 	 * 'lld_sa_generation == lli->lli_sa_generation'.
 	 */
 	ldd = ll_d2d(dentry);
-	if (ldd && ldd->lld_sa_generation == lli->lli_sa_generation)
+	if (ldd->lld_sa_generation == lli->lli_sa_generation)
 		return false;
 
 	return true;
@@ -1263,17 +1266,7 @@ static inline void ll_set_lock_data(struct obd_export *exp, struct inode *inode,
 
 static inline int d_lustre_invalid(const struct dentry *dentry)
 {
-	struct ll_dentry_data *lld = ll_d2d(dentry);
-
-	return !lld || lld->lld_invalid;
-}
-
-static inline void __d_lustre_invalidate(struct dentry *dentry)
-{
-	struct ll_dentry_data *lld = ll_d2d(dentry);
-
-	if (lld)
-		lld->lld_invalid = 1;
+	return ll_d2d(dentry)->lld_invalid;
 }
 
 /*
@@ -1289,7 +1282,7 @@ static inline void d_lustre_invalidate(struct dentry *dentry, int nested)
 
 	spin_lock_nested(&dentry->d_lock,
 			 nested ? DENTRY_D_LOCK_NESTED : DENTRY_D_LOCK_NORMAL);
-	__d_lustre_invalidate(dentry);
+	ll_d2d(dentry)->lld_invalid = 1;
 	/*
 	 * We should be careful about dentries created by d_obtain_alias().
 	 * These dentries are not put in the dentry tree, instead they are

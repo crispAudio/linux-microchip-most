@@ -51,6 +51,8 @@
 #include "../include/lustre_dlm.h"
 #include "../include/lustre_fid.h"
 #include "../include/lustre_kernelcomm.h"
+#include "../include/lustre_swab.h"
+
 #include "llite_internal.h"
 
 /*
@@ -1083,7 +1085,7 @@ static long ll_dir_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			goto out_free;
 		}
 
-		rc = ll_get_fid_by_name(inode, filename, namelen, NULL);
+		rc = ll_get_fid_by_name(inode, filename, namelen, NULL, NULL);
 		if (rc < 0) {
 			CERROR("%s: lookup %.*s failed: rc = %d\n",
 			       ll_get_fsname(inode->i_sb, NULL, 0), namelen,
@@ -1227,9 +1229,6 @@ lmv_out_free:
 
 		/* Get default LMV EA */
 		if (lum.lum_magic == LMV_USER_MAGIC) {
-			if (rc)
-				goto finish_req;
-
 			if (lmmsize > sizeof(*ulmv)) {
 				rc = -EINVAL;
 				goto finish_req;

@@ -1,5 +1,5 @@
 /*
- *   Driver for KeyStream, KS7010 based SDIO cards. 
+ *   Driver for KeyStream, KS7010 based SDIO cards.
  *
  *   Copyright (C) 2006-2008 KeyStream Corp.
  *   Copyright (C) 2009 Renesas Technology Corp.
@@ -41,7 +41,7 @@
 /* Write Index Register */
 #define WRITE_INDEX		0x000010
 
-/* Write Status/Read Data Size Register 
+/* Write Status/Read Data Size Register
  * for network packet (less than 2048 bytes data)
  */
 #define WSTATUS_RSIZE		0x000014
@@ -81,11 +81,11 @@
 
 /* AHB Data Window  0x010000-0x01FFFF */
 #define DATA_WINDOW		0x010000
-#define WINDOW_SIZE		64*1024
+#define WINDOW_SIZE		(64 * 1024)
 
 #define KS7010_IRAM_ADDRESS	0x06000000
 
-/* 
+/*
  * struct define
  */
 struct hw_info_t {

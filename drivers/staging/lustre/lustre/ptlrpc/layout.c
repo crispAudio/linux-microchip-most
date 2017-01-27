@@ -48,14 +48,14 @@
 
 #include <linux/module.h>
 
-/* LUSTRE_VERSION_CODE */
-#include "../include/lustre_ver.h"
-
-#include "../include/obd_support.h"
-/* lustre_swab_mdt_body */
 #include "../include/lustre/lustre_idl.h"
-/* obd2cli_tgt() (required by DEBUG_REQ()) */
+
+#include "../include/llog_swab.h"
+#include "../include/lustre_debug.h"
+#include "../include/lustre_swab.h"
+#include "../include/lustre_ver.h"
 #include "../include/obd.h"
+#include "../include/obd_support.h"
 
 /* __REQ_LAYOUT_USER__ */
 #endif
@@ -255,6 +255,18 @@ static const struct req_msg_field *mds_reint_rename_client[] = {
 	&RMF_NAME,
 	&RMF_SYMTGT,
 	&RMF_DLM_REQ
+};
+
+static const struct req_msg_field *mds_reint_migrate_client[] = {
+	&RMF_PTLRPC_BODY,
+	&RMF_REC_REINT,
+	&RMF_CAPA1,
+	&RMF_CAPA2,
+	&RMF_NAME,
+	&RMF_SYMTGT,
+	&RMF_DLM_REQ,
+	&RMF_MDT_EPOCH,
+	&RMF_CLOSE_DATA
 };
 
 static const struct req_msg_field *mds_last_unlink_server[] = {
@@ -678,6 +690,7 @@ static struct req_format *req_formats[] = {
 	&RQF_MDS_REINT_UNLINK,
 	&RQF_MDS_REINT_LINK,
 	&RQF_MDS_REINT_RENAME,
+	&RQF_MDS_REINT_MIGRATE,
 	&RQF_MDS_REINT_SETATTR,
 	&RQF_MDS_REINT_SETXATTR,
 	&RQF_MDS_QUOTACTL,
@@ -1253,6 +1266,11 @@ struct req_format RQF_MDS_REINT_RENAME =
 	DEFINE_REQ_FMT0("MDS_REINT_RENAME", mds_reint_rename_client,
 			mds_last_unlink_server);
 EXPORT_SYMBOL(RQF_MDS_REINT_RENAME);
+
+struct req_format RQF_MDS_REINT_MIGRATE =
+	DEFINE_REQ_FMT0("MDS_REINT_MIGRATE", mds_reint_migrate_client,
+			mds_last_unlink_server);
+EXPORT_SYMBOL(RQF_MDS_REINT_MIGRATE);
 
 struct req_format RQF_MDS_REINT_SETATTR =
 	DEFINE_REQ_FMT0("MDS_REINT_SETATTR",

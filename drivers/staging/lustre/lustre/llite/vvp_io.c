@@ -329,8 +329,8 @@ static void vvp_io_fini(const struct lu_env *env, const struct cl_io_slice *ios)
 			       vio->vui_layout_gen, gen);
 			/* today successful restore is the only possible case */
 			/* restore was done, clear restoring state */
-			ll_i2info(vvp_object_inode(obj))->lli_flags &=
-				~LLIF_FILE_RESTORING;
+			clear_bit(LLIF_FILE_RESTORING,
+				  &ll_i2info(inode)->lli_flags);
 		}
 	}
 }
@@ -982,11 +982,7 @@ static int vvp_io_write_start(const struct lu_env *env,
 		}
 	}
 	if (result > 0) {
-		struct ll_inode_info *lli = ll_i2info(inode);
-
-		spin_lock(&lli->lli_lock);
-		lli->lli_flags |= LLIF_DATA_MODIFIED;
-		spin_unlock(&lli->lli_lock);
+		set_bit(LLIF_DATA_MODIFIED, &(ll_i2info(inode))->lli_flags);
 
 		if (result < cnt)
 			io->ci_continue = 0;
@@ -1018,7 +1014,7 @@ static int vvp_io_kernel_fault(struct vvp_fault_io *cfio)
 		       "page %p map %p index %lu flags %lx count %u priv %0lx: got addr %p type NOPAGE\n",
 		       vmf->page, vmf->page->mapping, vmf->page->index,
 		       (long)vmf->page->flags, page_count(vmf->page),
-		       page_private(vmf->page), vmf->virtual_address);
+		       page_private(vmf->page), (void *)vmf->address);
 		if (unlikely(!(cfio->ft_flags & VM_FAULT_LOCKED))) {
 			lock_page(vmf->page);
 			cfio->ft_flags |= VM_FAULT_LOCKED;
@@ -1029,12 +1025,12 @@ static int vvp_io_kernel_fault(struct vvp_fault_io *cfio)
 	}
 
 	if (cfio->ft_flags & (VM_FAULT_SIGBUS | VM_FAULT_SIGSEGV)) {
-		CDEBUG(D_PAGE, "got addr %p - SIGBUS\n", vmf->virtual_address);
+		CDEBUG(D_PAGE, "got addr %p - SIGBUS\n", (void *)vmf->address);
 		return -EFAULT;
 	}
 
 	if (cfio->ft_flags & VM_FAULT_OOM) {
-		CDEBUG(D_PAGE, "got addr %p - OOM\n", vmf->virtual_address);
+		CDEBUG(D_PAGE, "got addr %p - OOM\n", (void *)vmf->address);
 		return -ENOMEM;
 	}
 
@@ -1067,12 +1063,6 @@ static int vvp_io_fault_start(const struct lu_env *env,
 	struct cl_page      *page;
 	loff_t	       size;
 	pgoff_t		     last_index;
-
-	if (fio->ft_executable &&
-	    inode->i_mtime.tv_sec != vio->u.fault.ft_mtime)
-		CWARN("binary "DFID
-		      " changed while waiting for the page fault lock\n",
-		      PFID(lu_object_fid(&obj->co_lu)));
 
 	down_read(&lli->lli_trunc_sem);
 

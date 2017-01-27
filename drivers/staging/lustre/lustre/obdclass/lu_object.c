@@ -68,6 +68,7 @@ enum {
 
 #define LU_SITE_BITS_MIN	12
 #define LU_SITE_BITS_MAX	24
+#define LU_SITE_BITS_MAX_CL	19
 /**
  * total 256 buckets, we don't want too many buckets because:
  * - consume too much memory
@@ -338,7 +339,7 @@ int lu_site_purge(const struct lu_env *env, struct lu_site *s, int nr)
 	struct cfs_hash_bd	    bd2;
 	struct list_head	       dispose;
 	int		      did_sth;
-	unsigned int start;
+	unsigned int start = 0;
 	int		      count;
 	int		      bnr;
 	unsigned int i;
@@ -351,7 +352,8 @@ int lu_site_purge(const struct lu_env *env, struct lu_site *s, int nr)
 	 * Under LRU list lock, scan LRU list and move unreferenced objects to
 	 * the dispose list, removing them from LRU and hash table.
 	 */
-	start = s->ls_purge_start;
+	if (nr != ~0)
+		start = s->ls_purge_start;
 	bnr = (nr == ~0) ? -1 : nr / (int)CFS_HASH_NBKT(s->ls_obj_hash) + 1;
  again:
 	/*
@@ -877,6 +879,9 @@ static unsigned long lu_htable_order(struct lu_device *top)
 	unsigned long cache_size;
 	unsigned long bits;
 
+	if (!strcmp(top->ld_type->ldt_name, LUSTRE_VVP_NAME))
+		bits_max = LU_SITE_BITS_MAX_CL;
+
 	/*
 	 * Calculate hash table size, assuming that we want reasonable
 	 * performance when 20% of total memory is occupied by cache of
@@ -909,8 +914,8 @@ static unsigned long lu_htable_order(struct lu_device *top)
 	return clamp_t(typeof(bits), bits, LU_SITE_BITS_MIN, bits_max);
 }
 
-static unsigned lu_obj_hop_hash(struct cfs_hash *hs,
-				const void *key, unsigned mask)
+static unsigned int lu_obj_hop_hash(struct cfs_hash *hs,
+				    const void *key, unsigned int mask)
 {
 	struct lu_fid  *fid = (struct lu_fid *)key;
 	__u32	   hash;
@@ -1319,7 +1324,7 @@ static atomic_t lu_key_initing_cnt = ATOMIC_INIT(0);
  * lu_context_refill(). No locking is provided, as initialization and shutdown
  * are supposed to be externally serialized.
  */
-static unsigned key_set_version;
+static unsigned int key_set_version;
 
 /**
  * Register new key.

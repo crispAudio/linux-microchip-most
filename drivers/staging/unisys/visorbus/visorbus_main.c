@@ -49,7 +49,7 @@ static ssize_t modalias_show(struct device *dev, struct device_attribute *attr,
 
 	vdev = to_visor_device(dev);
 	guid = visorchannel_get_uuid(vdev->visorchannel);
-	return snprintf(buf, PAGE_SIZE, "visorbus:%pUl\n", &guid);
+	return sprintf(buf, "visorbus:%pUl\n", &guid);
 }
 static DEVICE_ATTR_RO(modalias);
 
@@ -187,8 +187,8 @@ static ssize_t physaddr_show(struct device *dev, struct device_attribute *attr,
 
 	if (!vdev->visorchannel)
 		return 0;
-	return snprintf(buf, PAGE_SIZE, "0x%llx\n",
-			visorchannel_get_physaddr(vdev->visorchannel));
+	return sprintf(buf, "0x%llx\n",
+		       visorchannel_get_physaddr(vdev->visorchannel));
 }
 static DEVICE_ATTR_RO(physaddr);
 
@@ -199,7 +199,7 @@ static ssize_t nbytes_show(struct device *dev, struct device_attribute *attr,
 
 	if (!vdev->visorchannel)
 		return 0;
-	return snprintf(buf, PAGE_SIZE, "0x%lx\n",
+	return sprintf(buf, "0x%lx\n",
 			visorchannel_get_nbytes(vdev->visorchannel));
 }
 static DEVICE_ATTR_RO(nbytes);
@@ -211,8 +211,8 @@ static ssize_t clientpartition_show(struct device *dev,
 
 	if (!vdev->visorchannel)
 		return 0;
-	return snprintf(buf, PAGE_SIZE, "0x%llx\n",
-			visorchannel_get_clientpartition(vdev->visorchannel));
+	return sprintf(buf, "0x%llx\n",
+		       visorchannel_get_clientpartition(vdev->visorchannel));
 }
 static DEVICE_ATTR_RO(clientpartition);
 
@@ -224,8 +224,8 @@ static ssize_t typeguid_show(struct device *dev, struct device_attribute *attr,
 
 	if (!vdev->visorchannel)
 		return 0;
-	return snprintf(buf, PAGE_SIZE, "%s\n",
-			visorchannel_id(vdev->visorchannel, typeid));
+	return sprintf(buf, "%s\n",
+		       visorchannel_id(vdev->visorchannel, typeid));
 }
 static DEVICE_ATTR_RO(typeguid);
 
@@ -237,8 +237,8 @@ static ssize_t zoneguid_show(struct device *dev, struct device_attribute *attr,
 
 	if (!vdev->visorchannel)
 		return 0;
-	return snprintf(buf, PAGE_SIZE, "%s\n",
-			visorchannel_zoneid(vdev->visorchannel, zoneid));
+	return sprintf(buf, "%s\n",
+		       visorchannel_zoneid(vdev->visorchannel, zoneid));
 }
 static DEVICE_ATTR_RO(zoneguid);
 
@@ -257,7 +257,7 @@ static ssize_t typename_show(struct device *dev, struct device_attribute *attr,
 	if (!i)
 		return 0;
 	drv = to_visor_driver(xdrv);
-	return snprintf(buf, PAGE_SIZE, "%s\n", drv->channel_types[i - 1].name);
+	return sprintf(buf, "%s\n", drv->channel_types[i - 1].name);
 }
 static DEVICE_ATTR_RO(typename);
 
@@ -296,7 +296,7 @@ static ssize_t partition_handle_show(struct device *dev,
 	struct visor_device *vdev = to_visor_device(dev);
 	u64 handle = visorchannel_get_clientpartition(vdev->visorchannel);
 
-	return snprintf(buf, PAGE_SIZE, "0x%llx\n", handle);
+	return sprintf(buf, "0x%llx\n", handle);
 }
 static DEVICE_ATTR_RO(partition_handle);
 
@@ -305,7 +305,7 @@ static ssize_t partition_guid_show(struct device *dev,
 				   char *buf) {
 	struct visor_device *vdev = to_visor_device(dev);
 
-	return snprintf(buf, PAGE_SIZE, "{%pUb}\n", &vdev->partition_uuid);
+	return sprintf(buf, "{%pUb}\n", &vdev->partition_uuid);
 }
 static DEVICE_ATTR_RO(partition_guid);
 
@@ -314,7 +314,7 @@ static ssize_t partition_name_show(struct device *dev,
 				   char *buf) {
 	struct visor_device *vdev = to_visor_device(dev);
 
-	return snprintf(buf, PAGE_SIZE, "%s\n", vdev->name);
+	return sprintf(buf, "%s\n", vdev->name);
 }
 static DEVICE_ATTR_RO(partition_name);
 
@@ -324,7 +324,7 @@ static ssize_t channel_addr_show(struct device *dev,
 	struct visor_device *vdev = to_visor_device(dev);
 	u64 addr = visorchannel_get_physaddr(vdev->visorchannel);
 
-	return snprintf(buf, PAGE_SIZE, "0x%llx\n", addr);
+	return sprintf(buf, "0x%llx\n", addr);
 }
 static DEVICE_ATTR_RO(channel_addr);
 
@@ -334,7 +334,7 @@ static ssize_t channel_bytes_show(struct device *dev,
 	struct visor_device *vdev = to_visor_device(dev);
 	u64 nbytes = visorchannel_get_nbytes(vdev->visorchannel);
 
-	return snprintf(buf, PAGE_SIZE, "0x%llx\n", nbytes);
+	return sprintf(buf, "0x%llx\n", nbytes);
 }
 static DEVICE_ATTR_RO(channel_bytes);
 
@@ -438,8 +438,7 @@ dev_periodic_work(unsigned long __opaque)
 	struct visor_device *dev = (struct visor_device *)__opaque;
 	struct visor_driver *drv = to_visor_driver(dev->device.driver);
 
-	if (drv->channel_interrupt)
-		drv->channel_interrupt(dev);
+	drv->channel_interrupt(dev);
 	mod_timer(&dev->timer, jiffies + POLLJIFFIES_NORMALCHANNEL);
 }
 
@@ -561,6 +560,13 @@ EXPORT_SYMBOL_GPL(visorbus_write_channel);
 void
 visorbus_enable_channel_interrupts(struct visor_device *dev)
 {
+	struct visor_driver *drv = to_visor_driver(dev->device.driver);
+
+	if (!drv->channel_interrupt) {
+		dev_err(&dev->device, "%s no interrupt function!\n", __func__);
+		return;
+	}
+
 	dev_start_periodic_work(dev);
 }
 EXPORT_SYMBOL_GPL(visorbus_enable_channel_interrupts);
@@ -607,8 +613,8 @@ create_visor_device(struct visor_device *dev)
 	u32 chipset_bus_no = dev->chipset_bus_no;
 	u32 chipset_dev_no = dev->chipset_dev_no;
 
-	POSTCODE_LINUX_4(DEVICE_CREATE_ENTRY_PC, chipset_dev_no, chipset_bus_no,
-			 POSTCODE_SEVERITY_INFO);
+	POSTCODE_LINUX(DEVICE_CREATE_ENTRY_PC, chipset_dev_no, chipset_bus_no,
+		       DIAG_SEVERITY_PRINT);
 
 	mutex_init(&dev->visordriver_callback_lock);
 	dev->device.bus = &visorbus_type;
@@ -648,8 +654,8 @@ create_visor_device(struct visor_device *dev)
 	 */
 	err = device_add(&dev->device);
 	if (err < 0) {
-		POSTCODE_LINUX_3(DEVICE_ADD_PC, chipset_bus_no,
-				 DIAG_SEVERITY_ERR);
+		POSTCODE_LINUX(DEVICE_ADD_PC, 0, chipset_bus_no,
+			       DIAG_SEVERITY_ERR);
 		goto err_put;
 	}
 
@@ -966,7 +972,7 @@ create_bus_instance(struct visor_device *dev)
 	int err;
 	struct spar_vbus_headerinfo *hdr_info;
 
-	POSTCODE_LINUX_2(BUS_CREATE_ENTRY_PC, POSTCODE_SEVERITY_INFO);
+	POSTCODE_LINUX(BUS_CREATE_ENTRY_PC, 0, 0, DIAG_SEVERITY_PRINT);
 
 	hdr_info = kzalloc(sizeof(*hdr_info), GFP_KERNEL);
 	if (!hdr_info)
@@ -984,7 +990,7 @@ create_bus_instance(struct visor_device *dev)
 		goto err_hdr_info;
 	}
 	dev->debugfs_client_bus_info =
-		debugfs_create_file("client_bus_info", S_IRUSR | S_IRGRP,
+		debugfs_create_file("client_bus_info", 0440,
 				    dev->debugfs_dir, dev,
 				    &client_bus_info_debugfs_fops);
 	if (!dev->debugfs_client_bus_info) {
@@ -993,8 +999,8 @@ create_bus_instance(struct visor_device *dev)
 	}
 
 	if (device_register(&dev->device) < 0) {
-		POSTCODE_LINUX_3(DEVICE_CREATE_FAILURE_PC, id,
-				 POSTCODE_SEVERITY_ERR);
+		POSTCODE_LINUX(DEVICE_CREATE_FAILURE_PC, 0, id,
+			       DIAG_SEVERITY_ERR);
 		err = -ENODEV;
 		goto err_debugfs_created;
 	}
@@ -1092,16 +1098,16 @@ chipset_bus_create(struct visor_device *dev)
 	int rc;
 	u32 bus_no = dev->chipset_bus_no;
 
-	POSTCODE_LINUX_3(BUS_CREATE_ENTRY_PC, bus_no, POSTCODE_SEVERITY_INFO);
+	POSTCODE_LINUX(BUS_CREATE_ENTRY_PC, 0, bus_no, DIAG_SEVERITY_PRINT);
 	rc = create_bus_instance(dev);
-	POSTCODE_LINUX_3(BUS_CREATE_EXIT_PC, bus_no, POSTCODE_SEVERITY_INFO);
+	POSTCODE_LINUX(BUS_CREATE_EXIT_PC, 0, bus_no, DIAG_SEVERITY_PRINT);
 
 	if (rc < 0)
-		POSTCODE_LINUX_3(BUS_CREATE_FAILURE_PC, bus_no,
-				 POSTCODE_SEVERITY_ERR);
+		POSTCODE_LINUX(BUS_CREATE_FAILURE_PC, 0, bus_no,
+			       DIAG_SEVERITY_ERR);
 	else
-		POSTCODE_LINUX_3(CHIPSET_INIT_SUCCESS_PC, bus_no,
-				 POSTCODE_SEVERITY_INFO);
+		POSTCODE_LINUX(CHIPSET_INIT_SUCCESS_PC, 0, bus_no,
+			       DIAG_SEVERITY_PRINT);
 
 	bus_create_response(dev, rc);
 }
@@ -1120,18 +1126,18 @@ chipset_device_create(struct visor_device *dev_info)
 	u32 bus_no = dev_info->chipset_bus_no;
 	u32 dev_no = dev_info->chipset_dev_no;
 
-	POSTCODE_LINUX_4(DEVICE_CREATE_ENTRY_PC, dev_no, bus_no,
-			 POSTCODE_SEVERITY_INFO);
+	POSTCODE_LINUX(DEVICE_CREATE_ENTRY_PC, dev_no, bus_no,
+		       DIAG_SEVERITY_PRINT);
 
 	rc = create_visor_device(dev_info);
 	device_create_response(dev_info, rc);
 
 	if (rc < 0)
-		POSTCODE_LINUX_4(DEVICE_CREATE_FAILURE_PC, dev_no, bus_no,
-				 POSTCODE_SEVERITY_ERR);
+		POSTCODE_LINUX(DEVICE_CREATE_FAILURE_PC, dev_no, bus_no,
+			       DIAG_SEVERITY_ERR);
 	else
-		POSTCODE_LINUX_4(DEVICE_CREATE_SUCCESS_PC, dev_no, bus_no,
-				 POSTCODE_SEVERITY_INFO);
+		POSTCODE_LINUX(DEVICE_CREATE_SUCCESS_PC, dev_no, bus_no,
+			       DIAG_SEVERITY_PRINT);
 }
 
 void
@@ -1297,7 +1303,7 @@ visorbus_init(void)
 {
 	int err;
 
-	POSTCODE_LINUX_3(DRIVER_ENTRY_PC, 0, POSTCODE_SEVERITY_INFO);
+	POSTCODE_LINUX(DRIVER_ENTRY_PC, 0, 0, DIAG_SEVERITY_PRINT);
 
 	visorbus_debugfs_dir = debugfs_create_dir("visorbus", NULL);
 	if (!visorbus_debugfs_dir)
@@ -1307,7 +1313,7 @@ visorbus_init(void)
 
 	err = create_bus_type();
 	if (err < 0) {
-		POSTCODE_LINUX_2(BUS_CREATE_ENTRY_PC, DIAG_SEVERITY_ERR);
+		POSTCODE_LINUX(BUS_CREATE_ENTRY_PC, 0, 0, DIAG_SEVERITY_ERR);
 		goto error;
 	}
 
@@ -1316,7 +1322,7 @@ visorbus_init(void)
 	return 0;
 
 error:
-	POSTCODE_LINUX_3(CHIPSET_INIT_FAILURE_PC, err, POSTCODE_SEVERITY_ERR);
+	POSTCODE_LINUX(CHIPSET_INIT_FAILURE_PC, 0, err, DIAG_SEVERITY_ERR);
 	return err;
 }
 
@@ -1337,10 +1343,10 @@ visorbus_exit(void)
 	debugfs_remove_recursive(visorbus_debugfs_dir);
 }
 
-module_param_named(forcematch, visorbus_forcematch, int, S_IRUGO);
+module_param_named(forcematch, visorbus_forcematch, int, 0444);
 MODULE_PARM_DESC(visorbus_forcematch,
 		 "1 to force a successful dev <--> drv match");
 
-module_param_named(forcenomatch, visorbus_forcenomatch, int, S_IRUGO);
+module_param_named(forcenomatch, visorbus_forcenomatch, int, 0444);
 MODULE_PARM_DESC(visorbus_forcenomatch,
 		 "1 to force an UNsuccessful dev <--> drv match");

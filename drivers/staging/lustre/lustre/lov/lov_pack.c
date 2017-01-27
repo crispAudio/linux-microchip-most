@@ -38,14 +38,17 @@
 
 #define DEBUG_SUBSYSTEM S_LOV
 
+#include "../include/lustre/lustre_idl.h"
+#include "../include/lustre/lustre_user.h"
+
 #include "../include/lustre_net.h"
+#include "../include/lustre_swab.h"
 #include "../include/obd.h"
 #include "../include/obd_class.h"
 #include "../include/obd_support.h"
-#include "../include/lustre/lustre_user.h"
 
-#include "lov_internal.h"
 #include "lov_cl_internal.h"
+#include "lov_internal.h"
 
 void lov_dump_lmm_common(int level, void *lmmp)
 {
@@ -195,7 +198,8 @@ static int lov_verify_lmm(void *lmm, int lmm_bytes, __u16 *stripe_count)
 	return rc;
 }
 
-struct lov_stripe_md *lov_lsm_alloc(u16 stripe_count, u32 pattern, u32 magic)
+static struct lov_stripe_md *lov_lsm_alloc(u16 stripe_count, u32 pattern,
+					   u32 magic)
 {
 	struct lov_stripe_md *lsm;
 	unsigned int i;

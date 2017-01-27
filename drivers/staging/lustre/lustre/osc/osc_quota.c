@@ -106,7 +106,7 @@ int osc_quota_setdq(struct client_obd *cli, const unsigned int qid[],
 			}
 
 			CDEBUG(D_QUOTA, "%s: setdq to insert for %s %d (%d)\n",
-			       cli->cl_import->imp_obd->obd_name,
+			       cli_name(cli),
 			       type == USRQUOTA ? "user" : "group",
 			       qid[type], rc);
 		} else {
@@ -122,7 +122,7 @@ int osc_quota_setdq(struct client_obd *cli, const unsigned int qid[],
 				kmem_cache_free(osc_quota_kmem, oqi);
 
 			CDEBUG(D_QUOTA, "%s: setdq to remove for %s %d (%p)\n",
-			       cli->cl_import->imp_obd->obd_name,
+			       cli_name(cli),
 			       type == USRQUOTA ? "user" : "group",
 			       qid[type], oqi);
 		}
@@ -134,8 +134,8 @@ int osc_quota_setdq(struct client_obd *cli, const unsigned int qid[],
 /*
  * Hash operations for uid/gid <-> osc_quota_info
  */
-static unsigned
-oqi_hashfn(struct cfs_hash *hs, const void *key, unsigned mask)
+static unsigned int
+oqi_hashfn(struct cfs_hash *hs, const void *key, unsigned int mask)
 {
 	return cfs_hash_u32_hash(*((__u32 *)key), mask);
 }

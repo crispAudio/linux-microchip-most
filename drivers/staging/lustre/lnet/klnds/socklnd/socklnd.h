@@ -334,7 +334,7 @@ struct ksock_conn {
 	atomic_t           ksnc_conn_refcount;/* conn refcount */
 	atomic_t           ksnc_sock_refcount;/* sock refcount */
 	struct ksock_sched *ksnc_scheduler;	/* who schedules this connection
-					         */
+						 */
 	__u32              ksnc_myipaddr;     /* my IP */
 	__u32              ksnc_ipaddr;       /* peer's IP */
 	int                ksnc_port;         /* peer's port */
@@ -373,7 +373,7 @@ struct ksock_conn {
 					       * V2.x message takes the
 					       * whole struct
 					       * V1.x message is a bare
-					       * lnet_hdr_t, it's stored in
+					       * struct lnet_hdr, it's stored in
 					       * ksnc_msg.ksm_u.lnetmsg
 					       */
 	/* WRITER */

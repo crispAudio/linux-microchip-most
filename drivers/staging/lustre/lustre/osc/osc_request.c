@@ -43,6 +43,7 @@
 #include "../include/lprocfs_status.h"
 #include "../include/lustre/lustre_ioctl.h"
 #include "../include/lustre_debug.h"
+#include "../include/lustre_obdo.h"
 #include "../include/lustre_param.h"
 #include "../include/lustre_fid.h"
 #include "../include/obd_class.h"
@@ -583,14 +584,13 @@ static void osc_announce_cached(struct client_obd *cli, struct obdo *oa,
 		oa->o_undirty = 0;
 	} else if (unlikely(atomic_long_read(&obd_dirty_pages) -
 			    atomic_long_read(&obd_dirty_transit_pages) >
-			    (obd_max_dirty_pages + 1))) {
+			    (long)(obd_max_dirty_pages + 1))) {
 		/* The atomic_read() allowing the atomic_inc() are
 		 * not covered by a lock thus they may safely race and trip
 		 * this CERROR() unless we add in a small fudge factor (+1).
 		 */
-		CERROR("%s: dirty %ld + %ld > system dirty_max %lu\n",
-		       cli->cl_import->imp_obd->obd_name,
-		       atomic_long_read(&obd_dirty_pages),
+		CERROR("%s: dirty %ld + %ld > system dirty_max %ld\n",
+		       cli_name(cli), atomic_long_read(&obd_dirty_pages),
 		       atomic_long_read(&obd_dirty_transit_pages),
 		       obd_max_dirty_pages);
 		oa->o_undirty = 0;
@@ -785,12 +785,10 @@ static int osc_add_shrink_grant(struct client_obd *client)
 				       osc_grant_shrink_grant_cb, NULL,
 				       &client->cl_grant_shrink_list);
 	if (rc) {
-		CERROR("add grant client %s error %d\n",
-		       client->cl_import->imp_obd->obd_name, rc);
+		CERROR("add grant client %s error %d\n", cli_name(client), rc);
 		return rc;
 	}
-	CDEBUG(D_CACHE, "add grant client %s\n",
-	       client->cl_import->imp_obd->obd_name);
+	CDEBUG(D_CACHE, "add grant client %s\n", cli_name(client));
 	osc_update_next_shrink(client);
 	return 0;
 }
@@ -824,8 +822,8 @@ static void osc_init_grant(struct client_obd *cli, struct obd_connect_data *ocd)
 	spin_unlock(&cli->cl_loi_list_lock);
 
 	CDEBUG(D_CACHE, "%s, setting cl_avail_grant: %ld cl_lost_grant: %ld chunk bits: %d\n",
-	       cli->cl_import->imp_obd->obd_name,
-	       cli->cl_avail_grant, cli->cl_lost_grant, cli->cl_chunkbits);
+	       cli_name(cli), cli->cl_avail_grant, cli->cl_lost_grant,
+	       cli->cl_chunkbits);
 
 	if (ocd->ocd_connect_flags & OBD_CONNECT_GRANT_SHRINK &&
 	    list_empty(&cli->cl_grant_shrink_list))
@@ -911,9 +909,9 @@ static int check_write_rcs(struct ptlrpc_request *req,
 static inline int can_merge_pages(struct brw_page *p1, struct brw_page *p2)
 {
 	if (p1->flag != p2->flag) {
-		unsigned mask = ~(OBD_BRW_FROM_GRANT | OBD_BRW_NOCACHE |
-				  OBD_BRW_SYNC | OBD_BRW_ASYNC |
-				  OBD_BRW_NOQUOTA | OBD_BRW_SOFT_SYNC);
+		unsigned int mask = ~(OBD_BRW_FROM_GRANT | OBD_BRW_NOCACHE |
+				      OBD_BRW_SYNC | OBD_BRW_ASYNC |
+				      OBD_BRW_NOQUOTA | OBD_BRW_SOFT_SYNC);
 
 		/* warn if we try to combine flags that we don't know to be
 		 * safe to combine
@@ -936,7 +934,6 @@ static u32 osc_checksum_bulk(int nob, u32 pg_count,
 	int i = 0;
 	struct cfs_crypto_hash_desc *hdesc;
 	unsigned int bufsize;
-	int err;
 	unsigned char cfs_alg = cksum_obd2cfs(cksum_type);
 
 	LASSERT(pg_count > 0);
@@ -978,7 +975,7 @@ static u32 osc_checksum_bulk(int nob, u32 pg_count,
 	}
 
 	bufsize = sizeof(cksum);
-	err = cfs_crypto_hash_final(hdesc, (unsigned char *)&cksum, &bufsize);
+	cfs_crypto_hash_final(hdesc, (unsigned char *)&cksum, &bufsize);
 
 	/* For sending we only compute the wrong checksum instead
 	 * of corrupting the data so it is still correct on a redo
@@ -1816,16 +1813,11 @@ out:
 	return rc;
 }
 
-static int osc_set_lock_data_with_check(struct ldlm_lock *lock,
-					struct ldlm_enqueue_info *einfo)
+static int osc_set_lock_data(struct ldlm_lock *lock, void *data)
 {
-	void *data = einfo->ei_cbdata;
 	int set = 0;
 
-	LASSERT(lock->l_blocking_ast == einfo->ei_cb_bl);
-	LASSERT(lock->l_resource->lr_type == einfo->ei_type);
-	LASSERT(lock->l_completion_ast == einfo->ei_cb_cp);
-	LASSERT(lock->l_glimpse_ast == einfo->ei_cb_gl);
+	LASSERT(lock);
 
 	lock_res_and_lock(lock);
 
@@ -1836,21 +1828,6 @@ static int osc_set_lock_data_with_check(struct ldlm_lock *lock,
 
 	unlock_res_and_lock(lock);
 
-	return set;
-}
-
-static int osc_set_data_with_check(struct lustre_handle *lockh,
-				   struct ldlm_enqueue_info *einfo)
-{
-	struct ldlm_lock *lock = ldlm_handle2lock(lockh);
-	int set = 0;
-
-	if (lock) {
-		set = osc_set_lock_data_with_check(lock, einfo);
-		LDLM_LOCK_PUT(lock);
-	} else
-		CERROR("lockh %p, data %p - client evicted?\n",
-		       lockh, einfo->ei_cbdata);
 	return set;
 }
 
@@ -2019,7 +1996,7 @@ int osc_enqueue_base(struct obd_export *exp, struct ldlm_res_id *res_id,
 			ldlm_lock_decref(&lockh, mode);
 			LDLM_LOCK_PUT(matched);
 			return -ECANCELED;
-		} else if (osc_set_lock_data_with_check(matched, einfo)) {
+		} else if (osc_set_lock_data(matched, einfo->ei_cbdata)) {
 			*flags |= LDLM_FL_LVB_READY;
 			/* We already have a lock, and it's referenced. */
 			(*upcall)(cookie, &lockh, ELDLM_LOCK_MATCHED);
@@ -2131,19 +2108,18 @@ int osc_match_base(struct obd_export *exp, struct ldlm_res_id *res_id,
 		rc |= LCK_PW;
 	rc = ldlm_lock_match(obd->obd_namespace, lflags,
 			     res_id, type, policy, rc, lockh, unref);
-	if (rc) {
-		if (data) {
-			if (!osc_set_data_with_check(lockh, data)) {
-				if (!(lflags & LDLM_FL_TEST_LOCK))
-					ldlm_lock_decref(lockh, rc);
-				return 0;
-			}
-		}
-		if (!(lflags & LDLM_FL_TEST_LOCK) && mode != rc) {
-			ldlm_lock_addref(lockh, LCK_PR);
-			ldlm_lock_decref(lockh, LCK_PW);
-		}
+	if (!rc || lflags & LDLM_FL_TEST_LOCK)
 		return rc;
+
+	if (data) {
+		struct ldlm_lock *lock = ldlm_handle2lock(lockh);
+
+		LASSERT(lock);
+		if (!osc_set_lock_data(lock, data)) {
+			ldlm_lock_decref(lockh, rc);
+			rc = 0;
+		}
+		LDLM_LOCK_PUT(lock);
 	}
 	return rc;
 }
@@ -2504,6 +2480,33 @@ static int osc_disconnect(struct obd_export *exp)
 	return rc;
 }
 
+static int osc_ldlm_resource_invalidate(struct cfs_hash *hs,
+					struct cfs_hash_bd *bd,
+					struct hlist_node *hnode, void *arg)
+{
+	struct ldlm_resource *res = cfs_hash_object(hs, hnode);
+	struct osc_object *osc = NULL;
+	struct lu_env *env = arg;
+	struct ldlm_lock *lock;
+
+	lock_res(res);
+	list_for_each_entry(lock, &res->lr_granted, l_res_link) {
+		if (lock->l_ast_data && !osc) {
+			osc = lock->l_ast_data;
+			cl_object_get(osc2cl(osc));
+		}
+		lock->l_ast_data = NULL;
+	}
+	unlock_res(res);
+
+	if (osc) {
+		osc_object_invalidate(env, osc);
+		cl_object_put(env, osc2cl(osc));
+	}
+
+	return 0;
+}
+
 static int osc_import_event(struct obd_device *obd,
 			    struct obd_import *imp,
 			    enum obd_import_event event)
@@ -2531,17 +2534,18 @@ static int osc_import_event(struct obd_device *obd,
 		struct lu_env *env;
 		int refcheck;
 
+		ldlm_namespace_cleanup(ns, LDLM_FL_LOCAL_ONLY);
+
 		env = cl_env_get(&refcheck);
 		if (!IS_ERR(env)) {
-			/* Reset grants */
-			cli = &obd->u.cli;
-			/* all pages go to failing rpcs due to the invalid
-			 * import
-			 */
-			osc_io_unplug(env, cli, NULL);
+			osc_io_unplug(env, &obd->u.cli, NULL);
+
+			cfs_hash_for_each_nolock(ns->ns_rs_hash,
+						 osc_ldlm_resource_invalidate,
+						 env, 0);
+			cl_env_put(env, &refcheck);
 
 			ldlm_namespace_cleanup(ns, LDLM_FL_LOCAL_ONLY);
-			cl_env_put(env, &refcheck);
 		} else {
 			rc = PTR_ERR(env);
 		}
@@ -2790,8 +2794,6 @@ static struct obd_ops osc_obd_ops = {
 	.process_config = osc_process_config,
 	.quotactl       = osc_quotactl,
 };
-
-extern struct lu_kmem_descr osc_caches[];
 
 static int __init osc_init(void)
 {

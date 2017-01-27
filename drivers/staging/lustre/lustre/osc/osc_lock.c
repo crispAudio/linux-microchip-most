@@ -188,7 +188,7 @@ static void osc_lock_lvb_update(const struct lu_env *env,
 	struct cl_object *obj = osc2cl(osc);
 	struct lov_oinfo *oinfo = osc->oo_oinfo;
 	struct cl_attr *attr = &osc_env_info(env)->oti_attr;
-	unsigned valid;
+	unsigned int valid;
 
 	valid = CAT_BLOCKS | CAT_ATIME | CAT_CTIME | CAT_MTIME | CAT_SIZE;
 	if (!lvb)
@@ -1205,10 +1205,9 @@ struct ldlm_lock *osc_dlmlock_at_pgoff(const struct lu_env *env,
 	 * with a uniq gid and it conflicts with all other lock modes too
 	 */
 again:
-	mode = ldlm_lock_match(osc_export(obj)->exp_obd->obd_namespace,
-			       flags, resname, LDLM_EXTENT, policy,
-			       LCK_PR | LCK_PW | LCK_GROUP, &lockh,
-			       dap_flags & OSC_DAP_FL_CANCELING);
+	mode = osc_match_base(osc_export(obj), resname, LDLM_EXTENT, policy,
+			      LCK_PR | LCK_PW | LCK_GROUP, &flags, obj, &lockh,
+			      dap_flags & OSC_DAP_FL_CANCELING);
 	if (mode != 0) {
 		lock = ldlm_handle2lock(&lockh);
 		/* RACE: the lock is cancelled so let's try again */

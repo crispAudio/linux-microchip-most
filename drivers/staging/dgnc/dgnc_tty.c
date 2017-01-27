@@ -35,7 +35,6 @@
 #include "dgnc_tty.h"
 #include "dgnc_neo.h"
 #include "dgnc_cls.h"
-#include "dgnc_sysfs.h"
 #include "dgnc_utils.h"
 
 /* Default transparent print information. */
@@ -103,6 +102,8 @@ static int dgnc_tty_write(struct tty_struct *tty, const unsigned char *buf,
 static void dgnc_tty_set_termios(struct tty_struct *tty,
 				 struct ktermios *old_termios);
 static void dgnc_tty_send_xchar(struct tty_struct *tty, char ch);
+static void dgnc_set_signal_low(struct channel_t *ch, const unsigned char line);
+static void dgnc_wake_up_unit(struct un_t *unit);
 
 static const struct tty_operations dgnc_tty_ops = {
 	.open = dgnc_tty_open,
@@ -304,12 +305,10 @@ int dgnc_tty_init(struct dgnc_board *brd)
 			classp = tty_register_device(brd->serial_driver, i,
 						     &ch->ch_bd->pdev->dev);
 			ch->ch_tun.un_sysfs = classp;
-			dgnc_create_tty_sysfs(&ch->ch_tun, classp);
 
 			classp = tty_register_device(brd->print_driver, i,
 						     &ch->ch_bd->pdev->dev);
 			ch->ch_pun.un_sysfs = classp;
-			dgnc_create_tty_sysfs(&ch->ch_pun, classp);
 		}
 	}
 
@@ -333,20 +332,14 @@ void dgnc_cleanup_tty(struct dgnc_board *brd)
 {
 	int i = 0;
 
-	for (i = 0; i < brd->nasync; i++) {
-		if (brd->channels[i])
-			dgnc_remove_tty_sysfs(brd->channels[i]->
-					      ch_tun.un_sysfs);
+	for (i = 0; i < brd->nasync; i++)
 		tty_unregister_device(brd->serial_driver, i);
-	}
+
 	tty_unregister_driver(brd->serial_driver);
 
-	for (i = 0; i < brd->nasync; i++) {
-		if (brd->channels[i])
-			dgnc_remove_tty_sysfs(brd->channels[i]->
-					      ch_pun.un_sysfs);
+	for (i = 0; i < brd->nasync; i++)
 		tty_unregister_device(brd->print_driver, i);
-	}
+
 	tty_unregister_driver(brd->print_driver);
 
 	put_tty_driver(brd->serial_driver);
@@ -385,9 +378,7 @@ static void dgnc_wmove(struct channel_t *ch, char *buf, uint n)
 	}
 
 	if (n > 0) {
-
 		/* Move rest of data. */
-
 		remain = n;
 		memcpy(ch->ch_wqueue + head, buf, remain);
 		head += remain;
@@ -795,6 +786,12 @@ void dgnc_check_queue_flow_control(struct channel_t *ch)
 	}
 }
 
+static void dgnc_set_signal_low(struct channel_t *ch, const unsigned char sig)
+{
+	ch->ch_mostat &= ~(sig);
+	ch->ch_bd->bd_ops->assert_modem_signals(ch);
+}
+
 void dgnc_wakeup_writes(struct channel_t *ch)
 {
 	int qlen = 0;
@@ -832,19 +829,15 @@ void dgnc_wakeup_writes(struct channel_t *ch)
 				 * If RTS Toggle mode is on, whenever
 				 * the queue and UART is empty, keep RTS low.
 				 */
-				if (ch->ch_digi.digi_flags & DIGI_RTS_TOGGLE) {
-					ch->ch_mostat &= ~(UART_MCR_RTS);
-					ch->ch_bd->bd_ops->assert_modem_signals(ch);
-				}
+				if (ch->ch_digi.digi_flags & DIGI_RTS_TOGGLE)
+					dgnc_set_signal_low(ch, UART_MCR_RTS);
 
 				/*
 				 * If DTR Toggle mode is on, whenever
 				 * the queue and UART is empty, keep DTR low.
 				 */
-				if (ch->ch_digi.digi_flags & DIGI_DTR_TOGGLE) {
-					ch->ch_mostat &= ~(UART_MCR_DTR);
-					ch->ch_bd->bd_ops->assert_modem_signals(ch);
-				}
+				if (ch->ch_digi.digi_flags & DIGI_DTR_TOGGLE)
+					dgnc_set_signal_low(ch, UART_MCR_DTR);
 			}
 		}
 
@@ -978,8 +971,9 @@ static int dgnc_tty_open(struct tty_struct *tty, struct file *file)
 	 * touched safely, the close routine will signal the
 	 * ch_flags_wait to wake us back up.
 	 */
-	rc = wait_event_interruptible(ch->ch_flags_wait, (((ch->ch_tun.un_flags |
-				      ch->ch_pun.un_flags) & UN_CLOSING) == 0));
+	rc = wait_event_interruptible(ch->ch_flags_wait,
+			(((ch->ch_tun.un_flags |
+			   ch->ch_pun.un_flags) & UN_CLOSING) == 0));
 
 	/* If ret is non-zero, user ctrl-c'ed us */
 	if (rc)
@@ -1031,9 +1025,7 @@ static int dgnc_tty_open(struct tty_struct *tty, struct file *file)
 	/* Initialize if neither terminal or printer is open. */
 
 	if (!((ch->ch_tun.un_flags | ch->ch_pun.un_flags) & UN_ISOPEN)) {
-
 		/* Flush input queues. */
-
 		ch->ch_r_head = 0;
 		ch->ch_r_tail = 0;
 		ch->ch_e_head = 0;
@@ -1197,11 +1189,12 @@ static int dgnc_block_til_ready(struct tty_struct *tty,
 		 */
 		if (sleep_on_un_flags)
 			retval = wait_event_interruptible
-				(un->un_flags_wait, (old_flags != (ch->ch_tun.un_flags |
-								   ch->ch_pun.un_flags)));
+				(un->un_flags_wait,
+				 (old_flags != (ch->ch_tun.un_flags |
+						ch->ch_pun.un_flags)));
 		else
 			retval = wait_event_interruptible(ch->ch_flags_wait,
-							  (old_flags != ch->ch_flags));
+					(old_flags != ch->ch_flags));
 
 		/*
 		 * We got woken up for some reason.
@@ -1632,9 +1625,7 @@ static int dgnc_tty_write(struct tty_struct *tty,
 	}
 
 	if (n > 0) {
-
 		/* Move rest of data. */
-
 		remain = n;
 		memcpy(ch->ch_wqueue + head, buf, remain);
 		head += remain;
@@ -2335,6 +2326,17 @@ static void dgnc_tty_flush_buffer(struct tty_struct *tty)
 	spin_unlock_irqrestore(&ch->ch_lock, flags);
 }
 
+/*
+ * dgnc_wake_up_unit()
+ *
+ * Wakes up processes waiting in the unit's (teminal/printer) wait queue
+ */
+static void dgnc_wake_up_unit(struct un_t *unit)
+{
+	unit->un_flags &= ~(UN_LOW | UN_EMPTY);
+	wake_up_interruptible(&unit->un_flags_wait);
+}
+
 /* The IOCTL function and all of its helpers */
 
 /*
@@ -2517,17 +2519,11 @@ static int dgnc_tty_ioctl(struct tty_struct *tty, unsigned int cmd,
 				ch->ch_w_head = ch->ch_w_tail;
 				ch_bd_ops->flush_uart_write(ch);
 
-				if (ch->ch_tun.un_flags & (UN_LOW | UN_EMPTY)) {
-					ch->ch_tun.un_flags &=
-						~(UN_LOW | UN_EMPTY);
-					wake_up_interruptible(&ch->ch_tun.un_flags_wait);
-				}
+				if (ch->ch_tun.un_flags & (UN_LOW | UN_EMPTY))
+					dgnc_wake_up_unit(&ch->ch_tun);
 
-				if (ch->ch_pun.un_flags & (UN_LOW | UN_EMPTY)) {
-					ch->ch_pun.un_flags &=
-						~(UN_LOW | UN_EMPTY);
-					wake_up_interruptible(&ch->ch_pun.un_flags_wait);
-				}
+				if (ch->ch_pun.un_flags & (UN_LOW | UN_EMPTY))
+					dgnc_wake_up_unit(&ch->ch_pun);
 			}
 		}
 
@@ -2746,7 +2742,10 @@ static int dgnc_tty_ioctl(struct tty_struct *tty, unsigned int cmd,
 		buf.rxbuf = (ch->ch_r_head - ch->ch_r_tail) & RQUEUEMASK;
 		buf.txbuf = (ch->ch_w_head - ch->ch_w_tail) & WQUEUEMASK;
 
-		/* Is the UART empty? Add that value to whats in our TX queue. */
+		/*
+		 * Is the UART empty?
+		 * Add that value to whats in our TX queue.
+		 */
 
 		count = buf.txbuf + ch_bd_ops->get_uart_bytes_left(ch);
 
