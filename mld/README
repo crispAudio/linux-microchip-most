@@ -25,6 +25,13 @@ To see the build instructions:
 HISTORY OF CHANGES
 ==================
 
+mld-next
+--------
+
+- core: added automatic configuration ability, that allows to create the
+  configurations to automate and speed up the appearance of the devices
+
+
 mld-1.4.0
 ---------
 
