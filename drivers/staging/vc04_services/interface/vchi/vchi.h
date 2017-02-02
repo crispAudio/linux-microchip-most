@@ -219,13 +219,17 @@ extern int32_t vchi_service_set_option( const VCHI_SERVICE_HANDLE_T handle,
 					VCHI_SERVICE_OPTION_T option,
 					int value);
 
-// Routine to send a message across a service
-extern int32_t
-	vchi_msg_queue(VCHI_SERVICE_HANDLE_T handle,
-		       ssize_t (*copy_callback)(void *context, void *dest,
-						size_t offset, size_t maxsize),
-		       void *context,
-		       uint32_t data_size);
+/* Routine to send a message from kernel memory across a service */
+extern int
+vchi_queue_kernel_message(VCHI_SERVICE_HANDLE_T handle,
+			  void *data,
+			  unsigned int size);
+
+/* Routine to send a message from user memory across a service */
+extern int
+vchi_queue_user_message(VCHI_SERVICE_HANDLE_T handle,
+			void __user *data,
+			unsigned int size);
 
 // Routine to receive a msg from a service
 // Dequeue is equivalent to hold, copy into client buffer, release
