@@ -25,11 +25,15 @@ To see the build instructions:
 HISTORY OF CHANGES
 ==================
 
-mld-next
---------
+mld-1.5.0
+---------
 
 - core: added automatic configuration ability, that allows to create the
   configurations to automate and speed up the appearance of the devices
+- cdev-aim: the character device is destroyed by the disconnecting the channel,
+  i.e. the re-appeared channel may be immediately re-linked to the cdev with
+  the same name even if the application holds the file handle of the previous
+  character device
 
 
 mld-1.4.0
