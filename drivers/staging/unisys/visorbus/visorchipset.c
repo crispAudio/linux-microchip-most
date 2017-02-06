@@ -91,18 +91,6 @@ static struct cdev file_cdev;
 static struct visorchannel **file_controlvm_channel;
 
 static struct visorchannel *controlvm_channel;
-
-/* Manages the request payload in the controlvm channel */
-struct visor_controlvm_payload_info {
-	u8 *ptr;		/* pointer to base address of payload pool */
-	u64 offset;		/*
-				 * offset from beginning of controlvm
-				 * channel to beginning of payload * pool
-				 */
-	u32 bytes;		/* number of bytes in payload pool */
-};
-
-static struct visor_controlvm_payload_info controlvm_payload_info;
 static unsigned long controlvm_payload_bytes_buffered;
 
 /*
@@ -113,60 +101,6 @@ static unsigned long controlvm_payload_bytes_buffered;
  */
 static struct controlvm_message controlvm_pending_msg;
 static bool controlvm_pending_msg_valid;
-
-/*
- * This describes a buffer and its current state of transfer (e.g., how many
- * bytes have already been supplied as putfile data, and how many bytes are
- * remaining) for a putfile_request.
- */
-struct putfile_active_buffer {
-	/* a payload from a controlvm message, containing a file data buffer */
-	struct parser_context *parser_ctx;
-	/* points within data area of parser_ctx to next byte of data */
-	size_t bytes_remaining;
-};
-
-#define PUTFILE_REQUEST_SIG 0x0906101302281211
-/*
- * This identifies a single remote --> local CONTROLVM_TRANSMIT_FILE
- * conversation. Structs of this type are dynamically linked into
- * <Putfile_request_list>.
- */
-struct putfile_request {
-	u64 sig;		/* PUTFILE_REQUEST_SIG */
-
-	/* header from original TransmitFile request */
-	struct controlvm_message_header controlvm_header;
-
-	/* link to next struct putfile_request */
-	struct list_head next_putfile_request;
-
-	/*
-	 * head of putfile_buffer_entry list, which describes the data to be
-	 * supplied as putfile data;
-	 * - this list is added to when controlvm messages come in that supply
-	 * file data
-	 * - this list is removed from via the hotplug program that is actually
-	 * consuming these buffers to write as file data
-	 */
-	struct list_head input_buffer_list;
-	spinlock_t req_list_lock;	/* lock for input_buffer_list */
-
-	/* waiters for input_buffer_list to go non-empty */
-	wait_queue_head_t input_buffer_wq;
-
-	/* data not yet read within current putfile_buffer_entry */
-	struct putfile_active_buffer active_buf;
-
-	/*
-	 * <0 = failed, 0 = in-progress, >0 = successful;
-	 * note that this must be set with req_list_lock, and if you set <0,
-	 * it is your responsibility to also free up all of the other objects
-	 * in this struct (like input_buffer_list, active_buf.parser_ctx)
-	 * before releasing the lock
-	 */
-	int completion_status;
-};
 
 struct parahotplug_request {
 	struct list_head list;
@@ -399,6 +333,10 @@ parser_name_get(struct parser_context *ctx)
 	struct spar_controlvm_parameters_header *phdr = NULL;
 
 	phdr = (struct spar_controlvm_parameters_header *)(ctx->data);
+
+	if (phdr->name_offset + phdr->name_length > ctx->param_bytes)
+		return NULL;
+
 	ctx->curr = ctx->data + phdr->name_offset;
 	ctx->bytes_remaining = phdr->name_length;
 	return parser_string_get(ctx);
@@ -1051,82 +989,6 @@ err_respond:
 	return err;
 }
 
-/**
- * initialize_controlvm_payload_info() - init controlvm_payload_info struct
- * @phys_addr: the physical address of controlvm channel
- * @offset:    the offset to payload
- * @bytes:     the size of the payload in bytes
- * @info:      the returning valid struct
- *
- * When provided with the physical address of the controlvm channel
- * (phys_addr), the offset to the payload area we need to manage
- * (offset), and the size of this payload area (bytes), fills in the
- * controlvm_payload_info struct.
- *
- * Return: CONTROLVM_RESP_SUCCESS for success or a negative for failure
- */
-static int
-initialize_controlvm_payload_info(u64 phys_addr, u64 offset, u32 bytes,
-				  struct visor_controlvm_payload_info *info)
-{
-	u8 *payload = NULL;
-
-	if (!info)
-		return -CONTROLVM_RESP_PAYLOAD_INVALID;
-
-	if ((offset == 0) || (bytes == 0))
-		return -CONTROLVM_RESP_PAYLOAD_INVALID;
-
-	payload = memremap(phys_addr + offset, bytes, MEMREMAP_WB);
-	if (!payload)
-		return -CONTROLVM_RESP_IOREMAP_FAILED;
-
-	memset(info, 0, sizeof(struct visor_controlvm_payload_info));
-	info->offset = offset;
-	info->bytes = bytes;
-	info->ptr = payload;
-
-	return CONTROLVM_RESP_SUCCESS;
-}
-
-static void
-destroy_controlvm_payload_info(struct visor_controlvm_payload_info *info)
-{
-	if (info->ptr) {
-		memunmap(info->ptr);
-		info->ptr = NULL;
-	}
-	memset(info, 0, sizeof(struct visor_controlvm_payload_info));
-}
-
-static void
-initialize_controlvm_payload(void)
-{
-	u64 phys_addr = visorchannel_get_physaddr(controlvm_channel);
-	u64 payload_offset = 0;
-	u32 payload_bytes = 0;
-
-	if (visorchannel_read(controlvm_channel,
-			      offsetof(struct spar_controlvm_channel_protocol,
-				       request_payload_offset),
-			      &payload_offset, sizeof(payload_offset)) < 0) {
-		POSTCODE_LINUX(CONTROLVM_INIT_FAILURE_PC, 0, 0,
-			       DIAG_SEVERITY_ERR);
-		return;
-	}
-	if (visorchannel_read(controlvm_channel,
-			      offsetof(struct spar_controlvm_channel_protocol,
-				       request_payload_bytes),
-			      &payload_bytes, sizeof(payload_bytes)) < 0) {
-		POSTCODE_LINUX(CONTROLVM_INIT_FAILURE_PC, 0, 0,
-			       DIAG_SEVERITY_ERR);
-		return;
-	}
-	initialize_controlvm_payload_info(phys_addr,
-					  payload_offset, payload_bytes,
-					  &controlvm_payload_info);
-}
-
 /*
  * The general parahotplug flow works as follows. The visorchipset receives
  * a DEVICE_CHANGESTATE message from Command specifying a physical device
@@ -1431,22 +1293,33 @@ parahotplug_process_message(struct controlvm_message *inmsg)
 	}
 }
 
-/**
- * visorchipset_chipset_ready() - sends chipset_ready action
+/*
+ * chipset_ready_uevent() - sends chipset_ready action
  *
  * Send ACTION=online for DEVPATH=/sys/devices/platform/visorchipset.
  *
- * Return: CONTROLVM_RESP_SUCCESS
+ * Return: 0 on success, negative on failure
  */
 static int
-visorchipset_chipset_ready(void)
+chipset_ready_uevent(struct controlvm_message_header *msg_hdr)
 {
 	kobject_uevent(&visorchipset_platform_device.dev.kobj, KOBJ_ONLINE);
-	return CONTROLVM_RESP_SUCCESS;
+
+	if (msg_hdr->flags.response_expected)
+		return controlvm_respond(msg_hdr, CONTROLVM_RESP_SUCCESS);
+
+	return 0;
 }
 
+/*
+ * chipset_selftest_uevent() - sends chipset_selftest action
+ *
+ * Send ACTION=online for DEVPATH=/sys/devices/platform/visorchipset.
+ *
+ * Return: 0 on success, negative on failure
+ */
 static int
-visorchipset_chipset_selftest(void)
+chipset_selftest_uevent(struct controlvm_message_header *msg_hdr)
 {
 	char env_selftest[20];
 	char *envp[] = { env_selftest, NULL };
@@ -1454,54 +1327,29 @@ visorchipset_chipset_selftest(void)
 	sprintf(env_selftest, "SPARSP_SELFTEST=%d", 1);
 	kobject_uevent_env(&visorchipset_platform_device.dev.kobj, KOBJ_CHANGE,
 			   envp);
-	return CONTROLVM_RESP_SUCCESS;
+
+	if (msg_hdr->flags.response_expected)
+		return controlvm_respond(msg_hdr, CONTROLVM_RESP_SUCCESS);
+
+	return 0;
 }
 
-/**
- * visorchipset_chipset_notready() - sends chipset_notready action
+/*
+ * chipset_notready_uevent() - sends chipset_notready action
  *
  * Send ACTION=offline for DEVPATH=/sys/devices/platform/visorchipset.
  *
- * Return: CONTROLVM_RESP_SUCCESS
+ * Return: 0 on success, negative on failure
  */
 static int
-visorchipset_chipset_notready(void)
+chipset_notready_uevent(struct controlvm_message_header *msg_hdr)
 {
 	kobject_uevent(&visorchipset_platform_device.dev.kobj, KOBJ_OFFLINE);
-	return CONTROLVM_RESP_SUCCESS;
-}
 
-static void
-chipset_ready(struct controlvm_message_header *msg_hdr)
-{
-	int rc = visorchipset_chipset_ready();
-
-	if (rc != CONTROLVM_RESP_SUCCESS)
-		rc = -rc;
 	if (msg_hdr->flags.response_expected)
-		controlvm_respond(msg_hdr, rc);
-}
+		return controlvm_respond(msg_hdr, CONTROLVM_RESP_SUCCESS);
 
-static void
-chipset_selftest(struct controlvm_message_header *msg_hdr)
-{
-	int rc = visorchipset_chipset_selftest();
-
-	if (rc != CONTROLVM_RESP_SUCCESS)
-		rc = -rc;
-	if (msg_hdr->flags.response_expected)
-		controlvm_respond(msg_hdr, rc);
-}
-
-static void
-chipset_notready(struct controlvm_message_header *msg_hdr)
-{
-	int rc = visorchipset_chipset_notready();
-
-	if (rc != CONTROLVM_RESP_SUCCESS)
-		rc = -rc;
-	if (msg_hdr->flags.response_expected)
-		controlvm_respond(msg_hdr, rc);
+	return 0;
 }
 
 static inline unsigned int
@@ -1963,13 +1811,13 @@ handle_command(struct controlvm_message inmsg, u64 channel_addr)
 			controlvm_respond(&inmsg.hdr, CONTROLVM_RESP_SUCCESS);
 		break;
 	case CONTROLVM_CHIPSET_READY:
-		chipset_ready(&inmsg.hdr);
+		chipset_ready_uevent(&inmsg.hdr);
 		break;
 	case CONTROLVM_CHIPSET_SELFTEST:
-		chipset_selftest(&inmsg.hdr);
+		chipset_selftest_uevent(&inmsg.hdr);
 		break;
 	case CONTROLVM_CHIPSET_STOP:
-		chipset_notready(&inmsg.hdr);
+		chipset_notready_uevent(&inmsg.hdr);
 		break;
 	default:
 		if (inmsg.hdr.flags.response_expected)
@@ -2120,17 +1968,14 @@ visorchipset_init(struct acpi_device *acpi_device)
 	if (!controlvm_channel)
 		goto error;
 
-	if (SPAR_CONTROLVM_CHANNEL_OK_CLIENT(
-		    visorchannel_get_header(controlvm_channel))) {
-		initialize_controlvm_payload();
-	} else {
+	if (!SPAR_CONTROLVM_CHANNEL_OK_CLIENT(
+				visorchannel_get_header(controlvm_channel)))
 		goto error_destroy_channel;
-	}
 
 	major_dev = MKDEV(visorchipset_major, 0);
 	err = visorchipset_file_init(major_dev, &controlvm_channel);
 	if (err < 0)
-		goto error_destroy_payload;
+		goto error_destroy_channel;
 
 	/* if booting in a crash kernel */
 	if (is_kdump_kernel())
@@ -2166,9 +2011,6 @@ error_cancel_work:
 	cancel_delayed_work_sync(&periodic_controlvm_work);
 	visorchipset_file_cleanup(major_dev);
 
-error_destroy_payload:
-	destroy_controlvm_payload_info(&controlvm_payload_info);
-
 error_destroy_channel:
 	visorchannel_destroy(controlvm_channel);
 
@@ -2185,7 +2027,6 @@ visorchipset_exit(struct acpi_device *acpi_device)
 	visorbus_exit();
 
 	cancel_delayed_work_sync(&periodic_controlvm_work);
-	destroy_controlvm_payload_info(&controlvm_payload_info);
 
 	visorchannel_destroy(controlvm_channel);
 

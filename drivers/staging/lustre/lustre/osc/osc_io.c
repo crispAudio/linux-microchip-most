@@ -99,6 +99,7 @@ static int osc_io_read_ahead(const struct lu_env *env,
 			ldlm_lock_decref(&lockh, dlmlock->l_req_mode);
 		}
 
+		ra->cra_rpc_size = osc_cli(osc)->cl_max_pages_per_rpc;
 		ra->cra_end = cl_index(osc2cl(osc),
 				       dlmlock->l_policy_data.l_extent.end);
 		ra->cra_release = osc_read_ahead_release;
@@ -138,7 +139,7 @@ static int osc_io_submit(const struct lu_env *env,
 
 	LASSERT(qin->pl_nr > 0);
 
-	CDEBUG(D_CACHE, "%d %d\n", qin->pl_nr, crt);
+	CDEBUG(D_CACHE | D_READA, "%d %d\n", qin->pl_nr, crt);
 
 	osc = cl2osc(ios->cis_obj);
 	cli = osc_cli(osc);
@@ -208,6 +209,18 @@ static int osc_io_submit(const struct lu_env *env,
 
 	if (queued > 0)
 		result = osc_queue_sync_pages(env, osc, &list, cmd, brw_flags);
+
+	/* Update c/mtime for sync write. LU-7310 */
+	if (qout->pl_nr > 0 && !result) {
+		struct cl_attr *attr = &osc_env_info(env)->oti_attr;
+		struct cl_object *obj = ios->cis_obj;
+
+		cl_object_attr_lock(obj);
+		attr->cat_mtime = LTIME_S(CURRENT_TIME);
+		attr->cat_ctime = attr->cat_mtime;
+		cl_object_attr_update(env, obj, attr, CAT_MTIME | CAT_CTIME);
+		cl_object_attr_unlock(obj);
+	}
 
 	CDEBUG(D_INFO, "%d/%d %d\n", qin->pl_nr, qout->pl_nr, result);
 	return qout->pl_nr > 0 ? 0 : result;
@@ -699,7 +712,7 @@ static int osc_io_data_version_start(const struct lu_env *env,
 
 	ptlrpc_request_set_replen(req);
 	req->rq_interpret_reply = osc_data_version_interpret;
-	CLASSERT(sizeof(*dva) <= sizeof(req->rq_async_args));
+	BUILD_BUG_ON(sizeof(*dva) > sizeof(req->rq_async_args));
 	dva = ptlrpc_req_async_args(req);
 	dva->dva_oio = oio;
 

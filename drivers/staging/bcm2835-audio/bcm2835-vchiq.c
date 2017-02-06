@@ -22,7 +22,7 @@
 #include <linux/file.h>
 #include <linux/mm.h>
 #include <linux/syscalls.h>
-#include <asm/uaccess.h>
+#include <linux/uaccess.h>
 #include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/atomic.h>
@@ -44,15 +44,15 @@
 
 /* Logging macros (for remapping to other logging mechanisms, i.e., printf) */
 #ifdef AUDIO_DEBUG_ENABLE
-#define LOG_ERR( fmt, arg... )   pr_err( "%s:%d " fmt, __func__, __LINE__, ##arg)
-#define LOG_WARN( fmt, arg... )  pr_info( "%s:%d " fmt, __func__, __LINE__, ##arg)
-#define LOG_INFO( fmt, arg... )  pr_info( "%s:%d " fmt, __func__, __LINE__, ##arg)
-#define LOG_DBG( fmt, arg... )   pr_info( "%s:%d " fmt, __func__, __LINE__, ##arg)
+#define LOG_ERR(fmt, arg...)   pr_err("%s:%d " fmt, __func__, __LINE__, ##arg)
+#define LOG_WARN(fmt, arg...)  pr_info("%s:%d " fmt, __func__, __LINE__, ##arg)
+#define LOG_INFO(fmt, arg...)  pr_info("%s:%d " fmt, __func__, __LINE__, ##arg)
+#define LOG_DBG(fmt, arg...)   pr_info("%s:%d " fmt, __func__, __LINE__, ##arg)
 #else
-#define LOG_ERR( fmt, arg... )   pr_err( "%s:%d " fmt, __func__, __LINE__, ##arg)
-#define LOG_WARN( fmt, arg... )
-#define LOG_INFO( fmt, arg... )
-#define LOG_DBG( fmt, arg... )
+#define LOG_ERR(fmt, arg...)   pr_err("%s:%d " fmt, __func__, __LINE__, ##arg)
+#define LOG_WARN(fmt, arg...)	 no_printk(fmt, ##arg)
+#define LOG_INFO(fmt, arg...)	 no_printk(fmt, ##arg)
+#define LOG_DBG(fmt, arg...)	 no_printk(fmt, ##arg)
 #endif
 
 struct bcm2835_audio_instance {
@@ -81,28 +81,19 @@ static int bcm2835_audio_write_worker(struct bcm2835_alsa_stream *alsa_stream,
 
 // Routine to send a message across a service
 
-static ssize_t
-bcm2835_vchi_msg_queue_callback(void *context, void *dest,
-				size_t offset, size_t maxsize)
-{
-	memcpy(dest, context + offset, maxsize);
-	return maxsize;
-}
-
 static int
 bcm2835_vchi_msg_queue(VCHI_SERVICE_HANDLE_T handle,
 		       void *data,
 		       unsigned int size)
 {
-	return vchi_msg_queue(handle,
-			      bcm2835_vchi_msg_queue_callback,
-			      data,
-			      size);
+	return vchi_queue_kernel_message(handle,
+					 data,
+					 size);
 }
 
-static const u32 BCM2835_AUDIO_WRITE_COOKIE1 = ('B' << 24 | 'C' << 16 ||
+static const u32 BCM2835_AUDIO_WRITE_COOKIE1 = ('B' << 24 | 'C' << 16 |
 						'M' << 8  | 'A');
-static const u32 BCM2835_AUDIO_WRITE_COOKIE2 = ('D' << 24 | 'A' << 16 ||
+static const u32 BCM2835_AUDIO_WRITE_COOKIE2 = ('D' << 24 | 'A' << 16 |
 						'T' << 8  | 'A');
 
 struct bcm2835_audio_work {

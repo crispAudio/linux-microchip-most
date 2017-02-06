@@ -287,6 +287,8 @@ struct client_obd {
 	 * the transaction has NOT yet committed.
 	 */
 	atomic_long_t		 cl_unstable_count;
+	/** Link to osc_shrinker_list */
+	struct list_head	 cl_shrink_list;
 
 	/* number of in flight destroy rpcs is limited to max_rpcs_in_flight */
 	atomic_t	     cl_destroy_in_flight;
@@ -401,18 +403,10 @@ struct lmv_tgt_desc {
 	unsigned long		ltd_active:1; /* target up for requests */
 };
 
-enum placement_policy {
-	PLACEMENT_CHAR_POLICY   = 0,
-	PLACEMENT_NID_POLICY    = 1,
-	PLACEMENT_INVAL_POLICY  = 2,
-	PLACEMENT_MAX_POLICY
-};
-
 struct lmv_obd {
 	int			refcount;
 	struct lu_client_fld	lmv_fld;
 	spinlock_t		lmv_lock;
-	enum placement_policy	lmv_placement;
 	struct lmv_desc		desc;
 	struct obd_uuid		cluuid;
 	struct obd_export	*exp;
@@ -481,16 +475,12 @@ struct niobuf_local {
  * Events signalled through obd_notify() upcall-chain.
  */
 enum obd_notify_event {
-	/* target added */
-	OBD_NOTIFY_CREATE,
 	/* Device connect start */
 	OBD_NOTIFY_CONNECT,
 	/* Device activated */
 	OBD_NOTIFY_ACTIVE,
 	/* Device deactivated */
 	OBD_NOTIFY_INACTIVE,
-	/* Device disconnected */
-	OBD_NOTIFY_DISCON,
 	/* Connect data for import were changed */
 	OBD_NOTIFY_OCD,
 	/* Sync request */
@@ -761,6 +751,7 @@ struct md_enqueue_info {
 	struct lookup_intent    mi_it;
 	struct lustre_handle    mi_lockh;
 	struct inode	   *mi_dir;
+	struct ldlm_enqueue_info	mi_einfo;
 	int (*mi_cb)(struct ptlrpc_request *req,
 		     struct md_enqueue_info *minfo, int rc);
 	void			*mi_cbdata;
@@ -978,8 +969,7 @@ struct md_ops {
 				struct lu_fid *fid);
 
 	int (*intent_getattr_async)(struct obd_export *,
-				    struct md_enqueue_info *,
-				    struct ldlm_enqueue_info *);
+				    struct md_enqueue_info *);
 
 	int (*revalidate_lock)(struct obd_export *, struct lookup_intent *,
 			       struct lu_fid *, __u64 *bits);

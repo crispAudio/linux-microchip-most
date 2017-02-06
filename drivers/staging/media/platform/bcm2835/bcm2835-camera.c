@@ -1312,7 +1312,7 @@ static int vidioc_s_fmt_vid_cap(struct file *file, void *priv,
 	return ret;
 }
 
-int vidioc_enum_framesizes(struct file *file, void *fh,
+static int vidioc_enum_framesizes(struct file *file, void *fh,
 			   struct v4l2_frmsizeenum *fsize)
 {
 	struct bm2835_mmal_dev *dev = video_drvdata(file);
@@ -1842,7 +1842,7 @@ static int __init bm2835_mmal_init_device(struct bm2835_mmal_dev *dev,
 	return 0;
 }
 
-void bcm2835_cleanup_instance(struct bm2835_mmal_dev *dev)
+static void bcm2835_cleanup_instance(struct bm2835_mmal_dev *dev)
 {
 	if (!dev)
 		return;

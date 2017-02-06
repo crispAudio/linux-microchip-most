@@ -114,9 +114,9 @@ int osc_enqueue_base(struct obd_export *exp, struct ldlm_res_id *res_id,
 		     struct ptlrpc_request_set *rqset, int async, int agl);
 
 int osc_match_base(struct obd_export *exp, struct ldlm_res_id *res_id,
-		   __u32 type, union ldlm_policy_data *policy, __u32 mode,
-		   __u64 *flags, void *data, struct lustre_handle *lockh,
-		   int unref);
+		   enum ldlm_type type, union ldlm_policy_data *policy,
+		   enum ldlm_mode mode, __u64 *flags, void *data,
+		   struct lustre_handle *lockh, int unref);
 
 int osc_setattr_async(struct obd_export *exp, struct obdo *oa,
 		      obd_enqueue_update_f upcall, void *cookie,
@@ -221,5 +221,14 @@ struct ldlm_lock *osc_dlmlock_at_pgoff(const struct lu_env *env,
 				       enum osc_dap_flags flags);
 
 int osc_object_invalidate(const struct lu_env *env, struct osc_object *osc);
+
+/** osc shrink list to link all osc client obd */
+extern struct list_head osc_shrink_list;
+/** spin lock to protect osc_shrink_list */
+extern spinlock_t osc_shrink_lock;
+unsigned long osc_cache_shrink_count(struct shrinker *sk,
+				     struct shrink_control *sc);
+unsigned long osc_cache_shrink_scan(struct shrinker *sk,
+				    struct shrink_control *sc);
 
 #endif /* OSC_INTERNAL_H */
