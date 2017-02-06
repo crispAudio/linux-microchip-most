@@ -93,8 +93,10 @@ local_fetch() {
 	get_patch backport__hdm-dim2__add_module_owner.patch
 	get_patch backport__hdm-i2c__add_module_owner.patch
 	get_patch backport__sound__snd_card_new.patch
+	get_patch backport__sound__snd_pcm_set_ops.patch
 	get_patch backport__networking__alloc_netdev.patch
 	get_patch backport__networking__ether_addr_copy.patch
+	get_patch backport__networking__ether_addr_equal.patch
 	get_patch backport__hdm-dim2__devm_ioremap_resource.patch
 
 	# apply the universal patches only
