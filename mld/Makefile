@@ -8,49 +8,50 @@ ifndef KDIR
     KDIR=/lib/modules/$(shell uname -r)/build/
 endif
 
-obj-m := .bin/mostcore.o
-.bin/mostcore-y := .src/mostcore/core.o
+obj-m := mostcore.o
+mostcore-y := .src/mostcore/core.o
 
-obj-m += .bin/aim_cdev.o
-.bin/aim_cdev-y := .src/aim-cdev/cdev.o
+obj-m += default_conf.o
+default_conf-y := .src/mostcore/default_conf.o
+
+obj-m += aim_cdev.o
+aim_cdev-y := .src/aim-cdev/cdev.o
 CFLAGS_cdev.o := -I$(src)/.src/mostcore
 
-obj-m += .bin/aim_network.o
-.bin/aim_network-y := .src/aim-network/networking.o
+obj-m += aim_network.o
+aim_network-y := .src/aim-network/networking.o
 CFLAGS_networking.o := -I$(src)/.src/mostcore
 
-obj-m += .bin/aim_sound.o
-.bin/aim_sound-y := .src/aim-sound/sound.o
+obj-m += aim_sound.o
+aim_sound-y := .src/aim-sound/sound.o
 CFLAGS_sound.o := -I$(src)/.src/mostcore
 
-obj-m += .bin/aim_v4l2.o
-.bin/aim_v4l2-y := .src/aim-v4l2/video.o
+obj-m += aim_v4l2.o
+aim_v4l2-y := .src/aim-v4l2/video.o
 CFLAGS_video.o := -Idrivers/media/video -I$(src)/.src/mostcore
 
-obj-m += .bin/hdm_i2c.o .bin/hdm_i2c_pd.o
-.bin/hdm_i2c-y := .src/hdm-i2c/hdm_i2c.o
-.bin/hdm_i2c_pd-y := .src/hdm-i2c/platform/plat_imx6q.o
+obj-m += hdm_i2c.o hdm_i2c_pd.o
+hdm_i2c-y := .src/hdm-i2c/hdm_i2c.o
+hdm_i2c_pd-y := .src/hdm-i2c/platform/plat_imx6q.o
 CFLAGS_hdm_i2c.o := -I$(src)/.src/mostcore
 
-obj-m += .bin/hdm_dim2.o .bin/hdm_dim2_pd.o
-.bin/hdm_dim2-y := .src/hdm-dim2/dim2_hdm.o .src/hdm-dim2/dim2_hal.o .src/hdm-dim2/dim2_sysfs.o
-.bin/hdm_dim2_pd-y := .src/hdm-dim2/platform/dim2_mx6q_dt.o
+obj-m += hdm_dim2.o hdm_dim2_pd.o
+hdm_dim2-y := .src/hdm-dim2/dim2_hdm.o .src/hdm-dim2/dim2_hal.o .src/hdm-dim2/dim2_sysfs.o
+hdm_dim2_pd-y := .src/hdm-dim2/platform/dim2_mx6q_dt.o
 CFLAGS_dim2_hdm.o := -I$(src)/.src/mostcore -I$(src)/.src/aim-network
 
-obj-m += .bin/hdm_usb.o
-.bin/hdm_usb-y := .src/hdm-usb/hdm_usb.o
+obj-m += hdm_usb.o
+hdm_usb-y := .src/hdm-usb/hdm_usb.o
 CFLAGS_hdm_usb.o := -I$(src)/.src/mostcore -I$(src)/.src/aim-network
 
 
 PWD := $(shell pwd)
 
 modules:
-	mkdir -p .bin
 	$(MAKE) -C $(KDIR) M=$(PWD) modules
 
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) clean
-	rmdir .bin
 
 help:
 	@echo 'USAGE'
@@ -64,12 +65,12 @@ help:
 	@echo 'Environment variables'
 	@echo '====================='
 	@echo ''
-	@echo 'ARCH defines target architecture.'
+	@echo 'ARCH defines the target architecture.'
 	@echo ''
-	@echo 'CROSS_COMPILE defines binutils prefix.'
+	@echo 'CROSS_COMPILE defines the binutils prefix.'
 	@echo ''
-	@echo 'KDIR defines path to kernel sources.'
-	@echo 'If KDIR is not defined then it is set to /lib/modules/$$(shell uname -r)/build/'
+	@echo 'KDIR defines the path to the kernel sources.'
+	@echo 'Default: /lib/modules/$$(uname -r)/build/'
 	@echo ''
 	@echo 'EXAMPLES'
 	@echo '========'
