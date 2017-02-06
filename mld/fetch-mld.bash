@@ -88,6 +88,7 @@ local_fetch() {
 	get_src hdm-i2s/configure.sh
 	get_src hdm-usb/hdm_usb.c
 	get_src mostcore/core.c
+	get_src mostcore/default_conf.c
 	get_src mostcore/mostcore.h
 
 	get_patch backport__hdm-dim2__add_module_owner.patch
