@@ -125,7 +125,7 @@ main() {
 	echo "add version info ..."
 
 	if which git >/dev/null; then
-		LABEL="$(git ls-remote $GIT_REPO |grep "/mchp-dev$" |sed "s,\s.*,,")"
+		LABEL="$(git ls-remote $GIT_REPO |grep "/${TAG}$" |sed "s,\s.*,,")"
 	else
 		LABEL="$(date --rfc-3339=seconds)"
 	fi
