@@ -198,7 +198,7 @@ static int icmp6_checksum(struct ipv6hdr *ipv6, u16 *ptr, int len)
 	memset(&pseudo_header, 0, sizeof(pseudo_header));
 	memcpy(&pseudo_header.ph.ph_src, &ipv6->saddr.in6_u.u6_addr8, 16);
 	memcpy(&pseudo_header.ph.ph_dst, &ipv6->daddr.in6_u.u6_addr8, 16);
-	pseudo_header.ph.ph_len = ipv6->payload_len;
+	pseudo_header.ph.ph_len = be16_to_cpu(ipv6->payload_len);
 	pseudo_header.ph.ph_nxt = ipv6->nexthdr;
 
 	w = (u16 *)&pseudo_header;
@@ -560,13 +560,13 @@ void gdm_lte_event_exit(void)
 	}
 }
 
-static u8 find_dev_index(u32 nic_type)
+static int find_dev_index(u32 nic_type)
 {
 	u8 index;
 
 	index = (u8)(nic_type & 0x0000000f);
-	if (index > MAX_NIC_TYPE)
-		index = 0;
+	if (index >= MAX_NIC_TYPE)
+		return -EINVAL;
 
 	return index;
 }
@@ -695,7 +695,7 @@ static void gdm_lte_multi_sdu_pkt(struct phy_dev *phy_dev, char *buf, int len)
 	u16 hci_len;
 	u16 cmd_evt;
 	u32 nic_type;
-	u8 index;
+	int index;
 
 	hci_len = gdm_dev16_to_cpu(endian, multi_sdu->len);
 	num_packet = gdm_dev16_to_cpu(endian, multi_sdu->num_packet);
@@ -717,13 +717,13 @@ static void gdm_lte_multi_sdu_pkt(struct phy_dev *phy_dev, char *buf, int len)
 		}
 
 		index = find_dev_index(nic_type);
-		if (index < MAX_NIC_TYPE) {
-			dev = phy_dev->dev[index];
-			gdm_lte_netif_rx(dev, (char *)sdu->data,
-					 (int)(hci_len - 12), nic_type);
-		} else {
+		if (index < 0) {
 			pr_err("rx sdu invalid nic_type :%x\n", nic_type);
+			return;
 		}
+		dev = phy_dev->dev[index];
+		gdm_lte_netif_rx(dev, (char *)sdu->data,
+				 (int)(hci_len - 12), nic_type);
 
 		data += ((hci_len + 3) & 0xfffc) + HCI_HEADER_SIZE;
 	}
@@ -763,7 +763,7 @@ static int gdm_lte_receive_pkt(struct phy_dev *phy_dev, char *buf, int len)
 	int ret = 0;
 	u16 cmd_evt;
 	u32 nic_type;
-	u8 index;
+	int index;
 
 	if (!len)
 		return ret;
@@ -779,6 +779,8 @@ static int gdm_lte_receive_pkt(struct phy_dev *phy_dev, char *buf, int len)
 		sdu = (struct sdu *)hci->data;
 		nic_type = gdm_dev32_to_cpu(endian, sdu->nic_type);
 		index = find_dev_index(nic_type);
+		if (index < 0)
+			return index;
 		dev = phy_dev->dev[index];
 		gdm_lte_netif_rx(dev, hci->data, len, nic_type);
 		break;
@@ -794,6 +796,8 @@ static int gdm_lte_receive_pkt(struct phy_dev *phy_dev, char *buf, int len)
 		pdn_table = (struct hci_pdn_table_ind *)buf;
 		nic_type = gdm_dev32_to_cpu(endian, pdn_table->nic_type);
 		index = find_dev_index(nic_type);
+		if (index < 0)
+			return index;
 		dev = phy_dev->dev[index];
 		gdm_lte_pdn_table(dev, buf, len);
 		/* Fall through */

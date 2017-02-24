@@ -130,7 +130,7 @@ static int snd_bcm2835_playback_open_generic(
 		err = -EBUSY;
 		goto out;
 	}
-	if (idx > MAX_SUBSTREAMS) {
+	if (idx >= MAX_SUBSTREAMS) {
 		audio_error
 			("substream(%d) device doesn't exist max(%d) substreams allowed\n",
 			idx, MAX_SUBSTREAMS);
@@ -450,6 +450,7 @@ static int snd_bcm2835_pcm_lib_ioctl(struct snd_pcm_substream *substream,
 	unsigned int cmd, void *arg)
 {
 	int ret = snd_pcm_lib_ioctl(substream, cmd, arg);
+
 	audio_info(" .. substream=%p, cmd=%d, arg=%p (%x) ret=%d\n", substream,
 		cmd, arg, arg ? *(unsigned *) arg : 0, ret);
 	return ret;

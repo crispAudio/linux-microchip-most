@@ -2626,18 +2626,18 @@ int ll_migrate(struct inode *parent, struct file *file, int mdtidx,
 		       ll_get_fsname(parent->i_sb, NULL, 0), name,
 		       PFID(&op_data->op_fid3));
 		rc = -EINVAL;
-		goto out_free;
+		goto out_unlock;
 	}
 
 	rc = ll_get_mdt_idx_by_fid(ll_i2sbi(parent), &op_data->op_fid3);
 	if (rc < 0)
-		goto out_free;
+		goto out_unlock;
 
 	if (rc == mdtidx) {
 		CDEBUG(D_INFO, "%s:"DFID" is already on MDT%d.\n", name,
 		       PFID(&op_data->op_fid3), mdtidx);
 		rc = 0;
-		goto out_free;
+		goto out_unlock;
 	}
 again:
 	if (S_ISREG(child_inode->i_mode)) {
@@ -2645,13 +2645,13 @@ again:
 		if (IS_ERR(och)) {
 			rc = PTR_ERR(och);
 			och = NULL;
-			goto out_free;
+			goto out_unlock;
 		}
 
 		rc = ll_data_version(child_inode, &data_version,
 				     LL_DV_WR_FLUSH);
 		if (rc)
-			goto out_free;
+			goto out_close;
 
 		op_data->op_handle = och->och_fh;
 		op_data->op_data = och->och_mod;
@@ -2664,40 +2664,45 @@ again:
 	op_data->op_cli_flags = CLI_MIGRATE;
 	rc = md_rename(ll_i2sbi(parent)->ll_md_exp, op_data, name,
 		       namelen, name, namelen, &request);
-	if (!rc)
+	if (!rc) {
+		LASSERT(request);
 		ll_update_times(request, parent);
 
-	body = req_capsule_server_get(&request->rq_pill, &RMF_MDT_BODY);
-	if (!body) {
-		rc = -EPROTO;
-		goto out_free;
+		body = req_capsule_server_get(&request->rq_pill, &RMF_MDT_BODY);
+		LASSERT(body);
+
+		/*
+		 * If the server does release layout lock, then we cleanup
+		 * the client och here, otherwise release it in out_close:
+		 */
+		if (och && body->mbo_valid & OBD_MD_CLOSE_INTENT_EXECED) {
+			obd_mod_put(och->och_mod);
+			md_clear_open_replay_data(ll_i2sbi(parent)->ll_md_exp,
+						  och);
+			och->och_fh.cookie = DEAD_HANDLE_MAGIC;
+			kfree(och);
+			och = NULL;
+		}
 	}
 
-	/*
-	 * If the server does release layout lock, then we cleanup
-	 * the client och here, otherwise release it in out_free:
-	 */
-	if (och && body->mbo_valid & OBD_MD_CLOSE_INTENT_EXECED) {
-		obd_mod_put(och->och_mod);
-		md_clear_open_replay_data(ll_i2sbi(parent)->ll_md_exp, och);
-		och->och_fh.cookie = DEAD_HANDLE_MAGIC;
-		kfree(och);
-		och = NULL;
+	if (request) {
+		ptlrpc_req_finished(request);
+		request = NULL;
 	}
 
-	ptlrpc_req_finished(request);
 	/* Try again if the file layout has changed. */
 	if (rc == -EAGAIN && S_ISREG(child_inode->i_mode))
 		goto again;
-out_free:
-	if (child_inode) {
-		if (och) /* close the file */
-			ll_lease_close(och, child_inode, NULL);
-		clear_nlink(child_inode);
-		inode_unlock(child_inode);
-		iput(child_inode);
-	}
 
+out_close:
+	if (och) /* close the file */
+		ll_lease_close(och, child_inode, NULL);
+	if (!rc)
+		clear_nlink(child_inode);
+out_unlock:
+	inode_unlock(child_inode);
+	iput(child_inode);
+out_free:
 	ll_finish_md_op_data(op_data);
 	return rc;
 }

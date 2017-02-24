@@ -1085,7 +1085,8 @@ static void apb_log_get(struct es2_ap_dev *es2, char *buf)
 		retval = usb_control_msg(es2->usb_dev,
 					usb_rcvctrlpipe(es2->usb_dev, 0),
 					GB_APB_REQUEST_LOG,
-					USB_DIR_IN | USB_TYPE_VENDOR | USB_RECIP_INTERFACE,
+					USB_DIR_IN | USB_TYPE_VENDOR |
+					USB_RECIP_INTERFACE,
 					0x00, 0x00,
 					buf,
 					APB1_LOG_MSG_SIZE,
@@ -1151,7 +1152,7 @@ static void usb_log_enable(struct es2_ap_dev *es2)
 	if (IS_ERR(es2->apb_log_task))
 		return;
 	/* XXX We will need to rename this per APB */
-	es2->apb_log_dentry = debugfs_create_file("apb_log", S_IRUGO,
+	es2->apb_log_dentry = debugfs_create_file("apb_log", 0444,
 						gb_debugfs_get(), es2,
 						&apb_log_fops);
 }
@@ -1408,7 +1409,7 @@ static int ap_probe(struct usb_interface *interface,
 
 	/* XXX We will need to rename this per APB */
 	es2->apb_log_enable_dentry = debugfs_create_file("apb_log_enable",
-							(S_IWUSR | S_IRUGO),
+							0644,
 							gb_debugfs_get(), es2,
 							&apb_log_enable_fops);
 

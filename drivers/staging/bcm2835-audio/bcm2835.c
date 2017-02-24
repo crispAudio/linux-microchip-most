@@ -28,8 +28,8 @@
  * to debug if we run into issues
  */
 
-static struct snd_card *g_card = NULL;
-static struct bcm2835_chip *g_chip = NULL;
+static struct snd_card *g_card;
+static struct bcm2835_chip *g_chip;
 
 static int snd_bcm2835_free(struct bcm2835_chip *chip)
 {
@@ -49,8 +49,8 @@ static int snd_bcm2835_dev_free(struct snd_device *device)
  * (see "Management of Cards and Components")
  */
 static int snd_bcm2835_create(struct snd_card *card,
-	struct platform_device *pdev,
-	struct bcm2835_chip ** rchip)
+			      struct platform_device *pdev,
+			      struct bcm2835_chip **rchip)
 {
 	struct bcm2835_chip *chip;
 	int err;
@@ -61,7 +61,7 @@ static int snd_bcm2835_create(struct snd_card *card,
 	*rchip = NULL;
 
 	chip = kzalloc(sizeof(*chip), GFP_KERNEL);
-	if (chip == NULL)
+	if (!chip)
 		return -ENOMEM;
 
 	chip->card = card;
@@ -85,7 +85,7 @@ static int snd_bcm2835_alsa_probe_dt(struct platform_device *pdev)
 	int err, i;
 
 	err = of_property_read_u32(dev->of_node, "brcm,pwm-channels",
-		&numchans);
+				   &numchans);
 	if (err) {
 		dev_err(dev, "Failed to get DT property 'brcm,pwm-channels'");
 		return err;
@@ -94,7 +94,7 @@ static int snd_bcm2835_alsa_probe_dt(struct platform_device *pdev)
 	if (numchans == 0 || numchans > MAX_SUBSTREAMS) {
 		numchans = MAX_SUBSTREAMS;
 		dev_warn(dev, "Illegal 'brcm,pwm-channels' value, will use %u\n",
-			numchans);
+			 numchans);
 	}
 
 	err = snd_card_new(&pdev->dev, -1, NULL, THIS_MODULE, 0, &card);
@@ -139,7 +139,7 @@ static int snd_bcm2835_alsa_probe_dt(struct platform_device *pdev)
 
 	err = snd_card_register(card);
 	if (err) {
-		dev_err(dev, "Failed to register bcm2835 ALSA card \n");
+		dev_err(dev, "Failed to register bcm2835 ALSA card\n");
 		goto err_free;
 	}
 
@@ -163,7 +163,7 @@ static int snd_bcm2835_alsa_remove(struct platform_device *pdev)
 
 	drv_data = platform_get_drvdata(pdev);
 
-	if (drv_data == (void *) g_card) {
+	if (drv_data == (void *)g_card) {
 		/* This is the card device */
 		snd_card_free((struct snd_card *)drv_data);
 		g_card = NULL;
@@ -194,7 +194,7 @@ static int snd_bcm2835_alsa_remove(struct platform_device *pdev)
 #ifdef CONFIG_PM
 
 static int snd_bcm2835_alsa_suspend(struct platform_device *pdev,
-	pm_message_t state)
+				    pm_message_t state)
 {
 	return 0;
 }
@@ -219,8 +219,7 @@ static struct platform_driver bcm2835_alsa0_driver = {
 	.suspend = snd_bcm2835_alsa_suspend,
 	.resume = snd_bcm2835_alsa_resume,
 #endif
-	.driver =
-	{
+	.driver = {
 		.name = "bcm2835_AUD0",
 		.owner = THIS_MODULE,
 		.of_match_table = snd_bcm2835_of_match_table,
@@ -229,14 +228,13 @@ static struct platform_driver bcm2835_alsa0_driver = {
 
 static int bcm2835_alsa_device_init(void)
 {
-	int err;
-	err = platform_driver_register(&bcm2835_alsa0_driver);
-	if (err) {
-		pr_err("Error registering bcm2835_alsa0_driver %d .\n", err);
-		return err;
-	}
+	int retval;
 
-	return 0;
+	retval = platform_driver_register(&bcm2835_alsa0_driver);
+	if (retval)
+		pr_err("Error registering bcm2835_alsa0_driver %d .\n", retval);
+
+	return retval;
 }
 
 static void bcm2835_alsa_device_exit(void)

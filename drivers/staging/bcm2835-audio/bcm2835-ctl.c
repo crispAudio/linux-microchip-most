@@ -164,8 +164,7 @@ static struct snd_kcontrol_new snd_bcm2835_ctl[] = {
 		.get = snd_bcm2835_ctl_get,
 		.put = snd_bcm2835_ctl_put,
 		.count = 1,
-		.tlv =
-		{.p = snd_bcm2835_db_scale}
+		.tlv = {.p = snd_bcm2835_db_scale}
 	},
 	{
 		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
@@ -210,7 +209,7 @@ static int snd_bcm2835_spdif_default_get(struct snd_kcontrol *kcontrol,
 
 	for (i = 0; i < 4; i++)
 		ucontrol->value.iec958.status[i] =
-		(chip->spdif_status >> (i * 8)) && 0xff;
+			(chip->spdif_status >> (i * 8)) & 0xff;
 
 	mutex_unlock(&chip->audio_mutex);
 	return 0;
