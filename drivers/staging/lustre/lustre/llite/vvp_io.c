@@ -219,6 +219,7 @@ static int vvp_io_one_lock_index(const struct lu_env *env, struct cl_io *io,
 	if (vio->vui_fd && (vio->vui_fd->fd_flags & LL_FILE_GROUP_LOCKED)) {
 		descr->cld_mode = CLM_GROUP;
 		descr->cld_gid  = vio->vui_fd->fd_grouplock.lg_gid;
+		enqflags |= CEF_LOCK_MATCH;
 	} else {
 		descr->cld_mode  = mode;
 	}
@@ -1014,7 +1015,7 @@ static int vvp_io_kernel_fault(struct vvp_fault_io *cfio)
 {
 	struct vm_fault *vmf = cfio->ft_vmf;
 
-	cfio->ft_flags = filemap_fault(cfio->ft_vma, vmf);
+	cfio->ft_flags = filemap_fault(vmf);
 	cfio->ft_flags_valid = 1;
 
 	if (vmf->page) {

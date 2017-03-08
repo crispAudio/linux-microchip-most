@@ -19,7 +19,7 @@
  */
 
 #include <linux/kernel.h>
-#include <linux/sched.h>	/* For jiffies, task states */
+#include <linux/sched/signal.h>	/* For jiffies, task states, etc. */
 #include <linux/interrupt.h>	/* For tasklet and interrupt structs/defines */
 #include <linux/module.h>
 #include <linux/ctype.h>
@@ -58,7 +58,7 @@ static const struct digi_t dgnc_digi_init = {
  * This defines a raw port at 9600 baud, 8 data bits, no parity,
  * 1 stop bit.
  */
-static struct ktermios default_termios = {
+static const struct ktermios default_termios = {
 	.c_iflag =	(DEFAULT_IFLAGS),	/* iflags */
 	.c_oflag =	(DEFAULT_OFLAGS),	/* oflags */
 	.c_cflag =	(DEFAULT_CFLAGS),	/* cflags */

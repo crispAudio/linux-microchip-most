@@ -35,7 +35,6 @@
 #include "../include/lustre_debug.h"
 #include "../include/lustre_ver.h"
 #include "../include/lustre_disk.h"	/* for s2sbi */
-#include "../include/lustre_eacl.h"
 #include "../include/lustre_linkea.h"
 
 /* for struct cl_lock_descr and struct cl_io */
@@ -750,7 +749,8 @@ int ll_file_open(struct inode *inode, struct file *file);
 int ll_file_release(struct inode *inode, struct file *file);
 int ll_release_openhandle(struct inode *, struct lookup_intent *);
 int ll_md_real_close(struct inode *inode, fmode_t fmode);
-int ll_getattr(struct vfsmount *mnt, struct dentry *de, struct kstat *stat);
+int ll_getattr(const struct path *path, struct kstat *stat,
+	       u32 request_mask, unsigned int flags);
 struct posix_acl *ll_get_acl(struct inode *inode, int type);
 int ll_migrate(struct inode *parent, struct file *file, int mdtidx,
 	       const char *name, int namelen);
@@ -1329,7 +1329,7 @@ int cl_setattr_ost(struct cl_object *obj, const struct iattr *attr,
 		   unsigned int attr_flags);
 
 extern struct lu_env *cl_inode_fini_env;
-extern int cl_inode_fini_refcheck;
+extern u16 cl_inode_fini_refcheck;
 
 int cl_file_inode_init(struct inode *inode, struct lustre_md *md);
 void cl_inode_fini(struct inode *inode);
