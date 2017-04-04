@@ -4,10 +4,9 @@ From: Andrey Shvetsov <andrey.shvetsov@k2l.de>
 
 
 diff --git a/drivers/staging/most/hdm-dim2/dim2_hdm.c b/drivers/staging/most/hdm-dim2/dim2_hdm.c
-index 35aee9f..7655d5f 100644
 --- a/drivers/staging/most/hdm-dim2/dim2_hdm.c
 +++ b/drivers/staging/most/hdm-dim2/dim2_hdm.c
-@@ -722,6 +722,40 @@ static int poison_channel(struct most_interface *most_iface, int ch_idx)
+@@ -732,6 +732,40 @@ static int poison_channel(struct most_interface *most_iface, int ch_idx)
  	return ret;
  }
  
@@ -48,7 +47,7 @@ index 35aee9f..7655d5f 100644
  /*
   * dim2_probe - dim2 probe handler
   * @pdev: platform device structure
-@@ -745,13 +779,14 @@ static int dim2_probe(struct platform_device *pdev)
+@@ -755,13 +789,14 @@ static int dim2_probe(struct platform_device *pdev)
  
  	platform_set_drvdata(pdev, dev);
  	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -64,7 +63,7 @@ index 35aee9f..7655d5f 100644
  		return -ENODEV;
  	}
  
-@@ -759,12 +794,14 @@ static int dim2_probe(struct platform_device *pdev)
+@@ -769,12 +804,14 @@ static int dim2_probe(struct platform_device *pdev)
  			       "dim2_ahb0_int", dev);
  	if (ret) {
  		dev_err(&pdev->dev, "failed to request ahb0_int irq %d\n", irq);
@@ -79,7 +78,7 @@ index 35aee9f..7655d5f 100644
  		return -ENODEV;
  	}
  
-@@ -772,6 +809,7 @@ static int dim2_probe(struct platform_device *pdev)
+@@ -782,6 +819,7 @@ static int dim2_probe(struct platform_device *pdev)
  			       "dim2_mlb_int", dev);
  	if (ret) {
  		dev_err(&pdev->dev, "failed to request mlb_int irq %d\n", irq);
@@ -87,7 +86,7 @@ index 35aee9f..7655d5f 100644
  		return ret;
  	}
  
-@@ -848,6 +886,7 @@ err_unreg_iface:
+@@ -858,6 +896,7 @@ static int dim2_probe(struct platform_device *pdev)
  	most_deregister_interface(&dev->most_iface);
  err_stop_thread:
  	kthread_stop(dev->netinfo_task);
@@ -95,7 +94,7 @@ index 35aee9f..7655d5f 100644
  
  	return ret;
  }
-@@ -874,6 +913,7 @@ static int dim2_remove(struct platform_device *pdev)
+@@ -884,6 +923,7 @@ static int dim2_remove(struct platform_device *pdev)
  	dim2_sysfs_destroy(&dev->bus);
  	most_deregister_interface(&dev->most_iface);
  	kthread_stop(dev->netinfo_task);

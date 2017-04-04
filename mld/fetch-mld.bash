@@ -60,7 +60,6 @@ local_fetch() {
 	get_src Documentation/driver_usage.txt
 	get_src aim-cdev/cdev.c
 	get_src aim-network/networking.c
-	get_src aim-network/networking.h
 	get_src aim-sound/sound.c
 	get_src aim-v4l2/video.c
 	get_src hdm-dim2/dim2_errors.h
