@@ -502,14 +502,14 @@ static struct most_aim aim = {
 
 static int __init most_net_init(void)
 {
-	pr_info("most_net_init()\n");
+	pr_info("%s()\n", __func__);
 	spin_lock_init(&list_lock);
 	return most_register_aim(&aim);
 }
 
 static void __exit most_net_exit(void)
 {
-	pr_info("most_net_exit()\n");
+	pr_info("%s()\n", __func__);
 	most_deregister_aim(&aim);
 }
 
