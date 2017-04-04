@@ -21,6 +21,7 @@
 #include <linux/list.h>
 #include <linux/wait.h>
 #include <linux/kobject.h>
+#include <linux/kref.h>
 #include "mostcore.h"
 
 #define MEP_HDR_LEN 8
@@ -69,6 +70,7 @@ struct net_dev_context {
 	struct net_dev_channel rx;
 	struct net_dev_channel tx;
 	struct list_head list;
+	struct kref kref;
 };
 
 static struct list_head net_devices = LIST_HEAD_INIT(net_devices);
@@ -268,6 +270,26 @@ static void most_nd_setup(struct net_device *dev)
 	dev->netdev_ops = &most_nd_ops;
 }
 
+static void release_nd(struct kref *kref)
+{
+	struct net_dev_context *nd;
+
+	nd = container_of(kref, struct net_dev_context, kref);
+	list_del(&nd->list);
+}
+
+static inline void put_net_dev_context(struct net_dev_context *nd)
+{
+	unsigned long flags;
+	int released;
+
+	spin_lock_irqsave(&list_lock, flags);
+	released = kref_put(&nd->kref, release_nd);
+	spin_unlock_irqrestore(&list_lock, flags);
+	if (released)
+		free_netdev(nd->dev);
+}
+
 static struct net_dev_context *get_net_dev_context(
 	struct most_interface *iface)
 {
@@ -277,6 +299,7 @@ static struct net_dev_context *get_net_dev_context(
 	spin_lock_irqsave(&list_lock, flags);
 	list_for_each_entry(nd, &net_devices, list) {
 		if (nd->iface == iface) {
+			kref_get(&nd->kref);
 			spin_unlock_irqrestore(&list_lock, flags);
 			return nd;
 		}
@@ -300,7 +323,6 @@ static int aim_probe_channel(struct most_interface *iface, int channel_idx,
 		return -EINVAL;
 
 	nd = get_net_dev_context(iface);
-
 	if (!nd) {
 		struct net_device *dev;
 
@@ -309,19 +331,34 @@ static int aim_probe_channel(struct most_interface *iface, int channel_idx,
 		if (!dev)
 			return -ENOMEM;
 
+		/*
+		 * The network device for the given iface may be added with use
+		 * of the other channel just after the get_net_dev_context
+		 * call.  Free our duplicate of net_device in this case.
+		 */
+		spin_lock_irqsave(&list_lock, flags);
+		list_for_each_entry(nd, &net_devices, list) {
+			if (nd->iface == iface) {
+				kref_get(&nd->kref);
+				spin_unlock_irqrestore(&list_lock, flags);
+				free_netdev(dev);
+				goto ok;
+			}
+		}
+
 		nd = netdev_priv(dev);
+		kref_init(&nd->kref);
 		nd->iface = iface;
 		nd->dev = dev;
-
-		spin_lock_irqsave(&list_lock, flags);
 		list_add(&nd->list, &net_devices);
 		spin_unlock_irqrestore(&list_lock, flags);
 	}
 
+ok:
 	ch = ccfg->direction == MOST_CH_TX ? &nd->tx : &nd->rx;
 	if (ch->linked) {
 		pr_err("only one channel per instance & direction allowed\n");
-		return -EINVAL;
+		goto err;
 	}
 
 	ch->ch_id = channel_idx;
@@ -329,10 +366,14 @@ static int aim_probe_channel(struct most_interface *iface, int channel_idx,
 	if (nd->tx.linked && nd->rx.linked && register_netdev(nd->dev)) {
 		pr_err("register_netdev() failed\n");
 		ch->linked = false;
-		return -EINVAL;
+		goto err;
 	}
 
 	return 0;
+
+err:
+	put_net_dev_context(nd);
+	return -EINVAL;
 }
 
 static int aim_disconnect_channel(struct most_interface *iface,
@@ -340,7 +381,7 @@ static int aim_disconnect_channel(struct most_interface *iface,
 {
 	struct net_dev_context *nd;
 	struct net_dev_channel *ch;
-	unsigned long flags;
+	int ret = -EINVAL;
 
 	nd = get_net_dev_context(iface);
 	if (!nd)
@@ -351,7 +392,7 @@ static int aim_disconnect_channel(struct most_interface *iface,
 	else if (nd->tx.linked && channel_idx == nd->tx.ch_id)
 		ch = &nd->tx;
 	else
-		return -EINVAL;
+		goto put_nd;
 
 	/*
 	 * do not call most_stop_channel() here, because channels are
@@ -361,14 +402,12 @@ static int aim_disconnect_channel(struct most_interface *iface,
 		unregister_netdev(nd->dev);
 
 	ch->linked = false;
-	if (!nd->rx.linked && !nd->tx.linked) {
-		spin_lock_irqsave(&list_lock, flags);
-		list_del(&nd->list);
-		spin_unlock_irqrestore(&list_lock, flags);
-		free_netdev(nd->dev);
-	}
+	put_net_dev_context(nd);
+	ret = 0;
 
-	return 0;
+put_nd:
+	put_net_dev_context(nd);
+	return ret;
 }
 
 static int aim_resume_tx_channel(struct most_interface *iface,
@@ -377,10 +416,13 @@ static int aim_resume_tx_channel(struct most_interface *iface,
 	struct net_dev_context *nd;
 
 	nd = get_net_dev_context(iface);
-	if (!nd || nd->tx.ch_id != channel_idx)
+	if (!nd)
 		return 0;
 
-	netif_wake_queue(nd->dev);
+	if (nd->tx.ch_id == channel_idx)
+		netif_wake_queue(nd->dev);
+
+	put_net_dev_context(nd);
 	return 0;
 }
 
@@ -393,25 +435,30 @@ static int aim_rx_data(struct mbo *mbo)
 	struct sk_buff *skb;
 	struct net_device *dev;
 	unsigned int skb_len;
+	int ret = -EIO;
 
 	nd = get_net_dev_context(mbo->ifp);
-	if (!nd || nd->rx.ch_id != mbo->hdm_channel_id)
+	if (!nd)
 		return -EIO;
+
+	if (nd->rx.ch_id != mbo->hdm_channel_id)
+		goto put_nd;
 
 	dev = nd->dev;
 
 	if (nd->is_mamac) {
 		if (!PMS_IS_MAMAC(buf, len))
-			return -EIO;
+			goto put_nd;
 
 		skb = dev_alloc_skb(len - MDP_HDR_LEN + 2 * ETH_ALEN + 2);
 	} else {
 		if (!PMS_IS_MEP(buf, len))
-			return -EIO;
+			goto put_nd;
 
 		skb = dev_alloc_skb(len - MEP_HDR_LEN);
 	}
 
+	ret = 0;
 	if (!skb) {
 		dev->stats.rx_dropped++;
 		pr_err_once("drop packet: no memory for skb\n");
@@ -450,7 +497,10 @@ static int aim_rx_data(struct mbo *mbo)
 
 out:
 	most_put_mbo(mbo);
-	return 0;
+
+put_nd:
+	put_net_dev_context(nd);
+	return ret;
 }
 
 static struct most_aim aim = {
@@ -509,6 +559,8 @@ static void on_netinfo(struct most_interface *iface,
 				    m[0], m[1], m[2], m[3], m[4], m[5]);
 		}
 	}
+
+	put_net_dev_context(nd);
 }
 
 module_init(most_net_init);
