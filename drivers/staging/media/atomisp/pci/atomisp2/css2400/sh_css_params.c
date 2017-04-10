@@ -1225,10 +1225,6 @@ struct ia_css_isp_skc_dvs_statistics {
 	ia_css_ptr p_data;
 };
 
-struct ia_css_isp_lace_statistics {
-	ia_css_ptr p_data;
-};
-
 static enum ia_css_err
 ref_sh_css_ddr_address_map(
 		struct sh_css_ddr_address_map *map,
@@ -2326,7 +2322,6 @@ sh_css_set_baa_config(struct ia_css_isp_parameters *params,
 	assert(params != NULL);
 
 	IA_CSS_ENTER_PRIVATE("config=%p", config);
-	ia_css_aa_debug_dtrace(config, IA_CSS_DEBUG_TRACE);
 
 	params->bds_config = *config;
 	params->config_changed[IA_CSS_BDS_ID] = true;
@@ -2346,7 +2341,6 @@ sh_css_get_baa_config(const struct ia_css_isp_parameters *params,
 
 	*config = params->bds_config;
 
-	ia_css_aa_debug_dtrace(config, IA_CSS_DEBUG_TRACE);
 	IA_CSS_LEAVE_PRIVATE("void");
 }
 
@@ -2837,17 +2831,6 @@ ia_css_isp_3a_statistics_free(struct ia_css_isp_3a_statistics *me)
 }
 
 struct ia_css_isp_skc_dvs_statistics *ia_css_skc_dvs_statistics_allocate(void)
-{
-	return NULL;
-}
-
-void
-ia_css_lace_statistics_free(struct ia_css_isp_lace_statistics *me)
-{
-	me = NULL;
-}
-
-struct ia_css_isp_lace_statistics *ia_css_lace_statistics_allocate(void)
 {
 	return NULL;
 }
@@ -3705,23 +3688,6 @@ static void sh_css_update_isp_params_to_ddr(
 
 	assert(params != NULL);
 
-#ifdef HRT_CSIM
-	{
-		/* ispparm struct is read with DMA which reads
-		 * multiples of the DDR word with (32 bytes):
-		 * So we pad with zeroes to prevent warnings in csim.
-		 */
-		unsigned int aligned_width, padding_bytes;
-		hrt_vaddress pad_ptr;
-
-		aligned_width = CEIL_MUL(
-				  size,
-				  HIVE_ISP_DDR_WORD_BYTES);
-		padding_bytes = aligned_width - size;
-		pad_ptr = ddr_ptr + size;
-		mmgr_clear(pad_ptr, padding_bytes);
-	}
-#endif
 	mmgr_store(ddr_ptr, &(params->uds), size);
 	IA_CSS_LEAVE_PRIVATE("void");
 }
@@ -3742,7 +3708,7 @@ static void sh_css_update_isp_mem_params_to_ddr(
 	IA_CSS_LEAVE_PRIVATE("void");
 }
 
-void ia_css_dequeue_param_buffers(/*unsigned int pipe_num*/)
+void ia_css_dequeue_param_buffers(/*unsigned int pipe_num*/ void)
 {
 	unsigned int i;
 	hrt_vaddress cpy;
@@ -4073,18 +4039,6 @@ sh_css_params_write_to_ddr_internal(
 					return err;
 				}
 			}
-#ifdef HRT_CSIM
-			else {
-				hrt_vaddress ptr =
-					(hrt_vaddress)ddr_map->fpn_tbl;
-				/* prevent warnings when reading fpn table
-				 * in csim.*/
-				/* Actual values are not used when fpn is
-				 * disabled. */
-				/* MW: fpn_tbl_size*sizeof(whatever)? */
-				mmgr_clear(ptr, ddr_map_size->fpn_tbl);
-			}
-#endif
 		}
 	}
 

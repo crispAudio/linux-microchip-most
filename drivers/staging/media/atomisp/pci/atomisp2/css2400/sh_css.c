@@ -33,7 +33,6 @@
 #include "ia_css_rmgr.h"
 #include "ia_css_debug.h"
 #include "ia_css_debug_pipe.h"
-#include "ia_css_memory_access.h"
 #include "ia_css_device_access.h"
 #include "device_access.h"
 #include "sh_css_legacy.h"
@@ -104,9 +103,6 @@ static int thread_alive;
 
 /* Name of the sp program: should not be built-in */
 #define SP_PROG_NAME "sp"
-#if defined(HAS_SEC_SP)
-#define SP1_PROG_NAME "sp1"
-#endif /* HAS_SEC_SP */
 #if defined(HAS_BL)
 #define BL_PROG_NAME "bootloader"
 #endif
@@ -414,14 +410,6 @@ static unsigned int get_crop_lines_for_bayer_order(const struct ia_css_stream_co
 static unsigned int get_crop_columns_for_bayer_order(const struct ia_css_stream_config *config);
 static void get_pipe_extra_pixel(struct ia_css_pipe *pipe,
 		unsigned int *extra_row, unsigned int *extra_column);
-#endif
-
-#if defined(HAS_SEC_SP)
-static enum ia_css_err
-sh_css_start_sp1(void);
-
-static enum ia_css_err
-sh_css_stop_sp1(void);
 #endif
 
 #ifdef ISP2401
@@ -1575,14 +1563,6 @@ enable_interrupts(enum ia_css_irq_type irq_type)
 		ia_css_isys_rx_enable_all_interrupts(port);
 #endif
 
-#if defined(HRT_CSIM)
-	/*
-	 * Enable IRQ on the SP which signals that SP goes to idle
-	 * to get statistics for each binary
-	 */
-	cnd_isp_irq_enable(ISP0_ID, true);
-	cnd_virq_enable_channel(virq_isp, true);
-#endif
 	IA_CSS_LEAVE_PRIVATE("");
 }
 
@@ -1597,7 +1577,7 @@ static bool sh_css_setup_blctrl_config(const struct ia_css_fw_info *fw,
 	blctrl_cfg->bl_entry = 0;
 	blctrl_cfg->program_name = (char *)(program);
 
-#if !defined(C_RUN) && !defined(HRT_UNSCHED)
+#if !defined(HRT_UNSCHED)
 	blctrl_cfg->ddr_data_offset =  fw->blob.data_source;
 	blctrl_cfg->dmem_data_addr = fw->blob.data_target;
 	blctrl_cfg->dmem_bss_addr = fw->blob.bss_target;
@@ -1624,7 +1604,7 @@ static bool sh_css_setup_spctrl_config(const struct ia_css_fw_info *fw,
 	spctrl_cfg->sp_entry = 0;
 	spctrl_cfg->program_name = (char *)(program);
 
-#if !defined(C_RUN) && !defined(HRT_UNSCHED)
+#if !defined(HRT_UNSCHED)
 	spctrl_cfg->ddr_data_offset =  fw->blob.data_source;
 	spctrl_cfg->dmem_data_addr = fw->blob.data_target;
 	spctrl_cfg->dmem_bss_addr = fw->blob.bss_target;
@@ -1698,8 +1678,6 @@ ia_css_load_firmware(const struct ia_css_env *env,
 
 	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE, "ia_css_load_firmware() enter\n");
 
-	ia_css_memory_access_init(&env->css_mem_env);
-
 	/* make sure we initialize my_css */
 	if ((my_css.malloc != env->cpu_mem_env.alloc) ||
 		(my_css.free != env->cpu_mem_env.free) ||
@@ -1736,9 +1714,6 @@ ia_css_init(const struct ia_css_env *env,
 #if defined(HAS_BL)
 	ia_css_blctrl_cfg blctrl_cfg;
 #endif
-#if defined(HAS_SEC_SP)
-	ia_css_spctrl_cfg sp1ctrl_cfg;
-#endif /* HAS_SEC_SP */
 
 	void *(*malloc_func)(size_t size, bool zero_mem);
 	void (*free_func)(void *ptr);
@@ -1799,7 +1774,6 @@ ia_css_init(const struct ia_css_env *env,
 	ia_css_queue_map_init();
 
 	ia_css_device_access_init(&env->hw_access_env);
-	ia_css_memory_access_init(&env->css_mem_env);
 
 	select = gpio_reg_load(GPIO0_ID, _gpio_block_reg_do_select)
 						& (~GPIO_FLASH_PIN_MASK);
@@ -1902,15 +1876,6 @@ ia_css_init(const struct ia_css_env *env,
 		IA_CSS_LEAVE_ERR(err);
 		return err;
 	}
-#if defined(HAS_SEC_SP)
-	if(!sh_css_setup_spctrl_config(&sh_css_sp1_fw,SP1_PROG_NAME,&sp1ctrl_cfg))
-		return IA_CSS_ERR_INTERNAL_ERROR;
-	err = ia_css_spctrl_load_fw(SP1_ID, &sp1ctrl_cfg);
-	if (err != IA_CSS_SUCCESS) {
-		IA_CSS_LEAVE_ERR(err);
-		return err;
-	}
-#endif /* HAS_SEC_SP */
 
 #if defined(HAS_BL)
 	if (!sh_css_setup_blctrl_config(&sh_css_bl_fw, BL_PROG_NAME, &blctrl_cfg))
@@ -1920,14 +1885,7 @@ ia_css_init(const struct ia_css_env *env,
 		IA_CSS_LEAVE_ERR(err);
 		return err;
 	}
-#if defined(HAS_SEC_SP)
-	err = ia_css_blctrl_add_target_fw_info(&sh_css_sp1_fw, IA_CSS_SP1,
-					 get_sp_code_addr(SP1_ID));
-	if (err != IA_CSS_SUCCESS) {
-		IA_CSS_LEAVE_ERR(err);
-		return err;
-	}
-#endif
+
 #ifdef ISP2401
 	err = ia_css_blctrl_add_target_fw_info(&sh_css_sp_fw, IA_CSS_SP0,
 					 get_sp_code_addr(SP0_ID));
@@ -1938,18 +1896,6 @@ ia_css_init(const struct ia_css_env *env,
 		return err;
 	}
 #endif /* HAS_BL */
-
-#if defined(HRT_CSIM)
-	/**
-	 * In compiled simulator context include debug support by default.
-	 * In all other cases (e.g. Android phone), the user (e.g. driver)
-	 * must explicitly enable debug support by calling this function.
-	 */
-	if (!ia_css_debug_mode_init()) {
-		IA_CSS_LEAVE_ERR(IA_CSS_ERR_INTERNAL_ERROR);
-		return IA_CSS_ERR_INTERNAL_ERROR;
-	}
-#endif
 
 #if WITH_PC_MONITORING
 	if (!thread_alive) {
@@ -2009,7 +1955,7 @@ enum ia_css_err ia_css_suspend(void)
 	for(i=0;i<MAX_ACTIVE_STREAMS;i++)
 		ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE, "==*> after 1: seed %d (%p)\n", i, my_css_save.stream_seeds[i].stream);
 	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE, "ia_css_suspend() leave\n");
-	return(IA_CSS_SUCCESS);
+	return IA_CSS_SUCCESS;
 }
 
 enum ia_css_err
@@ -2021,10 +1967,10 @@ ia_css_resume(void)
 
 	err = ia_css_init(&(my_css_save.driver_env), my_css_save.loaded_fw, my_css_save.mmu_base, my_css_save.irq_type);
 	if (err != IA_CSS_SUCCESS)
-		return(err);
+		return err;
 	err = ia_css_start_sp();
 	if (err != IA_CSS_SUCCESS)
-		return(err);
+		return err;
 	my_css_save.mode = sh_css_mode_resume;
 	for(i=0;i<MAX_ACTIVE_STREAMS;i++)
 	{
@@ -2038,7 +1984,7 @@ ia_css_resume(void)
 				if (i)
 					for(j=0;j<i;j++)
 						ia_css_stream_unload(my_css_save.stream_seeds[j].stream);
-				return(err);
+				return err;
 			}
 			err = ia_css_stream_start(my_css_save.stream_seeds[i].stream);
 			if (err != IA_CSS_SUCCESS)
@@ -2048,7 +1994,7 @@ ia_css_resume(void)
 					ia_css_stream_stop(my_css_save.stream_seeds[j].stream);
 					ia_css_stream_unload(my_css_save.stream_seeds[j].stream);
 				}
-				return(err);
+				return err;
 			}
 			*my_css_save.stream_seeds[i].orig_stream = my_css_save.stream_seeds[i].stream;
 			for(j=0;j<my_css_save.stream_seeds[i].num_pipes;j++)
@@ -2057,7 +2003,7 @@ ia_css_resume(void)
 	}
 	my_css_save.mode = sh_css_mode_working;
 	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE, "ia_css_resume() leave: return_void\n");
-	return(IA_CSS_SUCCESS);
+	return IA_CSS_SUCCESS;
 }
 
 enum ia_css_err
@@ -2317,10 +2263,6 @@ create_host_pipeline(struct ia_css_stream *stream)
 				goto ERR;
 		}
 
-#ifdef HRT_CSIM
-		if(main_pipe->continuous_frames[0])
-			ia_css_frame_zero(main_pipe->continuous_frames[0]);
-#endif
 	}
 
 #if defined(USE_INPUT_SYSTEM_VERSION_2)
@@ -2737,11 +2679,6 @@ ia_css_uninit(void)
 	}
 	ia_css_spctrl_unload_fw(SP0_ID);
 	sh_css_sp_set_sp_running(false);
-#if defined(HAS_SEC_SP)
-	ia_css_spctrl_unload_fw(SP1_ID);
-	sh_css_sp1_set_sp1_running(false);
-#endif /* HAS_SEC_SP */
-
 #if defined(HAS_BL)
 	ia_css_blctrl_unload_fw();
 #endif
@@ -2806,11 +2743,6 @@ enum ia_css_err ia_css_irq_translate(
 			infos |= IA_CSS_IRQ_INFO_EVENTS_READY;
 			break;
 		case virq_isp:
-#ifdef HRT_CSIM
-			/* Enable IRQ which signals that ISP goes to idle
-			 * to get statistics for each binary */
-			infos |= IA_CSS_IRQ_INFO_ISP_BINARY_STATISTICS_READY;
-#endif
 			break;
 #if !defined(HAS_NO_INPUT_SYSTEM)
 		case virq_isys_sof:
@@ -6062,9 +5994,6 @@ static enum ia_css_err load_video_binaries(struct ia_css_pipe *pipe)
 		err = ia_css_frame_allocate_from_info(
 				&mycs->tnr_frames[i],
 				&tnr_info);
-#ifdef HRT_CSIM
-		ia_css_frame_zero(mycs->tnr_frames[i]);
-#endif
 		if (err != IA_CSS_SUCCESS)
 			return err;
 	}
@@ -6773,9 +6702,6 @@ allocate_delay_frames(struct ia_css_pipe *pipe)
 		err = ia_css_frame_allocate_from_info(&delay_frames[i],	&ref_info);
 		if (err != IA_CSS_SUCCESS)
 			return err;
-#if defined(HRT_CSIM) || defined(__SVOS__)
-		ia_css_frame_zero(delay_frames[i]);
-#endif
 	}
 	IA_CSS_LEAVE_PRIVATE("");
 	return IA_CSS_SUCCESS;
@@ -8713,7 +8639,7 @@ remove_firmware(struct ia_css_fw_info **l, struct ia_css_fw_info *firmware)
 	return; /* removing single and multiple firmware is handled in acc_unload_extension() */
 }
 
-#if !defined(C_RUN) && !defined(HRT_UNSCHED)
+#if !defined(HRT_UNSCHED)
 static enum ia_css_err
 upload_isp_code(struct ia_css_fw_info *firmware)
 {
@@ -8748,7 +8674,7 @@ upload_isp_code(struct ia_css_fw_info *firmware)
 static enum ia_css_err
 acc_load_extension(struct ia_css_fw_info *firmware)
 {
-#if !defined(C_RUN) && !defined(HRT_UNSCHED)
+#if !defined(HRT_UNSCHED)
 	enum ia_css_err err;
 	struct ia_css_fw_info *hd = firmware;
 	while (hd){
@@ -10261,7 +10187,7 @@ ia_css_stream_load(struct ia_css_stream *stream)
 						for(k=0;k<j;k++)
 							ia_css_pipe_destroy(my_css_save.stream_seeds[i].pipes[k]);
 					}
-					return(err);
+					return err;
 				}
 			err = ia_css_stream_create(&(my_css_save.stream_seeds[i].stream_config), my_css_save.stream_seeds[i].num_pipes,
 						    my_css_save.stream_seeds[i].pipes, &(my_css_save.stream_seeds[i].stream));
@@ -10270,12 +10196,12 @@ ia_css_stream_load(struct ia_css_stream *stream)
 				ia_css_stream_destroy(stream);
 				for(j=0;j<my_css_save.stream_seeds[i].num_pipes;j++)
 					ia_css_pipe_destroy(my_css_save.stream_seeds[i].pipes[j]);
-				return(err);
+				return err;
 			}
 			break;
 		}
 	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE,	"ia_css_stream_load() exit, \n");
-	return(IA_CSS_SUCCESS);
+	return IA_CSS_SUCCESS;
 #else
 	/* TODO remove function - DEPRECATED */
 	(void)stream;
@@ -10416,7 +10342,7 @@ ia_css_stream_unload(struct ia_css_stream *stream)
 			break;
 		}
 	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE,	"ia_css_stream_unload() exit, \n");
-	return(IA_CSS_SUCCESS);
+	return IA_CSS_SUCCESS;
 }
 
 #endif
@@ -10707,33 +10633,6 @@ ia_css_start_bl(void)
 
 #define SP_START_TIMEOUT_US 30000000
 
-#if defined(HAS_SEC_SP)
-
-static enum ia_css_err
-sh_css_start_sp1(void)
-{
-
-	unsigned long timeout;
-
-	IA_CSS_ENTER_PRIVATE("void");
-	sh_css_sp1_start();
-	/* waiting for the SP is completely started */
-	timeout = SP_START_TIMEOUT_US;
-	while((ia_css_spctrl_get_state(SP1_ID) != IA_CSS_SP_SW_INITIALIZED) && timeout) {
-		timeout--;
-		hrt_sleep();
-	}
-	if (timeout == 0) {
-		IA_CSS_LEAVE_ERR_PRIVATE(IA_CSS_ERR_INTERNAL_ERROR);
-		return IA_CSS_ERR_INTERNAL_ERROR;
-	}
-	sh_css_write_host2sp1_command(host2sp_cmd_ready);
-
-	IA_CSS_LEAVE_ERR_PRIVATE(IA_CSS_SUCCESS);
-	return IA_CSS_SUCCESS;
-}
-#endif
-
 enum ia_css_err
 ia_css_start_sp(void)
 {
@@ -10774,11 +10673,6 @@ ia_css_start_sp(void)
 	sh_css_setup_queues();
 	ia_css_bufq_dump_queue_info();
 
-#if defined(HAS_SEC_SP)
-	/* Start the SP1 Core */
-	err = sh_css_start_sp1();
-#endif /* HAS_SEC_SP */
-
 #ifdef ISP2401
 	if (ia_css_is_system_mode_suspend_or_resume() == false) { /* skip in suspend/resume flow */
 		ia_css_set_system_mode(IA_CSS_SYS_MODE_WORKING);
@@ -10794,42 +10688,6 @@ ia_css_start_sp(void)
  *	a proper error trace.
  */
 #define SP_SHUTDOWN_TIMEOUT_US 200000
-
-#if defined(HAS_SEC_SP)
-
-static enum ia_css_err
-sh_css_stop_sp1(void)
-{
-	unsigned long timeout;
-
-	IA_CSS_ENTER_PRIVATE("void");
-
-	/* For now, stop whole SP1 */
-	sh_css_write_host2sp1_command(host2sp_cmd_terminate);
-	sh_css_sp1_set_sp1_running(false);
-
-	timeout = SP_SHUTDOWN_TIMEOUT_US;
-	while ((ia_css_spctrl_get_state(SP1_ID)!= IA_CSS_SP_SW_TERMINATED) && timeout) {
-		timeout--;
-		hrt_sleep();
-	}
-	if (timeout == 0) {
-		IA_CSS_WARNING("SP1 is not terminated");
-	} else {
-		timeout = SP_SHUTDOWN_TIMEOUT_US;
-		while (!ia_css_spctrl_is_idle(SP1_ID) && 0 != timeout) {
-			timeout--;
-			hrt_sleep();
-		}
-		if (0 == timeout) {
-			IA_CSS_WARNING("SP1 is not idle");
-		}
-	}
-
-	IA_CSS_LEAVE_ERR_PRIVATE(IA_CSS_SUCCESS);
-	return IA_CSS_SUCCESS;
-}
-#endif
 
 enum ia_css_err
 ia_css_stop_sp(void)
@@ -10893,11 +10751,6 @@ ia_css_stop_sp(void)
 		ia_css_set_system_mode(IA_CSS_SYS_MODE_INIT);  /* System is initialized but not 'running' */
 	}
 #endif
-
-#if defined(HAS_SEC_SP)
-	/* Stop SP1 Core */
-	sh_css_stop_sp1();
-#endif /* HAS_SEC_SP */
 
 	IA_CSS_LEAVE_ERR(err);
 	return err;
@@ -11193,10 +11046,8 @@ enum ia_css_err
 ia_css_pipe_update_qos_ext_mapped_arg(struct ia_css_pipe *pipe, uint32_t fw_handle,
 	struct ia_css_isp_param_css_segments *css_seg, struct ia_css_isp_param_isp_segments *isp_seg)
 {
-#ifndef HRT_CSIM
 	unsigned int HIVE_ADDR_sp_group;
 	static struct sh_css_sp_group sp_group;
-#endif
 	static struct sh_css_sp_stage sp_stage;
 	static struct sh_css_isp_stage isp_stage;
 	const struct ia_css_fw_info *fw;
@@ -11235,17 +11086,12 @@ ia_css_pipe_update_qos_ext_mapped_arg(struct ia_css_pipe *pipe, uint32_t fw_hand
 			} else {
 				stage_num = stage->stage_num;
 
-#ifndef HRT_CSIM
 				HIVE_ADDR_sp_group = fw->info.sp.group;
 				sp_dmem_load(SP0_ID,
 					(unsigned int)sp_address_of(sp_group),
 					&sp_group, sizeof(struct sh_css_sp_group));
 				mmgr_load(sp_group.pipe[thread_id].sp_stage_addr[stage_num],
 					&sp_stage, sizeof(struct sh_css_sp_stage));
-#else
-				mmgr_load(sh_css_sp_group.pipe[thread_id].sp_stage_addr[stage_num],
-					&sp_stage, sizeof(struct sh_css_sp_stage));
-#endif
 
 				mmgr_load(sp_stage.isp_stage_addr,
 					&isp_stage, sizeof(struct sh_css_isp_stage));

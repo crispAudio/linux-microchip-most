@@ -29,7 +29,6 @@
 #define ELDO2_1P8V	0x16
 #define ELDO2_CTRL_SHIFT 0x01
 
-
 struct gmin_subdev {
 	struct v4l2_subdev *subdev;
 	int clock_num;
@@ -56,7 +55,7 @@ static enum { PMIC_UNSET = 0, PMIC_REGULATOR, PMIC_AXP, PMIC_TI ,
 	PMIC_CRYSTALCOVE } pmic_id;
 
 /* The atomisp uses type==0 for the end-of-list marker, so leave space. */
-static struct intel_v4l2_subdev_table pdata_subdevs[MAX_SUBDEVS+1];
+static struct intel_v4l2_subdev_table pdata_subdevs[MAX_SUBDEVS + 1];
 
 static const struct atomisp_platform_data pdata = {
 	.subdevs = pdata_subdevs,
@@ -354,7 +353,7 @@ static struct gmin_subdev *gmin_subdev_add(struct v4l2_subdev *subdev)
 	if (!client)
 		return NULL;
 
-	dev = client ? &client->dev : NULL;
+	dev = &client->dev;
 
 	for (i=0; i < MAX_SUBDEVS && gmin_subdevs[i].subdev; i++)
 		;
@@ -488,7 +487,6 @@ int gmin_v1p8_ctrl(struct v4l2_subdev *subdev, int on)
 		else
 			return regulator_disable(gs->v1p8_reg);
 	}
-
 
 	return -EINVAL;
 }
@@ -637,7 +635,7 @@ int gmin_get_config_var(struct device *dev, const char *var, char *out, size_t *
         else
                 ret = snprintf(var8, sizeof(var8), "gmin_%s", var);
 
-	if (ret < 0 || ret >= sizeof(var8)-1)
+	if (ret < 0 || ret >= sizeof(var8) - 1)
 		return -EINVAL;
 
 	/* First check a hard-coded list of board-specific variables.
@@ -654,7 +652,7 @@ int gmin_get_config_var(struct device *dev, const char *var, char *out, size_t *
 
 				if (strcmp(var8, gv->name))
 					continue;
-				if (vl > *out_len-1)
+				if (vl > *out_len - 1)
 					return -ENOSPC;
 
 				memcpy(out, gv->val, min(*out_len, vl+1));
@@ -669,7 +667,7 @@ int gmin_get_config_var(struct device *dev, const char *var, char *out, size_t *
 	/* Our variable names are ASCII by construction, but EFI names
 	 * are wide chars.  Convert and zero-pad. */
 	memset(var16, 0, sizeof(var16));
-	for (i=0; var8[i] && i < sizeof(var8); i++)
+	for (i = 0; i < sizeof(var8) && var8[i]; i++)
 		var16[i] = var8[i];
 
 	/* To avoid owerflows when calling the efivar API */

@@ -11,7 +11,7 @@
  *
  * Contact Information:
  * wlanfae <wlanfae@realtek.com>
-******************************************************************************/
+ *****************************************************************************/
 #include "rtl_core.h"
 #include "rtl_dm.h"
 #include "r8192E_hw.h"
@@ -887,10 +887,13 @@ static void _rtl92e_dm_tx_power_tracking_cb_thermal(struct net_device *dev)
 			tmpCCK40Mindex = CCK_Table_length-1;
 	} else {
 		tmpval = (u8)tmpRegA - priv->ThermalMeter[0];
-		if (tmpval >= 6)
-			tmpOFDMindex = tmpCCK20Mindex = 0;
-		else
-			tmpOFDMindex = tmpCCK20Mindex = 6 - tmpval;
+		if (tmpval >= 6) {
+			tmpOFDMindex = 0;
+			tmpCCK20Mindex = 0;
+		} else {
+			tmpOFDMindex = 6 - tmpval;
+			tmpCCK20Mindex = 6 - tmpval;
+		}
 		tmpCCK40Mindex = 0;
 	}
 	if (priv->CurrentChannelBW != HT_CHANNEL_WIDTH_20)
@@ -1330,7 +1333,7 @@ static void _rtl92e_dm_ctrl_initgain_byrssi(struct net_device *dev)
  *	When		Who		Remark
  *	03/04/2009	hpfan	Create Version 0.
  *
- *---------------------------------------------------------------------------*/
+ ******************************************************************************/
 
 static void _rtl92e_dm_ctrl_initgain_byrssi_driver(struct net_device *dev)
 {

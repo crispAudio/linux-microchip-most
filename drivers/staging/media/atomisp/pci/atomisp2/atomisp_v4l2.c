@@ -1,7 +1,7 @@
 /*
  * Support for Medifield PNW Camera Imaging ISP subsystem.
  *
- * Copyright (c) 2010 Intel Corporation. All Rights Reserved.
+ * Copyright (c) 2010-2017 Intel Corporation. All Rights Reserved.
  *
  * Copyright (c) 2010 Silicon Hive www.siliconhive.com.
  *
@@ -27,7 +27,6 @@
 #include <linux/timer.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
-#include "../../include/linux/intel_mid_pm.h"
 
 #include "../../include/linux/atomisp_gmin_platform.h"
 
@@ -47,21 +46,15 @@
 #include "hrt/hive_isp_css_mm_hrt.h"
 
 #include "device_access.h"
-#include "../../include/linux/intel_mid_pm.h"
 #include <asm/intel-mid.h>
 
 /* G-Min addition: pull this in from intel_mid_pm.h */
 #define CSTATE_EXIT_LATENCY_C1  1
 
-/* Moorefield lacks PCI PM, BYT advertises it but it's broken, use PUNIT */
-#define ATOMISP_INTERNAL_PM	(IS_MOFD || IS_BYT || IS_CHT)
-
-#ifdef ISP2401
 static uint skip_fwload = 0;
 module_param(skip_fwload, uint, 0644);
-MODULE_PARM_DESC(skip_fwload, "Skip atomisp firmware load for COS");
+MODULE_PARM_DESC(skip_fwload, "Skip atomisp firmware load");
 
-#endif
 /* set reserved memory pool size in page */
 unsigned int repool_pgnr;
 module_param(repool_pgnr, uint, 0644);
@@ -271,7 +264,7 @@ static int atomisp_save_iunit_reg(struct atomisp_device *isp)
 	return 0;
 }
 
-static int atomisp_restore_iunit_reg(struct atomisp_device *isp)
+static int __maybe_unused atomisp_restore_iunit_reg(struct atomisp_device *isp)
 {
 	struct pci_dev *dev = isp->pdev;
 
@@ -418,7 +411,7 @@ void punit_ddr_dvfs_enable(bool enable)
 		}
 	}
 
-	if (max_wait == 0)
+	if (max_wait == -1)
 		pr_info("DDR DVFS, door bell is not cleared within 3ms\n");
 }
 
@@ -526,10 +519,7 @@ int atomisp_runtime_suspend(struct device *dev)
 	if (ret)
 		return ret;
 	pm_qos_update_request(&isp->pm_qos, PM_QOS_DEFAULT_VALUE);
-	if (ATOMISP_INTERNAL_PM)
-		ret = atomisp_mrfld_power_down(isp);
-
-	return ret;
+	return atomisp_mrfld_power_down(isp);
 }
 
 int atomisp_runtime_resume(struct device *dev)
@@ -538,11 +528,9 @@ int atomisp_runtime_resume(struct device *dev)
 		dev_get_drvdata(dev);
 	int ret;
 
-	if (ATOMISP_INTERNAL_PM) {
-		ret = atomisp_mrfld_power_up(isp);
-		if (ret)
+	ret = atomisp_mrfld_power_up(isp);
+	if (ret)
 			return ret;
-	}
 
 	pm_qos_update_request(&isp->pm_qos, isp->max_isr_latency);
 	if (isp->sw_contex.power_state == ATOM_ISP_POWER_DOWN) {
@@ -597,10 +585,7 @@ static int atomisp_suspend(struct device *dev)
 		return ret;
 	}
 	pm_qos_update_request(&isp->pm_qos, PM_QOS_DEFAULT_VALUE);
-	if (ATOMISP_INTERNAL_PM)
-		ret = atomisp_mrfld_power_down(isp);
-
-	return ret;
+	return atomisp_mrfld_power_down(isp);
 }
 
 static int atomisp_resume(struct device *dev)
@@ -609,11 +594,9 @@ static int atomisp_resume(struct device *dev)
 		dev_get_drvdata(dev);
 	int ret;
 
-	if (ATOMISP_INTERNAL_PM) {
-		ret = atomisp_mrfld_power_up(isp);
-		if (ret)
-			return ret;
-	}
+	ret = atomisp_mrfld_power_up(isp);
+	if (ret)
+		return ret;
 
 	pm_qos_update_request(&isp->pm_qos, isp->max_isr_latency);
 
@@ -1099,14 +1082,9 @@ atomisp_load_firmware(struct atomisp_device *isp)
 	int rc;
 	char *fw_path = NULL;
 
-#ifdef ISP2401
 	if (skip_fwload)
 		return NULL;
 
-#endif
-#if defined(ATOMISP_FWNAME)
-	fw_path = ATOMISP_FWNAME;
-#else
 	if (isp->media_dev.driver_version == ATOMISP_CSS_VERSION_21) {
 		if (isp->media_dev.hw_revision ==
 		    ((ATOMISP_HW_REVISION_ISP2401 << ATOMISP_HW_REVISION_SHIFT)
@@ -1123,7 +1101,6 @@ atomisp_load_firmware(struct atomisp_device *isp)
 		     | ATOMISP_HW_STEPPING_B0))
 			fw_path = "shisp_2400b0_v21.bin";
 	}
-#endif
 
 	if (!fw_path) {
 		dev_err(isp->dev,
@@ -1545,10 +1522,8 @@ load_fw_fail:
 	atomisp_ospm_dphy_down(isp);
 
 	/* Address later when we worry about the ...field chips */
-	if (ATOMISP_INTERNAL_PM) {
-		if (atomisp_mrfld_power_down(isp))
-			dev_err(&dev->dev, "Failed to switch off ISP\n");
-	}
+	if (IS_ENABLED(CONFIG_PM) && atomisp_mrfld_power_down(isp))
+		dev_err(&dev->dev, "Failed to switch off ISP\n");
 	pci_dev_put(isp->pci_root);
 	return err;
 }

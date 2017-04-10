@@ -107,9 +107,7 @@ static ssize_t iunit_dbglvl_store(struct device_driver *drv, const char *buf,
 	if (kstrtouint(buf, 10, &iunit_debug.dbglvl)
 		|| iunit_debug.dbglvl < 1
 		|| iunit_debug.dbglvl > 9) {
-		dev_err(atomisp_dev, "%s setting %d value invalid, should be [1,9]\n",
-			__func__, iunit_debug.dbglvl);
-		return -EINVAL;
+		return -ERANGE;
 	}
 	atomisp_css_debug_set_dtrace_level(iunit_debug.dbglvl);
 
@@ -128,11 +126,9 @@ static ssize_t iunit_dbgfun_store(struct device_driver *drv, const char *buf,
 	unsigned int opt;
 	int ret;
 
-	if (kstrtouint(buf, 10, &opt)) {
-		dev_err(atomisp_dev, "%s setting %d value invalid\n",
-			__func__, opt);
-		return -EINVAL;
-	}
+	ret = kstrtouint(buf, 10, &opt);
+	if (ret)
+		return ret;
 
 	ret = atomisp_set_css_dbgfunc(iunit_debug.isp, opt);
 	if (ret)
@@ -154,11 +150,9 @@ static ssize_t iunit_dbgopt_store(struct device_driver *drv, const char *buf,
 	unsigned int opt;
 	int ret;
 
-	if (kstrtouint(buf, 10, &opt)) {
-		dev_err(atomisp_dev, "%s setting %d value invalid\n",
-			__func__, opt);
-		return -EINVAL;
-	}
+	ret = kstrtouint(buf, 10, &opt);
+	if (ret)
+		return ret;
 
 	iunit_debug.dbgopt = opt;
 	ret = iunit_dump_dbgopt(iunit_debug.isp, iunit_debug.dbgopt);
@@ -169,12 +163,9 @@ static ssize_t iunit_dbgopt_store(struct device_driver *drv, const char *buf,
 }
 
 static struct driver_attribute iunit_drvfs_attrs[] = {
-	__ATTR(dbglvl, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH, iunit_dbglvl_show,
-		iunit_dbglvl_store),
-	__ATTR(dbgfun, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH, iunit_dbgfun_show,
-		iunit_dbgfun_store),
-	__ATTR(dbgopt, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH, iunit_dbgopt_show,
-		iunit_dbgopt_store),
+	__ATTR(dbglvl, 0644, iunit_dbglvl_show, iunit_dbglvl_store),
+	__ATTR(dbgfun, 0644, iunit_dbgfun_show, iunit_dbgfun_store),
+	__ATTR(dbgopt, 0644, iunit_dbgopt_show, iunit_dbgopt_store),
 };
 
 static int iunit_drvfs_create_files(struct pci_driver *drv)

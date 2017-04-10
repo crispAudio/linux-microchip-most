@@ -878,30 +878,14 @@ static void XGIfb_post_setmode(struct xgifb_video_info *xgifb_info)
 			}
 
 			if ((filter >= 0) && (filter <= 7)) {
+				const u8 *f = XGI_TV_filter[filter_tb].filter[filter];
+
 				pr_debug("FilterTable[%d]-%d: %*ph\n",
-					 filter_tb, filter,
-					 4, XGI_TV_filter[filter_tb].
-						   filter[filter]);
-				xgifb_reg_set(
-					XGIPART2,
-					0x35,
-					(XGI_TV_filter[filter_tb].
-						filter[filter][0]));
-				xgifb_reg_set(
-					XGIPART2,
-					0x36,
-					(XGI_TV_filter[filter_tb].
-						filter[filter][1]));
-				xgifb_reg_set(
-					XGIPART2,
-					0x37,
-					(XGI_TV_filter[filter_tb].
-						filter[filter][2]));
-				xgifb_reg_set(
-					XGIPART2,
-					0x38,
-					(XGI_TV_filter[filter_tb].
-						filter[filter][3]));
+					 filter_tb, filter, 4, f);
+				xgifb_reg_set(XGIPART2, 0x35, f[0]);
+				xgifb_reg_set(XGIPART2, 0x36, f[1]);
+				xgifb_reg_set(XGIPART2, 0x37, f[2]);
+				xgifb_reg_set(XGIPART2, 0x38, f[3]);
 			}
 		}
 	}
@@ -1660,7 +1644,7 @@ static int xgifb_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	xgifb_info->mmio_base = pci_resource_start(pdev, 1);
 	xgifb_info->mmio_size = pci_resource_len(pdev, 1);
 	xgifb_info->vga_base = pci_resource_start(pdev, 2) + 0x30;
-	dev_info(&pdev->dev, "Relocate IO address: %Lx [%08lx]\n",
+	dev_info(&pdev->dev, "Relocate IO address: %llx [%08lx]\n",
 		 (u64)pci_resource_start(pdev, 2),
 		 xgifb_info->vga_base);
 
@@ -1755,13 +1739,13 @@ static int xgifb_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 					    xgifb_info->mmio_size);
 
 	dev_info(&pdev->dev,
-		 "Framebuffer at 0x%Lx, mapped to 0x%p, size %dk\n",
+		 "Framebuffer at 0x%llx, mapped to 0x%p, size %dk\n",
 		 (u64)xgifb_info->video_base,
 		 xgifb_info->video_vbase,
 		 xgifb_info->video_size / 1024);
 
 	dev_info(&pdev->dev,
-		 "MMIO at 0x%Lx, mapped to 0x%p, size %ldk\n",
+		 "MMIO at 0x%llx, mapped to 0x%p, size %ldk\n",
 		 (u64)xgifb_info->mmio_base, xgifb_info->mmio_vbase,
 		 xgifb_info->mmio_size / 1024);
 

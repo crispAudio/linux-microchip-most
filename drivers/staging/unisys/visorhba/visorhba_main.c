@@ -28,9 +28,9 @@
 
 /* The Send and Receive Buffers of the IO Queue may both be full */
 
-#define IOS_ERROR_THRESHOLD	1000
-#define MAX_PENDING_REQUESTS	(MIN_NUMSIGNALS * 2)
-#define VISORHBA_ERROR_COUNT	30
+#define IOS_ERROR_THRESHOLD  1000
+#define MAX_PENDING_REQUESTS (MIN_NUMSIGNALS * 2)
+#define VISORHBA_ERROR_COUNT 30
 
 static struct dentry *visorhba_debugfs_dir;
 
@@ -101,10 +101,10 @@ struct visorhba_devices_open {
 	struct visorhba_devdata *devdata;
 };
 
-#define for_each_vdisk_match(iter, list, match)			  \
+#define for_each_vdisk_match(iter, list, match) \
 	for (iter = &list->head; iter->next; iter = iter->next) \
-		if ((iter->channel == match->channel) &&		  \
-		    (iter->id == match->id) &&			  \
+		if ((iter->channel == match->channel) && \
+		    (iter->id == match->id) && \
 		    (iter->lun == match->lun))
 
 /*
@@ -686,8 +686,8 @@ static const struct file_operations info_debugfs_fops = {
  *	command. Wake up anyone waiting for it.
  *	Returns void
  */
-static inline void complete_taskmgmt_command
-(struct idr *idrtable, struct uiscmdrsp *cmdrsp, int result)
+static void complete_taskmgmt_command(struct idr *idrtable,
+				      struct uiscmdrsp *cmdrsp, int result)
 {
 	wait_queue_head_t *wq =
 		idr_find(idrtable, cmdrsp->scsitaskmgmt.notify_handle);

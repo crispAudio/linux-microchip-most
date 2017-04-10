@@ -41,7 +41,6 @@
 static int snd_bcm2835_ctl_info(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_info *uinfo)
 {
-	audio_info(" ... IN\n");
 	if (kcontrol->private_value == PCM_PLAYBACK_VOLUME) {
 		uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
 		uinfo->count = 1;
@@ -58,7 +57,6 @@ static int snd_bcm2835_ctl_info(struct snd_kcontrol *kcontrol,
 		uinfo->value.integer.min = 0;
 		uinfo->value.integer.max = AUDIO_DEST_MAX - 1;
 	}
-	audio_info(" ... OUT\n");
 	return 0;
 }
 
@@ -107,7 +105,7 @@ static int snd_bcm2835_ctl_get(struct snd_kcontrol *kcontrol,
 }
 
 static int snd_bcm2835_ctl_put(struct snd_kcontrol *kcontrol,
-	struct snd_ctl_elem_value *ucontrol)
+				struct snd_ctl_elem_value *ucontrol)
 {
 	struct bcm2835_chip *chip = snd_kcontrol_chip(kcontrol);
 	int changed = 0;
@@ -340,3 +338,89 @@ int snd_bcm2835_new_ctl(struct bcm2835_chip *chip)
 	}
 	return 0;
 }
+
+static struct snd_kcontrol_new snd_bcm2835_headphones_ctl[] = {
+	{
+		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+		.name = "Headphone Playback Volume",
+		.index = 0,
+		.access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
+			  SNDRV_CTL_ELEM_ACCESS_TLV_READ,
+		.private_value = PCM_PLAYBACK_VOLUME,
+		.info = snd_bcm2835_ctl_info,
+		.get = snd_bcm2835_ctl_get,
+		.put = snd_bcm2835_ctl_put,
+		.count = 1,
+		.tlv = {.p = snd_bcm2835_db_scale}
+	},
+	{
+		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+		.name = "Headphone Playback Switch",
+		.index = 0,
+		.access = SNDRV_CTL_ELEM_ACCESS_READWRITE,
+		.private_value = PCM_PLAYBACK_MUTE,
+		.info = snd_bcm2835_ctl_info,
+		.get = snd_bcm2835_ctl_get,
+		.put = snd_bcm2835_ctl_put,
+		.count = 1,
+	}
+};
+
+int snd_bcm2835_new_headphones_ctl(struct bcm2835_chip *chip)
+{
+	int err;
+	unsigned int idx;
+
+	strcpy(chip->card->mixername, "Broadcom Mixer");
+	for (idx = 0; idx < ARRAY_SIZE(snd_bcm2835_headphones_ctl); idx++) {
+		err = snd_ctl_add(chip->card,
+				  snd_ctl_new1(&snd_bcm2835_headphones_ctl[idx],
+					       chip));
+		if (err)
+			return err;
+	}
+	return 0;
+}
+
+static struct snd_kcontrol_new snd_bcm2835_hdmi[] = {
+	{
+		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+		.name = "HDMI Playback Volume",
+		.index = 0,
+		.access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
+			  SNDRV_CTL_ELEM_ACCESS_TLV_READ,
+		.private_value = PCM_PLAYBACK_VOLUME,
+		.info = snd_bcm2835_ctl_info,
+		.get = snd_bcm2835_ctl_get,
+		.put = snd_bcm2835_ctl_put,
+		.count = 1,
+		.tlv = {.p = snd_bcm2835_db_scale}
+	},
+	{
+		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+		.name = "HDMI Playback Switch",
+		.index = 0,
+		.access = SNDRV_CTL_ELEM_ACCESS_READWRITE,
+		.private_value = PCM_PLAYBACK_MUTE,
+		.info = snd_bcm2835_ctl_info,
+		.get = snd_bcm2835_ctl_get,
+		.put = snd_bcm2835_ctl_put,
+		.count = 1,
+	}
+};
+
+int snd_bcm2835_new_hdmi_ctl(struct bcm2835_chip *chip)
+{
+	int err;
+	unsigned int idx;
+
+	strcpy(chip->card->mixername, "Broadcom Mixer");
+	for (idx = 0; idx < ARRAY_SIZE(snd_bcm2835_hdmi); idx++) {
+		err = snd_ctl_add(chip->card,
+				  snd_ctl_new1(&snd_bcm2835_hdmi[idx], chip));
+		if (err)
+			return err;
+	}
+	return 0;
+}
+

@@ -110,14 +110,13 @@ int get_current_ap(struct ks_wlan_private *priv, struct link_ap_info_t *ap_info)
 	struct local_ap_t *ap;
 	union iwreq_data wrqu;
 	struct net_device *netdev = priv->net_dev;
-	int rc = 0;
 
 	DPRINTK(3, "\n");
 	ap = &priv->current_ap;
 
 	if ((priv->connect_status & CONNECT_STATUS_MASK) == DISCONNECT_STATUS) {
 		memset(ap, 0, sizeof(struct local_ap_t));
-		return 1;
+		return -EPERM;
 	}
 
 	/* bssid */
@@ -130,7 +129,7 @@ int get_current_ap(struct ks_wlan_private *priv, struct link_ap_info_t *ap_info)
 	memcpy(ap->rate_set.body, ap_info->rate_set.body,
 	       ap_info->rate_set.size);
 	ap->rate_set.size = ap_info->rate_set.size;
-	if (ap_info->ext_rate_set.size) {
+	if (ap_info->ext_rate_set.size != 0) {
 		/* rate_set */
 		memcpy(&ap->rate_set.body[ap->rate_set.size],
 		       ap_info->ext_rate_set.body,
@@ -198,7 +197,7 @@ int get_current_ap(struct ks_wlan_private *priv, struct link_ap_info_t *ap_info)
 	DPRINTK(4, "\n    ext_rate_set_size=%d\n    rate_set_size=%d\n",
 		ap_info->ext_rate_set.size, ap_info->rate_set.size);
 
-	return rc;
+	return 0;
 }
 
 static
@@ -239,19 +238,19 @@ int get_ap_information(struct ks_wlan_private *priv, struct ap_info_t *ap_info,
 					*(bp + 1));
 				ap->ssid.size = SSID_MAX_SIZE;
 			}
-			memcpy(&(ap->ssid.body[0]), bp + 2, ap->ssid.size);
+			memcpy(ap->ssid.body, bp + 2, ap->ssid.size);
 			break;
 		case 1:	/* rate */
 		case 50:	/* ext rate */
 			if ((*(bp + 1) + ap->rate_set.size) <=
 			    RATE_SET_MAX_SIZE) {
-				memcpy(&(ap->rate_set.body[ap->rate_set.size]),
+				memcpy(&ap->rate_set.body[ap->rate_set.size],
 				       bp + 2, *(bp + 1));
 				ap->rate_set.size += *(bp + 1);
 			} else {
 				DPRINTK(1, "size over :: rate size=%d\n",
 					(*(bp + 1) + ap->rate_set.size));
-				memcpy(&(ap->rate_set.body[ap->rate_set.size]),
+				memcpy(&ap->rate_set.body[ap->rate_set.size],
 				       bp + 2,
 				       RATE_SET_MAX_SIZE - ap->rate_set.size);
 				ap->rate_set.size +=
@@ -269,10 +268,10 @@ int get_ap_information(struct ks_wlan_private *priv, struct ap_info_t *ap_info,
 					*(bp + 1));
 				ap->rsn_ie.size = RSN_IE_BODY_MAX;
 			}
-			memcpy(&(ap->rsn_ie.body[0]), bp + 2, ap->rsn_ie.size);
+			memcpy(ap->rsn_ie.body, bp + 2, ap->rsn_ie.size);
 			break;
 		case 221:	/* WPA */
-			if (!memcmp(bp + 2, "\x00\x50\xf2\x01", 4)) {	/* WPA OUI check */
+			if (memcmp(bp + 2, "\x00\x50\xf2\x01", 4) == 0) {	/* WPA OUI check */
 				ap->wpa_ie.id = *bp;
 				if (*(bp + 1) <= RSN_IE_BODY_MAX) {
 					ap->wpa_ie.size = *(bp + 1);
@@ -282,7 +281,7 @@ int get_ap_information(struct ks_wlan_private *priv, struct ap_info_t *ap_info,
 						*(bp + 1));
 					ap->wpa_ie.size = RSN_IE_BODY_MAX;
 				}
-				memcpy(&(ap->wpa_ie.body[0]), bp + 2,
+				memcpy(ap->wpa_ie.body, bp + 2,
 				       ap->wpa_ie.size);
 			}
 			break;
@@ -308,23 +307,102 @@ int get_ap_information(struct ks_wlan_private *priv, struct ap_info_t *ap_info,
 }
 
 static
+int hostif_data_indication_wpa(struct ks_wlan_private *priv,
+			       unsigned short auth_type)
+{
+	struct ether_hdr *eth_hdr;
+	unsigned short eth_proto;
+	unsigned char RecvMIC[8];
+	char buf[128];
+	unsigned long now;
+	struct mic_failure_t *mic_failure;
+	struct michael_mic_t michael_mic;
+	union iwreq_data wrqu;
+	unsigned int key_index = auth_type - 1;
+	struct wpa_key_t *key = &priv->wpa.key[key_index];
+
+	eth_hdr = (struct ether_hdr *)(priv->rxp);
+	eth_proto = ntohs(eth_hdr->h_proto);
+
+	/* source address check */
+	if (memcmp(&eth_hdr->h_source[0], &priv->eth_addr[0], ETH_ALEN) == 0)
+		return 0;
+
+	if (eth_hdr->h_dest_snap != eth_hdr->h_source_snap) {
+		DPRINTK(1, "invalid data format\n");
+		priv->nstats.rx_errors++;
+		return -EINVAL;
+	}
+	if (((auth_type == TYPE_PMK1 &&
+	      priv->wpa.pairwise_suite == IW_AUTH_CIPHER_TKIP) ||
+	     (auth_type == TYPE_GMK1 &&
+	      priv->wpa.group_suite == IW_AUTH_CIPHER_TKIP) ||
+	     (auth_type == TYPE_GMK2 &&
+	      priv->wpa.group_suite == IW_AUTH_CIPHER_TKIP)) &&
+	    key->key_len) {
+		DPRINTK(4, "TKIP: protocol=%04X: size=%u\n",
+			eth_proto, priv->rx_size);
+		/* MIC save */
+		memcpy(&RecvMIC[0], (priv->rxp) + ((priv->rx_size) - 8), 8);
+		priv->rx_size = priv->rx_size - 8;
+		if (auth_type > 0 && auth_type < 4) {	/* auth_type check */
+			MichaelMICFunction(&michael_mic,
+					   (uint8_t *)key->rx_mic_key,
+					   (uint8_t *)priv->rxp,
+					   (int)priv->rx_size,
+					   (uint8_t)0,	/* priority */
+					   (uint8_t *)michael_mic.Result);
+		}
+		if (memcmp(michael_mic.Result, RecvMIC, 8) != 0) {
+			now = jiffies;
+			mic_failure = &priv->wpa.mic_failure;
+			/* MIC FAILURE */
+			if (mic_failure->last_failure_time &&
+			    (now - mic_failure->last_failure_time) / HZ >= 60) {
+				mic_failure->failure = 0;
+			}
+			DPRINTK(4, "MIC FAILURE\n");
+			if (mic_failure->failure == 0) {
+				mic_failure->failure = 1;
+				mic_failure->counter = 0;
+			} else if (mic_failure->failure == 1) {
+				mic_failure->failure = 2;
+				mic_failure->counter =
+					(uint16_t)((now - mic_failure->last_failure_time) / HZ);
+				if (!mic_failure->counter)	/*  range 1-60 */
+					mic_failure->counter = 1;
+			}
+			priv->wpa.mic_failure.last_failure_time = now;
+
+			/*  needed parameters: count, keyid, key type, TSC */
+			sprintf(buf,
+				"MLME-MICHAELMICFAILURE.indication(keyid=%d %scast addr=%pM)",
+				key_index,
+				eth_hdr->h_dest[0] & 0x01 ? "broad" : "uni",
+				eth_hdr->h_source);
+			memset(&wrqu, 0, sizeof(wrqu));
+			wrqu.data.length = strlen(buf);
+			DPRINTK(4, "IWEVENT:MICHAELMICFAILURE\n");
+			wireless_send_event(priv->net_dev, IWEVCUSTOM, &wrqu,
+					    buf);
+			return -EINVAL;
+		}
+	}
+	return 0;
+}
+
+static
 void hostif_data_indication(struct ks_wlan_private *priv)
 {
 	unsigned int rx_ind_size;	/* indicate data size */
 	struct sk_buff *skb;
 	unsigned short auth_type;
 	unsigned char temp[256];
-
-	unsigned char RecvMIC[8];
-	char buf[128];
 	struct ether_hdr *eth_hdr;
 	unsigned short eth_proto;
-	unsigned long now;
-	struct mic_failure_t *mic_failure;
 	struct ieee802_1x_hdr *aa1x_hdr;
 	struct wpa_eapol_key *eap_key;
-	struct michel_mic_t michel_mic;
-	union iwreq_data wrqu;
+	int ret;
 
 	DPRINTK(3, "\n");
 
@@ -343,7 +421,7 @@ void hostif_data_indication(struct ks_wlan_private *priv)
 	DPRINTK(3, "ether protocol = %04X\n", eth_proto);
 
 	/* source address check */
-	if (!memcmp(&priv->eth_addr[0], eth_hdr->h_source, ETH_ALEN)) {
+	if (memcmp(&priv->eth_addr[0], eth_hdr->h_source, ETH_ALEN) == 0) {
 		DPRINTK(1, "invalid : source is own mac address !!\n");
 		DPRINTK(1,
 			"eth_hdrernet->h_dest=%02X:%02X:%02X:%02X:%02X:%02X\n",
@@ -356,78 +434,9 @@ void hostif_data_indication(struct ks_wlan_private *priv)
 
 	/*  for WPA */
 	if (auth_type != TYPE_DATA && priv->wpa.rsn_enabled) {
-		if (memcmp(&eth_hdr->h_source[0], &priv->eth_addr[0], ETH_ALEN)) {	/* source address check */
-			if (eth_hdr->h_dest_snap != eth_hdr->h_source_snap) {
-				DPRINTK(1, "invalid data format\n");
-				priv->nstats.rx_errors++;
-				return;
-			}
-			if (((auth_type == TYPE_PMK1
-			      && priv->wpa.pairwise_suite ==
-			      IW_AUTH_CIPHER_TKIP) || (auth_type == TYPE_GMK1
-						       && priv->wpa.
-						       group_suite ==
-						       IW_AUTH_CIPHER_TKIP)
-			     || (auth_type == TYPE_GMK2
-				 && priv->wpa.group_suite ==
-				 IW_AUTH_CIPHER_TKIP))
-			    && priv->wpa.key[auth_type - 1].key_len) {
-				DPRINTK(4, "TKIP: protocol=%04X: size=%u\n",
-					eth_proto, priv->rx_size);
-				/* MIC save */
-				memcpy(&RecvMIC[0],
-				       (priv->rxp) + ((priv->rx_size) - 8), 8);
-				priv->rx_size = priv->rx_size - 8;
-				if (auth_type > 0 && auth_type < 4) {	/* auth_type check */
-					MichaelMICFunction(&michel_mic, (uint8_t *)priv->wpa.key[auth_type - 1].rx_mic_key, (uint8_t *)priv->rxp, (int)priv->rx_size, (uint8_t)0,	/* priority */
-							   (uint8_t *)michel_mic.Result);
-				}
-				if (memcmp(michel_mic.Result, RecvMIC, 8)) {
-					now = jiffies;
-					mic_failure = &priv->wpa.mic_failure;
-					/* MIC FAILURE */
-					if (mic_failure->last_failure_time &&
-					    (now -
-					     mic_failure->last_failure_time) /
-					    HZ >= 60) {
-						mic_failure->failure = 0;
-					}
-					DPRINTK(4, "MIC FAILURE\n");
-					if (mic_failure->failure == 0) {
-						mic_failure->failure = 1;
-						mic_failure->counter = 0;
-					} else if (mic_failure->failure == 1) {
-						mic_failure->failure = 2;
-						mic_failure->counter =
-						    (uint16_t)((now -
-								 mic_failure->
-								 last_failure_time)
-								/ HZ);
-						if (!mic_failure->counter)	/* mic_failure counter value range 1-60 */
-							mic_failure->counter =
-							    1;
-					}
-					priv->wpa.mic_failure.
-					    last_failure_time = now;
-					/*  needed parameters: count, keyid, key type, TSC */
-					sprintf(buf,
-						"MLME-MICHAELMICFAILURE.indication(keyid=%d %scast addr="
-						"%pM)",
-						auth_type - 1,
-						eth_hdr->
-						h_dest[0] & 0x01 ? "broad" :
-						"uni", eth_hdr->h_source);
-					memset(&wrqu, 0, sizeof(wrqu));
-					wrqu.data.length = strlen(buf);
-					DPRINTK(4,
-						"IWEVENT:MICHAELMICFAILURE\n");
-					wireless_send_event(priv->net_dev,
-							    IWEVCUSTOM, &wrqu,
-							    buf);
-					return;
-				}
-			}
-		}
+		ret = hostif_data_indication_wpa(priv, auth_type);
+		if (ret)
+			return;
 	}
 
 	if ((priv->connect_status & FORCE_DISCONNECT) ||
@@ -507,10 +516,10 @@ static
 void hostif_mib_get_confirm(struct ks_wlan_private *priv)
 {
 	struct net_device *dev = priv->net_dev;
-	uint32_t mib_status;
-	uint32_t mib_attribute;
-	uint16_t mib_val_size;
-	uint16_t mib_val_type;
+	u32 mib_status;
+	u32 mib_attribute;
+	u16 mib_val_size;
+	u16 mib_val_type;
 
 	DPRINTK(3, "\n");
 
@@ -519,7 +528,7 @@ void hostif_mib_get_confirm(struct ks_wlan_private *priv)
 	mib_val_size = get_WORD(priv);	/* MIB value size */
 	mib_val_type = get_WORD(priv);	/* MIB value type */
 
-	if (mib_status != 0) {
+	if (mib_status) {
 		/* in case of error */
 		DPRINTK(1, "attribute=%08X, status=%08X\n", mib_attribute,
 			mib_status);
@@ -587,15 +596,15 @@ void hostif_mib_get_confirm(struct ks_wlan_private *priv)
 static
 void hostif_mib_set_confirm(struct ks_wlan_private *priv)
 {
-	uint32_t mib_status;	/* +04 MIB Status */
-	uint32_t mib_attribute;	/* +08 MIB attribute */
+	u32 mib_status;	/* +04 MIB Status */
+	u32 mib_attribute;	/* +08 MIB attribute */
 
 	DPRINTK(3, "\n");
 
 	mib_status = get_DWORD(priv);	/* MIB Status */
 	mib_attribute = get_DWORD(priv);	/* MIB attribute */
 
-	if (mib_status != 0) {
+	if (mib_status) {
 		/* in case of error */
 		DPRINTK(1, "error :: attribute=%08X, status=%08X\n",
 			mib_attribute, mib_status);
@@ -825,16 +834,14 @@ void hostif_scan_indication(struct ks_wlan_private *priv)
 	DPRINTK(3, "scan_ind_count = %d\n", priv->scan_ind_count);
 	ap_info = (struct ap_info_t *)(priv->rxp);
 
-	if (priv->scan_ind_count != 0) {
+	if (priv->scan_ind_count) {
 		for (i = 0; i < priv->aplist.size; i++) {	/* bssid check */
-			if (!memcmp
-			    (&(ap_info->bssid[0]),
-			     &(priv->aplist.ap[i].bssid[0]), ETH_ALEN)) {
+			if (memcmp(ap_info->bssid,
+				   priv->aplist.ap[i].bssid, ETH_ALEN) == 0) {
 				if (ap_info->frame_type ==
 				    FRAME_TYPE_PROBE_RESP)
 					get_ap_information(priv, ap_info,
-							   &(priv->aplist.
-							     ap[i]));
+							   &priv->aplist.ap[i]);
 				return;
 			}
 		}
@@ -902,7 +909,7 @@ void hostif_ps_adhoc_set_confirm(struct ks_wlan_private *priv)
 static
 void hostif_infrastructure_set_confirm(struct ks_wlan_private *priv)
 {
-	uint16_t result_code;
+	u16 result_code;
 
 	DPRINTK(3, "\n");
 	result_code = get_WORD(priv);
@@ -1111,17 +1118,18 @@ int hostif_data_request(struct ks_wlan_private *priv, struct sk_buff *packet)
 	int result = 0;
 	unsigned short eth_proto;
 	struct ether_hdr *eth_hdr;
-	struct michel_mic_t michel_mic;
+	struct michael_mic_t michael_mic;
 	unsigned short keyinfo = 0;
 	struct ieee802_1x_hdr *aa1x_hdr;
 	struct wpa_eapol_key *eap_key;
 	struct ethhdr *eth;
+	int ret;
 
 	packet_len = packet->len;
 	if (packet_len > ETH_FRAME_LEN) {
 		DPRINTK(1, "bad length packet_len=%d\n", packet_len);
-		dev_kfree_skb(packet);
-		return -1;
+		ret = -EOVERFLOW;
+		goto err_kfree_skb;
 	}
 
 	if (((priv->connect_status & CONNECT_STATUS_MASK) == DISCONNECT_STATUS)
@@ -1148,8 +1156,8 @@ int hostif_data_request(struct ks_wlan_private *priv, struct sk_buff *packet)
 
 	if (!pp) {
 		DPRINTK(3, "allocate memory failed..\n");
-		dev_kfree_skb(packet);
-		return -2;
+		ret = -ENOMEM;
+		goto err_kfree_skb;
 	}
 
 	p = (unsigned char *)pp->data;
@@ -1159,12 +1167,11 @@ int hostif_data_request(struct ks_wlan_private *priv, struct sk_buff *packet)
 
 	/* packet check */
 	eth = (struct ethhdr *)packet->data;
-	if (memcmp(&priv->eth_addr[0], eth->h_source, ETH_ALEN)) {
+	if (memcmp(&priv->eth_addr[0], eth->h_source, ETH_ALEN) != 0) {
 		DPRINTK(1, "invalid mac address !!\n");
 		DPRINTK(1, "ethernet->h_source=%pM\n", eth->h_source);
-		dev_kfree_skb(packet);
-		kfree(pp);
-		return -3;
+		ret = -ENXIO;
+		goto err_kfree;
 	}
 
 	/* MAC address copy */
@@ -1219,10 +1226,10 @@ int hostif_data_request(struct ks_wlan_private *priv, struct sk_buff *packet)
 			pp->auth_type = cpu_to_le16((uint16_t)TYPE_AUTH);	/* no encryption */
 		} else {
 			if (priv->wpa.pairwise_suite == IW_AUTH_CIPHER_TKIP) {
-				MichaelMICFunction(&michel_mic, (uint8_t *)priv->wpa.key[0].tx_mic_key, (uint8_t *)&pp->data[0], (int)packet_len, (uint8_t)0,	/* priority */
-						   (uint8_t *)michel_mic.
+				MichaelMICFunction(&michael_mic, (uint8_t *)priv->wpa.key[0].tx_mic_key, (uint8_t *)&pp->data[0], (int)packet_len, (uint8_t)0,	/* priority */
+						   (uint8_t *)michael_mic.
 						   Result);
-				memcpy(p, michel_mic.Result, 8);
+				memcpy(p, michael_mic.Result, 8);
 				length += 8;
 				packet_len += 8;
 				p += 8;
@@ -1267,6 +1274,13 @@ int hostif_data_request(struct ks_wlan_private *priv, struct sk_buff *packet)
 	}
 
 	return result;
+
+err_kfree:
+	kfree(pp);
+err_kfree_skb:
+	dev_kfree_skb(packet);
+
+	return ret;
 }
 
 #define ps_confirm_wait_inc(priv) do { \
@@ -1365,7 +1379,7 @@ static
 void hostif_ps_adhoc_set_request(struct ks_wlan_private *priv)
 {
 	struct hostif_ps_adhoc_set_request_t *pp;
-	uint16_t capability;
+	u16 capability;
 
 	DPRINTK(3, "\n");
 
@@ -1408,7 +1422,7 @@ static
 void hostif_infrastructure_set_request(struct ks_wlan_private *priv)
 {
 	struct hostif_infrastructure_set_request_t *pp;
-	uint16_t capability;
+	u16 capability;
 
 	DPRINTK(3, "ssid.size=%d\n", priv->reg.ssid.size);
 
@@ -1474,7 +1488,7 @@ void hostif_infrastructure_set_request(struct ks_wlan_private *priv)
 static void hostif_infrastructure_set2_request(struct ks_wlan_private *priv)
 {
 	struct hostif_infrastructure_set2_request_t *pp;
-	uint16_t capability;
+	u16 capability;
 
 	DPRINTK(2, "ssid.size=%d\n", priv->reg.ssid.size);
 
@@ -1543,7 +1557,7 @@ static
 void hostif_adhoc_set_request(struct ks_wlan_private *priv)
 {
 	struct hostif_adhoc_set_request_t *pp;
-	uint16_t capability;
+	u16 capability;
 
 	DPRINTK(3, "\n");
 
@@ -1588,7 +1602,7 @@ static
 void hostif_adhoc_set2_request(struct ks_wlan_private *priv)
 {
 	struct hostif_adhoc_set2_request_t *pp;
-	uint16_t capability;
+	u16 capability;
 
 	DPRINTK(3, "\n");
 
@@ -1865,7 +1879,7 @@ void hostif_receive(struct ks_wlan_private *priv, unsigned char *p,
 static
 void hostif_sme_set_wep(struct ks_wlan_private *priv, int type)
 {
-	uint32_t val;
+	u32 val;
 
 	switch (type) {
 	case SME_WEP_INDEX_REQUEST:
@@ -1919,8 +1933,8 @@ struct wpa_suite_t {
 } __packed;
 
 struct rsn_mode_t {
-	uint32_t rsn_mode;
-	uint16_t rsn_capability;
+	u32 rsn_mode;
+	u16 rsn_capability;
 } __packed;
 
 static
@@ -1928,7 +1942,7 @@ void hostif_sme_set_rsn(struct ks_wlan_private *priv, int type)
 {
 	struct wpa_suite_t wpa_suite;
 	struct rsn_mode_t rsn_mode;
-	uint32_t val;
+	u32 val;
 
 	memset(&wpa_suite, 0, sizeof(wpa_suite));
 
@@ -2324,7 +2338,7 @@ void hostif_sme_sleep_set(struct ks_wlan_private *priv)
 static
 void hostif_sme_set_key(struct ks_wlan_private *priv, int type)
 {
-	uint32_t val;
+	u32 val;
 
 	switch (type) {
 	case SME_SET_FLAG:
@@ -2383,10 +2397,10 @@ static
 void hostif_sme_set_pmksa(struct ks_wlan_private *priv)
 {
 	struct pmk_cache_t {
-		uint16_t size;
+		u16 size;
 		struct {
-			uint8_t bssid[ETH_ALEN];
-			uint8_t pmkid[IW_PMKID_LEN];
+			u8 bssid[ETH_ALEN];
+			u8 pmkid[IW_PMKID_LEN];
 		} __packed list[PMK_LIST_MAX];
 	} __packed pmkcache;
 	struct pmk_t *pmk;
@@ -2414,7 +2428,7 @@ void hostif_sme_set_pmksa(struct ks_wlan_private *priv)
 static
 void hostif_sme_execute(struct ks_wlan_private *priv, int event)
 {
-	uint32_t val;
+	u32 val;
 
 	DPRINTK(3, "event=%d\n", event);
 	switch (event) {
@@ -2443,18 +2457,16 @@ void hostif_sme_execute(struct ks_wlan_private *priv, int event)
 	case SME_MIC_FAILURE_REQUEST:
 		if (priv->wpa.mic_failure.failure == 1) {
 			hostif_mic_failure_request(priv,
-						   priv->wpa.mic_failure.
-						   failure - 1, 0);
+						   priv->wpa.mic_failure.failure - 1,
+						   0);
 		} else if (priv->wpa.mic_failure.failure == 2) {
 			hostif_mic_failure_request(priv,
-						   priv->wpa.mic_failure.
-						   failure - 1,
-						   priv->wpa.mic_failure.
-						   counter);
-		} else
-			DPRINTK(4,
-				"SME_MIC_FAILURE_REQUEST: failure count=%u error?\n",
+						   priv->wpa.mic_failure.failure - 1,
+						   priv->wpa.mic_failure.counter);
+		} else {
+			DPRINTK(4, "SME_MIC_FAILURE_REQUEST: failure count=%u error?\n",
 				priv->wpa.mic_failure.failure);
+		}
 		break;
 	case SME_MIC_FAILURE_CONFIRM:
 		if (priv->wpa.mic_failure.failure == 2) {
@@ -2595,17 +2607,16 @@ void hostif_sme_task(unsigned long dev)
 
 	DPRINTK(3, "\n");
 
-	if (priv->dev_state >= DEVICE_STATE_BOOT) {
-		if (0 < cnt_smeqbody(priv)
-		    && priv->dev_state >= DEVICE_STATE_BOOT) {
-			hostif_sme_execute(priv,
-					   priv->sme_i.event_buff[priv->sme_i.
-								  qhead]);
-			inc_smeqhead(priv);
-			if (0 < cnt_smeqbody(priv))
-				tasklet_schedule(&priv->sme_task);
-		}
-	}
+	if (priv->dev_state < DEVICE_STATE_BOOT)
+		return;
+
+	if (cnt_smeqbody(priv) <= 0)
+		return;
+
+	hostif_sme_execute(priv, priv->sme_i.event_buff[priv->sme_i.qhead]);
+	inc_smeqhead(priv);
+	if (cnt_smeqbody(priv) > 0)
+		tasklet_schedule(&priv->sme_task);
 }
 
 /* send to Station Management Entity module */
@@ -2617,14 +2628,12 @@ void hostif_sme_enqueue(struct ks_wlan_private *priv, unsigned short event)
 	if (cnt_smeqbody(priv) < (SME_EVENT_BUFF_SIZE - 1)) {
 		priv->sme_i.event_buff[priv->sme_i.qtail] = event;
 		inc_smeqtail(priv);
-		//DPRINTK(3,"inc_smeqtail \n");
 #ifdef KS_WLAN_DEBUG
 		if (priv->sme_i.max_event_count < cnt_smeqbody(priv))
 			priv->sme_i.max_event_count = cnt_smeqbody(priv);
 #endif /* KS_WLAN_DEBUG */
 	} else {
 		/* in case of buffer overflow */
-		//DPRINTK(2,"sme queue buffer overflow\n");
 		netdev_err(priv->net_dev, "sme queue buffer overflow\n");
 	}
 
@@ -2639,7 +2648,7 @@ int hostif_init(struct ks_wlan_private *priv)
 
 	priv->aplist.size = 0;
 	for (i = 0; i < LOCAL_APLIST_MAX; i++)
-		memset(&(priv->aplist.ap[i]), 0, sizeof(struct local_ap_t));
+		memset(&priv->aplist.ap[i], 0, sizeof(struct local_ap_t));
 	priv->infra_status = 0;
 	priv->current_rate = 4;
 	priv->connect_status = DISCONNECT_STATUS;
@@ -2662,18 +2671,19 @@ int hostif_init(struct ks_wlan_private *priv)
 	INIT_WORK(&priv->ks_wlan_wakeup_task, ks_wlan_hw_wakeup_task);
 
 	/* WPA */
-	memset(&(priv->wpa), 0, sizeof(priv->wpa));
+	memset(&priv->wpa, 0, sizeof(priv->wpa));
 	priv->wpa.rsn_enabled = 0;
 	priv->wpa.mic_failure.failure = 0;
 	priv->wpa.mic_failure.last_failure_time = 0;
 	priv->wpa.mic_failure.stop = 0;
-	memset(&(priv->pmklist), 0, sizeof(priv->pmklist));
+	memset(&priv->pmklist, 0, sizeof(priv->pmklist));
 	INIT_LIST_HEAD(&priv->pmklist.head);
 	for (i = 0; i < PMK_LIST_MAX; i++)
 		INIT_LIST_HEAD(&priv->pmklist.pmk[i].list);
 
 	priv->sme_i.sme_status = SME_IDLE;
-	priv->sme_i.qhead = priv->sme_i.qtail = 0;
+	priv->sme_i.qhead = 0;
+	priv->sme_i.qtail = 0;
 #ifdef KS_WLAN_DEBUG
 	priv->sme_i.max_event_count = 0;
 #endif

@@ -63,7 +63,7 @@ struct hmm_buffer_object *__bo_alloc(struct kmem_cache *bo_cache)
 
 	bo = kmem_cache_alloc(bo_cache, GFP_KERNEL);
 	if (!bo)
-		dev_err(atomisp_dev, "%s: __bo_alloc failed!\n", __func__);
+		dev_err(atomisp_dev, "%s: failed!\n", __func__);
 
 	return bo;
 }
@@ -1011,6 +1011,7 @@ static int alloc_user_pages(struct hmm_buffer_object *bo,
 		dev_err(atomisp_dev, "find_vma failed\n");
 		atomisp_kernel_free(bo->page_obj);
 		atomisp_kernel_free(pages);
+		mutex_lock(&bo->mutex);
 		return -EFAULT;
 	}
 	mutex_lock(&bo->mutex);

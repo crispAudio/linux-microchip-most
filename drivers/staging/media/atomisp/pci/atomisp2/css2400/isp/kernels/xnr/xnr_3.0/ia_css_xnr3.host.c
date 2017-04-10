@@ -22,10 +22,11 @@
 #include "ia_css_xnr3.host.h"
 
 /* Maximum value for alpha on ISP interface */
-#define XNR_MAX_ALPHA  ((1 << (ISP_VEC_ELEMBITS-1)) - 1)
+#define XNR_MAX_ALPHA  ((1 << (ISP_VEC_ELEMBITS - 1)) - 1)
 
 /* Minimum value for sigma on host interface. Lower values translate to
- * max_alpha. */
+ * max_alpha.
+ */
 #define XNR_MIN_SIGMA  (IA_CSS_XNR3_SIGMA_SCALE / 100)
 
 /*
@@ -49,7 +50,6 @@ static const int16_t b[XNR3_LOOK_UP_TABLE_POINTS] = {
 
 static const int16_t c[XNR3_LOOK_UP_TABLE_POINTS] = {
 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-
 
 /*
 #endif
@@ -78,7 +78,7 @@ compute_alpha(int sigma)
 #if defined(XNR_ATE_ROUNDING_BUG)
 	int32_t alpha_unscaled;
 #else
-	int offset = sigma/2;
+	int offset = sigma / 2;
 #endif
 	if (sigma < XNR_MIN_SIGMA) {
 		alpha = XNR_MAX_ALPHA;
@@ -97,9 +97,8 @@ compute_alpha(int sigma)
 		alpha = ((IA_CSS_XNR3_SIGMA_SCALE * XNR_ALPHA_SCALE_FACTOR) + offset)/ sigma;
 #endif
 
-		if (alpha > XNR_MAX_ALPHA) {
+		if (alpha > XNR_MAX_ALPHA)
 			alpha = XNR_MAX_ALPHA;
-		}
 	}
 
 	return alpha;
@@ -118,7 +117,8 @@ compute_coring(int coring)
 	int32_t offset = host_scale / 2; /* fixed-point 0.5 */
 
 	/* Convert from public host-side scale factor to isp-side scale
-	 * factor. Clip to [0, isp_scale-1). */
+	 * factor. Clip to [0, isp_scale-1).
+	 */
 	isp_coring = ((coring * isp_scale) + offset) / host_scale;
 	return min(max(isp_coring, 0), isp_scale - 1);
 }
@@ -138,7 +138,8 @@ compute_blending(int strength)
 	/* Convert from public host-side scale factor to isp-side scale
 	 * factor. The blending factor is positive on the host side, but
 	 * negative on the ISP side because +1.0 cannot be represented
-	 * exactly as s0.11 fixed point, but -1.0 can. */
+	 * exactly as s0.11 fixed point, but -1.0 can.
+	 */
 	isp_strength = -(((strength * isp_scale) + offset) / host_scale);
 	return max(min(isp_strength, 0), -XNR_BLENDING_SCALE_FACTOR);
 }
@@ -221,7 +222,6 @@ ia_css_xnr3_vmem_encode(
 		to->c[0][i] = 0;
 	}
 
-
 	/* Constraints on "x":
 	 * - values should be greater or equal to 0.
 	 * - values should be ascending.
@@ -230,10 +230,9 @@ ia_css_xnr3_vmem_encode(
 
 	for (j = 1; j < XNR3_LOOK_UP_TABLE_POINTS; j++) {
 		assert(x[j] >= 0);
-		assert(x[j] > x[j-1]);
+		assert(x[j] > x[j - 1]);
 
 	}
-
 
 	/* The implementation of the calulating 1/x is based on the availability
 	 * of the OP_vec_shuffle16 operation.
@@ -253,8 +252,6 @@ ia_css_xnr3_vmem_encode(
 		}
 	}
 }
-
-
 
 #endif
 /* Dummy Function added as the tool expects it*/

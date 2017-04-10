@@ -44,35 +44,6 @@ EXPORT_SYMBOL_GPL(speakup_info);
 
 static int do_synth_init(struct spk_synth *in_synth);
 
-int spk_serial_synth_probe(struct spk_synth *synth)
-{
-	const struct old_serial_port *ser;
-	int failed = 0;
-
-	if ((synth->ser >= SPK_LO_TTY) && (synth->ser <= SPK_HI_TTY)) {
-		ser = spk_serial_init(synth->ser);
-		if (!ser) {
-			failed = -1;
-		} else {
-			outb_p(0, ser->port);
-			mdelay(1);
-			outb_p('\r', ser->port);
-		}
-	} else {
-		failed = -1;
-		pr_warn("ttyS%i is an invalid port\n", synth->ser);
-	}
-	if (failed) {
-		pr_info("%s: not found\n", synth->long_name);
-		return -ENODEV;
-	}
-	pr_info("%s: ttyS%i, Driver Version %s\n",
-		synth->long_name, synth->ser, synth->version);
-	synth->alive = 1;
-	return 0;
-}
-EXPORT_SYMBOL_GPL(spk_serial_synth_probe);
-
 /*
  * Main loop of the progression thread: keep eating from the buffer
  * and push to the serial port, waiting as needed
@@ -109,6 +80,7 @@ void spk_do_catch_up(struct spk_synth *synth)
 			synth->flush(synth);
 			continue;
 		}
+		synth_buffer_skip_nonlatin1();
 		if (synth_buffer_empty()) {
 			spin_unlock_irqrestore(&speakup_info.spinlock, flags);
 			break;
@@ -119,7 +91,7 @@ void spk_do_catch_up(struct spk_synth *synth)
 		spin_unlock_irqrestore(&speakup_info.spinlock, flags);
 		if (ch == '\n')
 			ch = synth->procspeech;
-		if (!spk_serial_out(ch)) {
+		if (!synth->io_ops->synth_out(synth, ch)) {
 			schedule_timeout(msecs_to_jiffies(full_time_val));
 			continue;
 		}
@@ -129,7 +101,7 @@ void spk_do_catch_up(struct spk_synth *synth)
 			delay_time_val = delay_time->u.n.value;
 			full_time_val = full_time->u.n.value;
 			spin_unlock_irqrestore(&speakup_info.spinlock, flags);
-			if (spk_serial_out(synth->procspeech))
+			if (synth->io_ops->synth_out(synth, synth->procspeech))
 				schedule_timeout(
 					msecs_to_jiffies(delay_time_val));
 			else
@@ -142,30 +114,13 @@ void spk_do_catch_up(struct spk_synth *synth)
 		synth_buffer_getc();
 		spin_unlock_irqrestore(&speakup_info.spinlock, flags);
 	}
-	spk_serial_out(synth->procspeech);
+	synth->io_ops->synth_out(synth, synth->procspeech);
 }
 EXPORT_SYMBOL_GPL(spk_do_catch_up);
 
-const char *spk_synth_immediate(struct spk_synth *synth, const char *buff)
-{
-	u_char ch;
-
-	while ((ch = *buff)) {
-		if (ch == '\n')
-			ch = synth->procspeech;
-		if (spk_wait_for_xmitr())
-			outb(ch, speakup_info.port_tts);
-		else
-			return buff;
-		buff++;
-	}
-	return NULL;
-}
-EXPORT_SYMBOL_GPL(spk_synth_immediate);
-
 void spk_synth_flush(struct spk_synth *synth)
 {
-	spk_serial_out(synth->clear);
+	synth->io_ops->synth_out(synth, synth->clear);
 }
 EXPORT_SYMBOL_GPL(spk_synth_flush);
 
@@ -180,7 +135,7 @@ int spk_synth_is_alive_restart(struct spk_synth *synth)
 {
 	if (synth->alive)
 		return 1;
-	if (spk_wait_for_xmitr() > 0) {
+	if (spk_wait_for_xmitr(synth) > 0) {
 		/* restart */
 		synth->alive = 1;
 		synth_printf("%s", synth->init);
@@ -254,6 +209,35 @@ void synth_printf(const char *fmt, ...)
 	synth_start();
 }
 EXPORT_SYMBOL_GPL(synth_printf);
+
+void synth_putwc(u16 wc)
+{
+	synth_buffer_add(wc);
+}
+EXPORT_SYMBOL_GPL(synth_putwc);
+
+void synth_putwc_s(u16 wc)
+{
+	synth_buffer_add(wc);
+	synth_start();
+}
+EXPORT_SYMBOL_GPL(synth_putwc_s);
+
+void synth_putws(const u16 *buf)
+{
+	const u16 *p;
+
+	for (p = buf; *p; p++)
+		synth_buffer_add(*p);
+}
+EXPORT_SYMBOL_GPL(synth_putws);
+
+void synth_putws_s(const u16 *buf)
+{
+	synth_putws(buf);
+	synth_start();
+}
+EXPORT_SYMBOL_GPL(synth_putws_s);
 
 static int index_count;
 static int sentence_count;
@@ -432,7 +416,6 @@ void synth_release(void)
 		sysfs_remove_group(speakup_kobj, &synth->attributes);
 	for (var = synth->vars; var->var_id != MAXVARS; var++)
 		speakup_unregister_var(var->var_id);
-	spk_stop_serial_interrupt();
 	synth->release();
 	synth = NULL;
 }

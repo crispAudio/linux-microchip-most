@@ -60,9 +60,6 @@ static const char *release_version = STR(irci_ecr-master_20150911_0724);
 static char FW_rel_ver_name[MAX_FW_REL_VER_NAME] = "---";
 
 struct ia_css_fw_info	  sh_css_sp_fw;
-#if defined(HAS_SEC_SP)
-struct ia_css_fw_info	  sh_css_sp1_fw;
-#endif /* HAS_SEC_SP */
 #if defined(HAS_BL)
 struct ia_css_fw_info     sh_css_bl_fw;
 #endif /* HAS_BL */
@@ -74,7 +71,7 @@ static struct fw_param *fw_minibuffer;
 
 char *sh_css_get_fw_version(void)
 {
-	return(FW_rel_ver_name);
+	return FW_rel_ver_name;
 }
 
 
@@ -95,7 +92,7 @@ setup_binary(struct ia_css_fw_info *fw, const char *fw_data, struct ia_css_fw_in
 
 	*sh_css_fw = *fw;
 
-#if defined(C_RUN) || defined(HRT_UNSCHED)
+#if defined(HRT_UNSCHED)
 	sh_css_fw->blob.code = sh_css_malloc(1);
 #else
 	sh_css_fw->blob.code = sh_css_malloc(fw->blob.size);
@@ -122,7 +119,7 @@ sh_css_load_blob_info(const char *fw, const struct ia_css_fw_info *bi, struct ia
 	/* Special case: only one binary in fw */
 	if (bi == NULL) bi = (const struct ia_css_fw_info *)fw;
 
-	name = (const char *)fw + bi->blob.prog_name_offset;
+	name = fw + bi->blob.prog_name_offset;
 	blob = (const unsigned char *)fw + bi->blob.offset;
 
 	/* sanity check */
@@ -138,9 +135,6 @@ sh_css_load_blob_info(const char *fw, const struct ia_css_fw_info *bi, struct ia
 	bd->header = *bi;
 
 	if ((bi->type == ia_css_isp_firmware) || (bi->type == ia_css_sp_firmware)
-#if defined(HAS_SEC_SP)
-	|| (bi->type == ia_css_sp1_firmware)
-#endif /* HAS_SEC_SP */
 #if defined(HAS_BL)
 	|| (bi->type == ia_css_bootloader_firmware)
 #endif /* HAS_BL */
@@ -201,7 +195,7 @@ sh_css_check_firmware_version(const char *fw_data)
 	struct sh_css_fw_bi_file_h *file_header;
 
 	firmware_header = (struct firmware_header *)fw_data;
-	file_header = (struct sh_css_fw_bi_file_h *)&firmware_header->file_header;
+	file_header = &firmware_header->file_header;
 
 	if (strcmp(file_header->version, release_version) != 0) {
 		return false;
@@ -221,12 +215,12 @@ sh_css_load_firmware(const char *fw_data,
 	bool valid_firmware = false;
 
 	firmware_header = (struct firmware_header *)fw_data;
-	file_header = (struct sh_css_fw_bi_file_h *)&firmware_header->file_header;
-	binaries = (struct ia_css_fw_info *)&firmware_header->binary_header;
+	file_header = &firmware_header->file_header;
+	binaries = &firmware_header->binary_header;
 	strncpy(FW_rel_ver_name, file_header->version, min(sizeof(FW_rel_ver_name), sizeof(file_header->version)) - 1);
 	valid_firmware = sh_css_check_firmware_version(fw_data);
 	if (!valid_firmware) {
-#if (!defined HRT_CSIM && !defined HRT_RTL)
+#if !defined(HRT_RTL)
 		IA_CSS_ERROR("CSS code version (%s) and firmware version (%s) mismatch!",
 				file_header->version, release_version);
 		return IA_CSS_ERR_VERSION_MISMATCH;
@@ -282,14 +276,6 @@ sh_css_load_firmware(const char *fw_data,
 			err = setup_binary(bi, fw_data, &sh_css_sp_fw, i);
 			if (err != IA_CSS_SUCCESS)
 				return err;
-#if defined(HAS_SEC_SP)
-		} else if (bi->type == ia_css_sp1_firmware) {
-			if (i != SP1_FIRMWARE)
-				return IA_CSS_ERR_INTERNAL_ERROR;
-			err = setup_binary(bi, fw_data, &sh_css_sp1_fw, i);
-			if (err != IA_CSS_SUCCESS)
-				return err;
-#endif /* HAS_SEC_SP */
 #if defined(HAS_BL)
 		} else if (bi->type == ia_css_bootloader_firmware) {
 			if (i != BOOTLOADER_FIRMWARE)
@@ -332,9 +318,6 @@ void sh_css_unload_firmware(void)
 	}
 
 	memset(&sh_css_sp_fw, 0, sizeof(sh_css_sp_fw));
-#if defined(HAS_SEC_SP)
-	memset(&sh_css_sp1_fw, 0, sizeof(sh_css_sp1_fw));
-#endif /* HAS_SEC_SP */
 	if (sh_css_blob_info) {
 		sh_css_free(sh_css_blob_info);
 		sh_css_blob_info = NULL;
@@ -350,14 +333,7 @@ sh_css_load_blob(const unsigned char *blob, unsigned size)
 	   is required for the CSS DMA to read the instructions. */
 
 	assert(blob != NULL);
-	if (target_addr) {
+	if (target_addr) 
 		mmgr_store(target_addr, blob, size);
-#ifdef HRT_CSIM
-		{
-			unsigned padded_size = CEIL_MUL(size, HIVE_ISP_DDR_WORD_BYTES);
-			mmgr_clear(target_addr + size, padded_size - size);
-		}
-#endif
-	}
 	return target_addr;
 }

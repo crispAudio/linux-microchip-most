@@ -1,7 +1,7 @@
 /*
  * Support for Medifield PNW Camera Imaging ISP subsystem.
  *
- * Copyright (c) 2010 Intel Corporation. All Rights Reserved.
+ * Copyright (c) 2010-2017 Intel Corporation. All Rights Reserved.
  *
  * Copyright (c) 2010 Silicon Hive www.siliconhive.com.
  *
@@ -39,24 +39,17 @@
 #include "mmu/isp_mmu.h"
 #include "mmu/sh_mmu_mrfld.h"
 
-#ifdef USE_SSSE3
-#include <asm/ssse3.h>
-#endif
-
 struct hmm_bo_device bo_device;
 struct hmm_pool	dynamic_pool;
 struct hmm_pool	reserved_pool;
 static ia_css_ptr dummy_ptr;
 struct _hmm_mem_stat hmm_mem_stat;
 
-const char *hmm_bo_type_strings[HMM_BO_LAST] = {
-	"p", /* private */
-	"s", /* shared */
-	"u", /* user */
-#ifdef CONFIG_ION
-	"i", /* ion */
-#endif
-};
+/* p: private
+   s: shared
+   u: user
+   i: ion */
+static const char hmm_bo_type_string[] = "psui";
 
 static ssize_t bo_show(struct device *dev, struct device_attribute *attr,
 			char *buf, struct list_head *bo_list, bool active)
@@ -81,8 +74,8 @@ static ssize_t bo_show(struct device *dev, struct device_attribute *attr,
 		if ((active && (bo->status & HMM_BO_ALLOCED)) ||
 			(!active && !(bo->status & HMM_BO_ALLOCED))) {
 			ret = scnprintf(buf + index1, PAGE_SIZE - index1,
-				"%s %d\n",
-				hmm_bo_type_strings[bo->type], bo->pgnr);
+				"%c %d\n",
+				hmm_bo_type_string[bo->type], bo->pgnr);
 
 			total[bo->type] += bo->pgnr;
 			count[bo->type]++;
@@ -96,8 +89,8 @@ static ssize_t bo_show(struct device *dev, struct device_attribute *attr,
 		if (count[i]) {
 			ret = scnprintf(buf + index1 + index2,
 				PAGE_SIZE - index1 - index2,
-				"%ld %s buffer objects: %ld KB\n",
-				count[i], hmm_bo_type_strings[i], total[i] * 4);
+				"%ld %c buffer objects: %ld KB\n",
+				count[i], hmm_bo_type_string[i], total[i] * 4);
 			if (ret > 0)
 				index2 += ret;
 		}
@@ -167,10 +160,10 @@ static ssize_t dynamic_pool_show(struct device *dev,
 	return ret;
 };
 
-static DEVICE_ATTR(active_bo, S_IRUGO, active_bo_show, NULL);
-static DEVICE_ATTR(free_bo, S_IRUGO, free_bo_show, NULL);
-static DEVICE_ATTR(reserved_pool, S_IRUGO, reserved_pool_show, NULL);
-static DEVICE_ATTR(dynamic_pool, S_IRUGO, dynamic_pool_show, NULL);
+static DEVICE_ATTR(active_bo, 0444, active_bo_show, NULL);
+static DEVICE_ATTR(free_bo, 0444, free_bo_show, NULL);
+static DEVICE_ATTR(reserved_pool, 0444, reserved_pool_show, NULL);
+static DEVICE_ATTR(dynamic_pool, 0444, dynamic_pool_show, NULL);
 
 static struct attribute *sysfs_attrs_ctrl[] = {
 	&dev_attr_active_bo.attr,
@@ -356,12 +349,7 @@ static int load_and_flush_by_kmap(ia_css_ptr virt, void *data, unsigned int byte
 		virt += len;	/* update virt for next loop */
 
 		if (des) {
-
-#ifdef USE_SSSE3
-			_ssse3_memcpy(des, src, len);
-#else
 			memcpy(des, src, len);
-#endif
 			des += len;
 		}
 
@@ -388,11 +376,7 @@ static int load_and_flush(ia_css_ptr virt, void *data, unsigned int bytes)
 		void *src = bo->vmap_addr;
 
 		src += (virt - bo->start);
-#ifdef USE_SSSE3
-		_ssse3_memcpy(data, src, bytes);
-#else
 		memcpy(data, src, bytes);
-#endif
 		if (bo->status & HMM_BO_VMAPED_CACHED)
 			clflush_cache_range(src, bytes);
 	} else {
@@ -404,11 +388,7 @@ static int load_and_flush(ia_css_ptr virt, void *data, unsigned int bytes)
 		else
 			vptr = vptr + (virt - bo->start);
 
-#ifdef USE_SSSE3
-		_ssse3_memcpy(data, vptr, bytes);
-#else
 		memcpy(data, vptr, bytes);
-#endif
 		clflush_cache_range(vptr, bytes);
 		hmm_bo_vunmap(bo);
 	}
@@ -450,11 +430,7 @@ int hmm_store(ia_css_ptr virt, const void *data, unsigned int bytes)
 		void *dst = bo->vmap_addr;
 
 		dst += (virt - bo->start);
-#ifdef USE_SSSE3
-		_ssse3_memcpy(dst, data, bytes);
-#else
 		memcpy(dst, data, bytes);
-#endif
 		if (bo->status & HMM_BO_VMAPED_CACHED)
 			clflush_cache_range(dst, bytes);
 	} else {
@@ -464,11 +440,7 @@ int hmm_store(ia_css_ptr virt, const void *data, unsigned int bytes)
 		if (vptr) {
 			vptr = vptr + (virt - bo->start);
 
-#ifdef USE_SSSE3
-			_ssse3_memcpy(vptr, data, bytes);
-#else
 			memcpy(vptr, data, bytes);
-#endif
 			clflush_cache_range(vptr, bytes);
 			hmm_bo_vunmap(bo);
 			return 0;
@@ -504,11 +476,8 @@ int hmm_store(ia_css_ptr virt, const void *data, unsigned int bytes)
 
 		virt += len;
 
-#ifdef USE_SSSE3
-		_ssse3_memcpy(des, src, len);
-#else
 		memcpy(des, src, len);
-#endif
+
 		src += len;
 
 		clflush_cache_range(des, len);
@@ -553,7 +522,7 @@ int hmm_set(ia_css_ptr virt, int c, unsigned int bytes)
 		vptr = hmm_bo_vmap(bo, true);
 		if (vptr) {
 			vptr = vptr + (virt - bo->start);
-			memset((void *)vptr, c, bytes);
+			memset(vptr, c, bytes);
 			clflush_cache_range(vptr, bytes);
 			hmm_bo_vunmap(bo);
 			return 0;

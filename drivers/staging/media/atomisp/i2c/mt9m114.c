@@ -29,7 +29,6 @@
 #include <linux/kmod.h>
 #include <linux/device.h>
 #include <linux/fs.h>
-#include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/i2c.h>
@@ -444,12 +443,8 @@ static int mt9m114_set_suspend(struct v4l2_subdev *sd)
 static int mt9m114_init_common(struct v4l2_subdev *sd)
 {
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
-	int ret;
 
-	ret = mt9m114_write_reg_array(client, mt9m114_common, PRE_POLLING);
-	if (ret)
-		return ret;
-	return ret;
+	return mt9m114_write_reg_array(client, mt9m114_common, PRE_POLLING);
 }
 
 static int power_ctrl(struct v4l2_subdev *sd, bool flag)
@@ -618,10 +613,10 @@ static int distance(struct mt9m114_res_struct const *res, u32 w, u32 h)
 	h_ratio = (res->height << 13) / h;
 	if (h_ratio == 0)
 		return -1;
-	match   = abs(((w_ratio << 13) / h_ratio) - ((int)8192));
+	match   = abs(((w_ratio << 13) / h_ratio) - 8192);
 
-	if ((w_ratio < (int)8192) || (h_ratio < (int)8192)  ||
-		(match > LARGEST_ALLOWED_RATIO_MISMATCH))
+	if ((w_ratio < 8192) || (h_ratio < 8192) ||
+	    (match > LARGEST_ALLOWED_RATIO_MISMATCH))
 		return -1;
 
 	return w_ratio + h_ratio;
@@ -926,10 +921,10 @@ static int mt9m114_set_fmt(struct v4l2_subdev *sd,
 		for (index = 0; index < N_RES; index++) {
 			if ((width == mt9m114_res[index].width) &&
 			    (height == mt9m114_res[index].height)) {
-				mt9m114_res[index].used = 1;
+				mt9m114_res[index].used = true;
 				continue;
 			}
-			mt9m114_res[index].used = 0;
+			mt9m114_res[index].used = false;
 		}
 	}
 	ret = mt9m114_get_intg_factor(c, mt9m114_info,

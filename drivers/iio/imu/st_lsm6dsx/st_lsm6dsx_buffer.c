@@ -194,8 +194,8 @@ int st_lsm6dsx_update_watermark(struct st_lsm6dsx_sensor *sensor, u16 watermark)
 	if (err < 0)
 		goto out;
 
-	fifo_watermark = ((data & ~ST_LSM6DSX_FIFO_TH_MASK) << 8) |
-			  (fifo_watermark & ST_LSM6DSX_FIFO_TH_MASK);
+	fifo_watermark = ((data << 8) & ~ST_LSM6DSX_FIFO_TH_MASK) |
+			 (fifo_watermark & ST_LSM6DSX_FIFO_TH_MASK);
 
 	wdata = cpu_to_le16(fifo_watermark);
 	err = hw->tf->write(hw->dev, ST_LSM6DSX_REG_FIFO_THL_ADDR,
@@ -364,7 +364,7 @@ static int st_lsm6dsx_update_fifo(struct iio_dev *iio_dev, bool enable)
 
 static irqreturn_t st_lsm6dsx_handler_irq(int irq, void *private)
 {
-	struct st_lsm6dsx_hw *hw = (struct st_lsm6dsx_hw *)private;
+	struct st_lsm6dsx_hw *hw = private;
 	struct st_lsm6dsx_sensor *sensor;
 	int i;
 
@@ -388,7 +388,7 @@ static irqreturn_t st_lsm6dsx_handler_irq(int irq, void *private)
 
 static irqreturn_t st_lsm6dsx_handler_thread(int irq, void *private)
 {
-	struct st_lsm6dsx_hw *hw = (struct st_lsm6dsx_hw *)private;
+	struct st_lsm6dsx_hw *hw = private;
 	int count;
 
 	mutex_lock(&hw->fifo_lock);

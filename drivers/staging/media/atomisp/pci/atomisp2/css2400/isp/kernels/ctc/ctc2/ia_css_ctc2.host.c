@@ -21,16 +21,13 @@
 #define INEFFECTIVE_VAL 4096
 #define BASIC_VAL 819
 
-/*Default configuration of parameters for Ctc2
-*/
+/*Default configuration of parameters for Ctc2*/
 const struct ia_css_ctc2_config default_ctc2_config = {
 	INEFFECTIVE_VAL, INEFFECTIVE_VAL, INEFFECTIVE_VAL,
 	INEFFECTIVE_VAL, INEFFECTIVE_VAL, INEFFECTIVE_VAL,
 	BASIC_VAL * 2, BASIC_VAL * 4, BASIC_VAL * 6,
 	BASIC_VAL * 8, INEFFECTIVE_VAL, INEFFECTIVE_VAL,
 	BASIC_VAL >> 1, BASIC_VAL};
-
-
 
 /* (dydx) = ctc2_slope(y1, y0, x1, x0)
  * -----------------------------------------------
@@ -44,7 +41,7 @@ static int ctc2_slope(int y1, int y0, int x1, int x0)
 	const int max_slope = (1 << IA_CSS_CTC_COEF_SHIFT) - 1;
 	int dy = y1 - y0;
 	int dx = x1 - x0;
-	int rounding = (dx+1) >> 1;
+	int rounding = (dx + 1) >> 1;
 	int dy_shift = dy << shift_val;
 	int slope, dydx;
 
@@ -55,9 +52,8 @@ static int ctc2_slope(int y1, int y0, int x1, int x0)
 	assert(x1 > 0 && x1 <= max_slope);
 	assert(dx > 0);
 
-	if (dy < 0) {
+	if (dy < 0)
 		rounding = -rounding;
-	}
 	slope = (int) (dy_shift + rounding) / dx;
 
 	/*the slope must lie within the range
@@ -104,14 +100,14 @@ void ia_css_ctc2_vmem_encode(struct ia_css_isp_ctc2_vmem_params *to,
 			    SH_CSS_BAYER_MAXVAL, from->y_x4);
 
 	/*Fill 3 arrays with:
-	* - Luma input gain values y_y0, y_y1, y_y2, y_3, y_y4
-	* - Luma kneepoints 0, y_x1, y_x2, y_x3, y_x4
-	* - Calculated slopes dydx0, dyxd1, dydx2, dydx3, dydx4
-	*
-	* - Each 64-element array is divided in blocks of 16 elements:
-	*   the 5 parameters + zeros in the remaining 11 positions
-	* - All blocks of the same array will contain the same data
-	*/
+	 * - Luma input gain values y_y0, y_y1, y_y2, y_3, y_y4
+	 * - Luma kneepoints 0, y_x1, y_x2, y_x3, y_x4
+	 * - Calculated slopes dydx0, dyxd1, dydx2, dydx3, dydx4
+	 *
+	 * - Each 64-element array is divided in blocks of 16 elements:
+	 *   the 5 parameters + zeros in the remaining 11 positions
+	 * - All blocks of the same array will contain the same data
+	 */
 	for (i = 0; i < shffl_blck; i++) {
 		to->y_x[0][(i << shffl_blck)]     = 0;
 		to->y_x[0][(i << shffl_blck) + 1] = from->y_x1;
@@ -126,14 +122,14 @@ void ia_css_ctc2_vmem_encode(struct ia_css_isp_ctc2_vmem_params *to,
 		to->y_y[0][(i << shffl_blck) + 4] = from->y_y4;
 
 		to->e_y_slope[0][(i << shffl_blck)]    = dydx0;
-		to->e_y_slope[0][(i << shffl_blck) +1] = dydx1;
-		to->e_y_slope[0][(i << shffl_blck) +2] = dydx2;
-		to->e_y_slope[0][(i << shffl_blck) +3] = dydx3;
-		to->e_y_slope[0][(i << shffl_blck) +4] = dydx4;
+		to->e_y_slope[0][(i << shffl_blck) + 1] = dydx1;
+		to->e_y_slope[0][(i << shffl_blck) + 2] = dydx2;
+		to->e_y_slope[0][(i << shffl_blck) + 3] = dydx3;
+		to->e_y_slope[0][(i << shffl_blck) + 4] = dydx4;
 
 		for (j = 0; j < lenght_zeros; j++) {
-			to->y_x[0][(i << shffl_blck)+ 5 + j] = 0;
-			to->y_y[0][(i << shffl_blck)+ 5 + j] = 0;
+			to->y_x[0][(i << shffl_blck) + 5 + j] = 0;
+			to->y_y[0][(i << shffl_blck) + 5 + j] = 0;
 			to->e_y_slope[0][(i << shffl_blck)+ 5 + j] = 0;
 		}
 	}

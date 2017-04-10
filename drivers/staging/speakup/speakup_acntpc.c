@@ -113,6 +113,7 @@ static struct spk_synth synth_acntpc = {
 	.startup = SYNTH_START,
 	.checkval = SYNTH_CHECK,
 	.vars = vars,
+	.io_ops = &spk_serial_io_ops,
 	.probe = synth_probe,
 	.release = accent_release,
 	.synth_immediate = synth_immediate,
@@ -196,6 +197,7 @@ static void do_catch_up(struct spk_synth *synth)
 			synth->flush(synth);
 			continue;
 		}
+		synth_buffer_skip_nonlatin1();
 		if (synth_buffer_empty()) {
 			spin_unlock_irqrestore(&speakup_info.spinlock, flags);
 			break;
@@ -259,9 +261,9 @@ static int synth_probe(struct spk_synth *synth)
 	if (port_forced) {
 		speakup_info.port_tts = port_forced;
 		pr_info("probe forced to %x by kernel command line\n",
-				speakup_info.port_tts);
+			speakup_info.port_tts);
 		if (synth_request_region(speakup_info.port_tts - 1,
-					SYNTH_IO_EXTENT)) {
+					 SYNTH_IO_EXTENT)) {
 			pr_warn("sorry, port already reserved\n");
 			return -EBUSY;
 		}
@@ -270,7 +272,7 @@ static int synth_probe(struct spk_synth *synth)
 	} else {
 		for (i = 0; synth_portlist[i]; i++) {
 			if (synth_request_region(synth_portlist[i],
-						SYNTH_IO_EXTENT)) {
+						 SYNTH_IO_EXTENT)) {
 				pr_warn
 				    ("request_region: failed with 0x%x, %d\n",
 				     synth_portlist[i], SYNTH_IO_EXTENT);
@@ -280,7 +282,7 @@ static int synth_probe(struct spk_synth *synth)
 			if (port_val == 0x53fc) {
 				/* 'S' and out&input bits */
 				synth_port_control = synth_portlist[i];
-				speakup_info.port_tts = synth_port_control+1;
+				speakup_info.port_tts = synth_port_control + 1;
 				break;
 			}
 		}
@@ -302,6 +304,7 @@ static int synth_probe(struct spk_synth *synth)
 
 static void accent_release(void)
 {
+	spk_stop_serial_interrupt();
 	if (speakup_info.port_tts)
 		synth_release_region(speakup_info.port_tts-1, SYNTH_IO_EXTENT);
 	speakup_info.port_tts = 0;

@@ -14,7 +14,6 @@
 
 #if !defined(HAS_NO_HMEM)
 
-#include "ia_css_memory_access.h"
 #include "memory_access.h"
 #include "ia_css_types.h"
 #include "sh_css_internal.h"
@@ -62,17 +61,6 @@ ia_css_bh_encode(
 	    uDIGIT_FITTING(from->ae_y_coef_g, 16, SH_CSS_AE_YCOEF_SHIFT);
 	to->y_coef_b =
 	    uDIGIT_FITTING(from->ae_y_coef_b, 16, SH_CSS_AE_YCOEF_SHIFT);
-}
-
-void
-ia_css_bh_hmem_encode(
-	struct sh_css_isp_bh_hmem_params *to,
-	const struct ia_css_3a_config *from,
-	unsigned size)
-{
-	(void)size;
-	(void)from;
-	(void)to;
 }
 
 #endif

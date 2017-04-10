@@ -290,11 +290,7 @@ init_bufq(unsigned int desc_offset,
 	ia_css_queue_remote_t remoteq;
 
 	fw = &sh_css_sp_fw;
-#ifdef C_RUN
-	q_base_addr = (unsigned int)sp_address_of(ia_css_bufq_host_sp_queue);
-#else
 	q_base_addr = fw->info.sp.host_sp_queue;
-#endif
 
 	/* Setup queue location as SP and proc id as SP0_ID */
 	remoteq.location = IA_CSS_QUEUE_LOC_SP;
@@ -444,7 +440,7 @@ enum ia_css_err ia_css_bufq_enqueue_psys_event(
 enum  ia_css_err ia_css_bufq_dequeue_psys_event(
 	uint8_t item[BUFQ_EVENT_SIZE])
 {
-	enum ia_css_err return_err;
+	enum ia_css_err;
 	int error = 0;
 	ia_css_queue_t *q;
 
@@ -461,8 +457,7 @@ enum  ia_css_err ia_css_bufq_dequeue_psys_event(
 	}
 	error = ia_css_eventq_recv(q, item);
 
-	return_err = ia_css_convert_errno(error);
-	return return_err;
+	return ia_css_convert_errno(error);
 
 }
 
@@ -470,7 +465,7 @@ enum  ia_css_err ia_css_bufq_dequeue_isys_event(
 	uint8_t item[BUFQ_EVENT_SIZE])
 {
 #if !defined(HAS_NO_INPUT_SYSTEM)
-	enum ia_css_err return_err;
+	enum ia_css_err;
 	int error = 0;
 	ia_css_queue_t *q;
 
@@ -486,8 +481,7 @@ enum  ia_css_err ia_css_bufq_dequeue_isys_event(
 		return IA_CSS_ERR_RESOURCE_NOT_AVAILABLE;
 	}
 	error = ia_css_eventq_recv(q, item);
-	return_err = ia_css_convert_errno(error);
-	return return_err;
+	return ia_css_convert_errno(error);
 #else
 	(void)item;
 	return IA_CSS_ERR_RESOURCE_NOT_AVAILABLE;

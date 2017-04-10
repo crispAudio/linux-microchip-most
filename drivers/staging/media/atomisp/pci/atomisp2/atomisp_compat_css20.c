@@ -92,65 +92,6 @@ unsigned int atomisp_css_debug_get_dtrace_level(void)
 	return ia_css_debug_trace_level;
 }
 
-static ia_css_ptr atomisp_css2_mm_alloc(size_t bytes, uint32_t attr)
-{
-	if (attr & IA_CSS_MEM_ATTR_ZEROED) {
-		if (attr & IA_CSS_MEM_ATTR_CACHED) {
-			if (attr & IA_CSS_MEM_ATTR_CONTIGUOUS)
-				return (ia_css_ptr) hrt_isp_css_mm_calloc_contiguous(bytes);
-			else
-				return (ia_css_ptr) hrt_isp_css_mm_calloc_cached(bytes);
-		} else {
-			if (attr & IA_CSS_MEM_ATTR_CONTIGUOUS)
-				return (ia_css_ptr) hrt_isp_css_mm_calloc_contiguous(bytes);
-			else
-				return (ia_css_ptr) hrt_isp_css_mm_calloc(bytes);
-		}
-	} else {
-		if (attr & IA_CSS_MEM_ATTR_CACHED) {
-			if (attr & IA_CSS_MEM_ATTR_CONTIGUOUS)
-				return (ia_css_ptr) hrt_isp_css_mm_alloc_contiguous(bytes);
-			else
-				return (ia_css_ptr) hrt_isp_css_mm_alloc_cached(bytes);
-		} else {
-			if (attr & IA_CSS_MEM_ATTR_CONTIGUOUS)
-				return (ia_css_ptr) hrt_isp_css_mm_alloc_contiguous(bytes);
-			else
-				return (ia_css_ptr) hrt_isp_css_mm_alloc(bytes);
-		}
-	}
-}
-
-static void atomisp_css2_mm_free(ia_css_ptr ptr)
-{
-	hrt_isp_css_mm_free(ptr);
-}
-
-static int atomisp_css2_mm_load(ia_css_ptr ptr, void *data, size_t bytes)
-{
-	return hrt_isp_css_mm_load(ptr, data, bytes);
-}
-
-static int atomisp_css2_mm_store(ia_css_ptr ptr, const void *data, size_t bytes)
-{
-	return hrt_isp_css_mm_store(ptr, data, bytes);
-}
-
-static int atomisp_css2_mm_set(ia_css_ptr ptr, int c, size_t bytes)
-{
-	return hrt_isp_css_mm_set(ptr, c, bytes);
-}
-
-static ia_css_ptr atomisp_css2_mm_mmap(const void *ptr, const size_t size,
-		   uint16_t attribute, void *context)
-{
-	struct hrt_userbuffer_attr *userbuffer_attr = context;
-	return hrt_isp_css_mm_alloc_user_ptr(
-			size, (void *)ptr, userbuffer_attr->pgnr,
-			userbuffer_attr->type,
-			attribute & HRT_BUF_FLAG_CACHED);
-}
-
 void atomisp_css2_hw_store_8(hrt_address addr, uint8_t data)
 {
 	unsigned long flags;
@@ -548,7 +489,7 @@ static int __destroy_stream(struct atomisp_sub_device *asd,
 			}
 
 			usleep_range(100, 200);
-		};
+		}
 	}
 
 	stream_env->stream_state = CSS_STREAM_STOPPED;
@@ -984,13 +925,6 @@ int atomisp_css_load_firmware(struct atomisp_device *isp)
 
 	isp->css_env.isp_css_env.cpu_mem_env.alloc = atomisp_kernel_zalloc;
 	isp->css_env.isp_css_env.cpu_mem_env.free = atomisp_kernel_free;
-
-	isp->css_env.isp_css_env.css_mem_env.alloc = atomisp_css2_mm_alloc;
-	isp->css_env.isp_css_env.css_mem_env.free = atomisp_css2_mm_free;
-	isp->css_env.isp_css_env.css_mem_env.load = atomisp_css2_mm_load;
-	isp->css_env.isp_css_env.css_mem_env.store = atomisp_css2_mm_store;
-	isp->css_env.isp_css_env.css_mem_env.set = atomisp_css2_mm_set;
-	isp->css_env.isp_css_env.css_mem_env.mmap = atomisp_css2_mm_mmap;
 
 	isp->css_env.isp_css_env.hw_access_env.store_8 =
 							atomisp_css2_hw_store_8;
@@ -4697,11 +4631,6 @@ int atomisp_css_isr_thread(struct atomisp_device *isp,
 #endif
 
 	return 0;
-}
-
-void atomisp_set_stop_timeout(unsigned int timeout)
-{
-	return;
 }
 
 bool atomisp_css_valid_sof(struct atomisp_device *isp)

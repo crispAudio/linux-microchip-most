@@ -17,17 +17,6 @@
 
 #include "storage_class.h"
 
-#ifdef __KLOCWORK__
-/* Klocwork does not see that assert will lead to abortion
- * as there is no good way to tell this to KW and the code
- * should not depend on assert to function (actually the assert
- * could be disabled in a release build) it was decided to
- * disable the assert for KW scans (by defining NDEBUG)
- * see also: http://www.klocwork.com/products/documentation/current/Tuning_C/C%2B%2B_analysis#Assertions
- */
-#define NDEBUG
-#endif /* __KLOCWORK__ */
-
 /**
  * The following macro can help to test the size of a struct at compile
  * time rather than at run-time. It does not work for all compilers; see
@@ -72,15 +61,6 @@
 #include <assert.h>
 #endif
 
-#elif defined(__HIVECC)
-
-/* enable assert for unsched, disable assert for sched and target */
-#if defined(HRT_UNSCHED)
-#define assert(cnd) OP___csim_assert(cnd)
-#else
-#define assert(cnd) ((void)0)
-#endif
-
 #elif defined(__KERNEL__)
 #include <linux/bug.h>
 
@@ -112,16 +92,12 @@
  * The implemenation for the pipe generation tool is in see support.isp.h */
 #define OP___assert(cnd) assert(cnd)
 
-#ifdef C_RUN
-#define compile_time_assert(cond) OP___assert(cond)
-#else
 STORAGE_CLASS_INLINE void compile_time_assert (unsigned cond)
 {
 	/* Call undefined function if cond is false */
 	extern void _compile_time_assert (void);
 	if (!cond) _compile_time_assert();
 }
-#endif
 #endif /* PIPE_GENERATION */
 
 #endif /* __ASSERT_SUPPORT_H_INCLUDED__ */

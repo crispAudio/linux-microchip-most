@@ -141,6 +141,43 @@ struct visornic_devdata {
 	struct uiscmdrsp cmdrsp[SIZEOF_CMDRSP];
 };
 
+/* Returns next non-zero index on success or 0 on failure (i.e. out of room). */
+static inline u16
+add_physinfo_entries(u64 inp_pfn, u16 inp_off, u32 inp_len, u16 index,
+		     u16 max_pi_arr_entries, struct phys_info pi_arr[])
+{
+	u32 len;
+	u16 i, firstlen;
+
+	firstlen = PI_PAGE_SIZE - inp_off;
+	if (inp_len <= firstlen) {
+		/* The input entry spans only one page - add as is. */
+		if (index >= max_pi_arr_entries)
+			return 0;
+		pi_arr[index].pi_pfn = inp_pfn;
+		pi_arr[index].pi_off = (u16)inp_off;
+		pi_arr[index].pi_len = (u16)inp_len;
+		return index + 1;
+	}
+
+	/* This entry spans multiple pages. */
+	for (len = inp_len, i = 0; len;
+		len -= pi_arr[index + i].pi_len, i++) {
+		if (index + i >= max_pi_arr_entries)
+			return 0;
+		pi_arr[index + i].pi_pfn = inp_pfn + i;
+		if (i == 0) {
+			pi_arr[index].pi_off = inp_off;
+			pi_arr[index].pi_len = firstlen;
+		} else {
+			pi_arr[index + i].pi_off = 0;
+			pi_arr[index + i].pi_len =
+			    (u16)MINNUM(len, (u32)PI_PAGE_SIZE);
+		}
+	}
+	return index + i;
+}
+
 /*
  *	visor_copy_fragsinfo_from_skb(
  *	@skb_in: skbuff that we are pulling the frags from
@@ -370,12 +407,14 @@ alloc_rcv_buf(struct net_device *netdev)
  *	@skb: skb to give to the IO partition
  *
  *	Send the skb to the IO Partition.
- *	Returns void
+ *	Returns 0 or error
  */
-static inline void
+static int
 post_skb(struct uiscmdrsp *cmdrsp,
 	 struct visornic_devdata *devdata, struct sk_buff *skb)
 {
+	int err;
+
 	cmdrsp->net.buf = skb;
 	cmdrsp->net.rcvpost.frag.pi_pfn = page_to_pfn(virt_to_page(skb->data));
 	cmdrsp->net.rcvpost.frag.pi_off =
@@ -383,18 +422,23 @@ post_skb(struct uiscmdrsp *cmdrsp,
 	cmdrsp->net.rcvpost.frag.pi_len = skb->len;
 	cmdrsp->net.rcvpost.unique_num = devdata->incarnation_id;
 
-	if ((cmdrsp->net.rcvpost.frag.pi_off + skb->len) <= PI_PAGE_SIZE) {
-		cmdrsp->net.type = NET_RCV_POST;
-		cmdrsp->cmdtype = CMD_NET_TYPE;
-		if (!visorchannel_signalinsert(devdata->dev->visorchannel,
-					       IOCHAN_TO_IOPART,
-					       cmdrsp)) {
-			atomic_inc(&devdata->num_rcvbuf_in_iovm);
-			devdata->chstat.sent_post++;
-		} else {
-			devdata->chstat.sent_post_failed++;
-		}
+	if ((cmdrsp->net.rcvpost.frag.pi_off + skb->len) > PI_PAGE_SIZE)
+		return -EINVAL;
+
+	cmdrsp->net.type = NET_RCV_POST;
+	cmdrsp->cmdtype = CMD_NET_TYPE;
+	err = visorchannel_signalinsert(devdata->dev->visorchannel,
+					IOCHAN_TO_IOPART,
+					cmdrsp);
+	if (err) {
+		devdata->chstat.sent_post_failed++;
+		return err;
 	}
+
+	atomic_inc(&devdata->num_rcvbuf_in_iovm);
+	devdata->chstat.sent_post++;
+
+	return 0;
 }
 
 /*
@@ -405,20 +449,25 @@ post_skb(struct uiscmdrsp *cmdrsp,
  *	@devdata: visornic device we are enabling/disabling
  *
  *	Send the enable/disable message to the IO Partition.
- *	Returns void
+ *	Returns 0 or error
  */
-static void
+static int
 send_enbdis(struct net_device *netdev, int state,
 	    struct visornic_devdata *devdata)
 {
+	int err;
+
 	devdata->cmdrsp_rcv->net.enbdis.enable = state;
 	devdata->cmdrsp_rcv->net.enbdis.context = netdev;
 	devdata->cmdrsp_rcv->net.type = NET_RCV_ENBDIS;
 	devdata->cmdrsp_rcv->cmdtype = CMD_NET_TYPE;
-	if (!visorchannel_signalinsert(devdata->dev->visorchannel,
-				       IOCHAN_TO_IOPART,
-				       devdata->cmdrsp_rcv))
-		devdata->chstat.sent_enbdis++;
+	err = visorchannel_signalinsert(devdata->dev->visorchannel,
+					IOCHAN_TO_IOPART,
+					devdata->cmdrsp_rcv);
+	if (err)
+		return err;
+	devdata->chstat.sent_enbdis++;
+	return 0;
 }
 
 /*
@@ -439,6 +488,7 @@ visornic_disable_with_timeout(struct net_device *netdev, const int timeout)
 	int i;
 	unsigned long flags;
 	int wait = 0;
+	int err;
 
 	/* send a msg telling the other end we are stopping incoming pkts */
 	spin_lock_irqsave(&devdata->priv_lock, flags);
@@ -448,8 +498,11 @@ visornic_disable_with_timeout(struct net_device *netdev, const int timeout)
 
 	/* send disable and wait for ack -- don't hold lock when sending
 	 * disable because if the queue is full, insert might sleep.
+	 * If an error occurs, don't wait for the timeout.
 	 */
-	send_enbdis(netdev, 0, devdata);
+	err = send_enbdis(netdev, 0, devdata);
+	if (err)
+		return err;
 
 	/* wait for ack to arrive before we try to free rcv buffers
 	 * NOTE: the other end automatically unposts the rcv buffers when
@@ -518,7 +571,7 @@ visornic_disable_with_timeout(struct net_device *netdev, const int timeout)
 static int
 init_rcv_bufs(struct net_device *netdev, struct visornic_devdata *devdata)
 {
-	int i, count;
+	int i, j, count, err;
 
 	/* allocate fixed number of receive buffers to post to uisnic
 	 * post receive buffers after we've allocated a required amount
@@ -548,8 +601,25 @@ init_rcv_bufs(struct net_device *netdev, struct visornic_devdata *devdata)
 	 * lock - we've not enabled nor started the queue so there shouldn't
 	 * be any rcv or xmit activity
 	 */
-	for (i = 0; i < count; i++)
-		post_skb(devdata->cmdrsp_rcv, devdata, devdata->rcvbuf[i]);
+	for (i = 0; i < count; i++) {
+		err = post_skb(devdata->cmdrsp_rcv, devdata,
+			       devdata->rcvbuf[i]);
+		if (!err)
+			continue;
+
+		/* Error handling -
+		 * If we posted at least one skb, we should return success,
+		 * but need to free the resources that we have not successfully
+		 * posted.
+		 */
+		for (j = i; j < count; j++) {
+			kfree_skb(devdata->rcvbuf[j]);
+			devdata->rcvbuf[j] = NULL;
+		}
+		if (i == 0)
+			return err;
+		break;
+	}
 
 	return 0;
 }
@@ -566,7 +636,7 @@ init_rcv_bufs(struct net_device *netdev, struct visornic_devdata *devdata)
 static int
 visornic_enable_with_timeout(struct net_device *netdev, const int timeout)
 {
-	int i;
+	int err = 0;
 	struct visornic_devdata *devdata = netdev_priv(netdev);
 	unsigned long flags;
 	int wait = 0;
@@ -576,11 +646,11 @@ visornic_enable_with_timeout(struct net_device *netdev, const int timeout)
 	/* NOTE: the other end automatically unposts the rcv buffers when it
 	 * gets a disable.
 	 */
-	i = init_rcv_bufs(netdev, devdata);
-	if (i < 0) {
+	err = init_rcv_bufs(netdev, devdata);
+	if (err < 0) {
 		dev_err(&netdev->dev,
-			"%s failed to init rcv bufs (%d)\n", __func__, i);
-		return i;
+			"%s failed to init rcv bufs\n", __func__);
+		return err;
 	}
 
 	spin_lock_irqsave(&devdata->priv_lock, flags);
@@ -594,9 +664,12 @@ visornic_enable_with_timeout(struct net_device *netdev, const int timeout)
 	spin_unlock_irqrestore(&devdata->priv_lock, flags);
 
 	/* send enable and wait for ack -- don't hold lock when sending enable
-	 * because if the queue is full, insert might sleep.
+	 * because if the queue is full, insert might sleep. If an error
+	 * occurs error out.
 	 */
-	send_enbdis(netdev, 1, devdata);
+	err = send_enbdis(netdev, 1, devdata);
+	if (err)
+		return err;
 
 	spin_lock_irqsave(&devdata->priv_lock, flags);
 	while ((timeout == VISORNIC_INFINITE_RSP_WAIT) ||
@@ -723,8 +796,8 @@ static unsigned long devdata_xmits_outstanding(struct visornic_devdata *devdata)
  *      Returns true iff the number of unacked xmits sent to
  *      the IO partition is >= high_watermark.
  */
-static inline bool vnic_hit_high_watermark(struct visornic_devdata *devdata,
-					   ulong high_watermark)
+static bool vnic_hit_high_watermark(struct visornic_devdata *devdata,
+				    ulong high_watermark)
 {
 	return (devdata_xmits_outstanding(devdata) >= high_watermark);
 }
@@ -739,8 +812,8 @@ static inline bool vnic_hit_high_watermark(struct visornic_devdata *devdata,
  *      Returns true iff the number of unacked xmits sent to
  *      the IO partition is <= low_watermark.
  */
-static inline bool vnic_hit_low_watermark(struct visornic_devdata *devdata,
-					  ulong low_watermark)
+static bool vnic_hit_low_watermark(struct visornic_devdata *devdata,
+				   ulong low_watermark)
 {
 	return (devdata_xmits_outstanding(devdata) <= low_watermark);
 }
@@ -764,6 +837,7 @@ visornic_xmit(struct sk_buff *skb, struct net_device *netdev)
 	int len, firstfraglen, padlen;
 	struct uiscmdrsp *cmdrsp = NULL;
 	unsigned long flags;
+	int err;
 
 	devdata = netdev_priv(netdev);
 	spin_lock_irqsave(&devdata->priv_lock, flags);
@@ -880,8 +954,9 @@ visornic_xmit(struct sk_buff *skb, struct net_device *netdev)
 		return NETDEV_TX_OK;
 	}
 
-	if (visorchannel_signalinsert(devdata->dev->visorchannel,
-				      IOCHAN_TO_IOPART, cmdrsp)) {
+	err = visorchannel_signalinsert(devdata->dev->visorchannel,
+					IOCHAN_TO_IOPART, cmdrsp);
+	if (err) {
 		netif_stop_queue(netdev);
 		spin_unlock_irqrestore(&devdata->priv_lock, flags);
 		devdata->busy_cnt++;
@@ -959,6 +1034,7 @@ visornic_set_multi(struct net_device *netdev)
 {
 	struct uiscmdrsp *cmdrsp;
 	struct visornic_devdata *devdata = netdev_priv(netdev);
+	int err = 0;
 
 	if (devdata->old_flags == netdev->flags)
 		return;
@@ -975,10 +1051,12 @@ visornic_set_multi(struct net_device *netdev)
 	cmdrsp->net.enbdis.context = netdev;
 	cmdrsp->net.enbdis.enable =
 		netdev->flags & IFF_PROMISC;
-	visorchannel_signalinsert(devdata->dev->visorchannel,
-				  IOCHAN_TO_IOPART,
-				  cmdrsp);
+	err = visorchannel_signalinsert(devdata->dev->visorchannel,
+					IOCHAN_TO_IOPART,
+					cmdrsp);
 	kfree(cmdrsp);
+	if (err)
+		return;
 
 out_save_flags:
 	devdata->old_flags = netdev->flags;
@@ -1030,7 +1108,7 @@ visornic_xmit_timeout(struct net_device *netdev)
  *	we are finished with them.
  *	Returns 0 for success, -1 for error.
  */
-static inline int
+static int
 repost_return(struct uiscmdrsp *cmdrsp, struct visornic_devdata *devdata,
 	      struct sk_buff *skb, struct net_device *netdev)
 {
@@ -1071,7 +1149,12 @@ repost_return(struct uiscmdrsp *cmdrsp, struct visornic_devdata *devdata,
 				status = -ENOMEM;
 				break;
 			}
-			post_skb(cmdrsp, devdata, devdata->rcvbuf[i]);
+			status = post_skb(cmdrsp, devdata, devdata->rcvbuf[i]);
+			if (status) {
+				kfree_skb(devdata->rcvbuf[i]);
+				devdata->rcvbuf[i] = NULL;
+				break;
+			}
 			numreposted++;
 			break;
 		}
@@ -1494,17 +1577,18 @@ static const struct file_operations debugfs_info_fops = {
  *	Send receive buffers to the IO Partition.
  *	Returns void
  */
-static void
+static int
 send_rcv_posts_if_needed(struct visornic_devdata *devdata)
 {
 	int i;
 	struct net_device *netdev;
 	struct uiscmdrsp *cmdrsp = devdata->cmdrsp_rcv;
 	int cur_num_rcv_bufs_to_alloc, rcv_bufs_allocated;
+	int err;
 
 	/* don't do this until vnic is marked ready */
 	if (!(devdata->enabled && devdata->enab_dis_acked))
-		return;
+		return 0;
 
 	netdev = devdata->netdev;
 	rcv_bufs_allocated = 0;
@@ -1523,11 +1607,17 @@ send_rcv_posts_if_needed(struct visornic_devdata *devdata)
 				break;
 			}
 			rcv_bufs_allocated++;
-			post_skb(cmdrsp, devdata, devdata->rcvbuf[i]);
+			err = post_skb(cmdrsp, devdata, devdata->rcvbuf[i]);
+			if (err) {
+				kfree_skb(devdata->rcvbuf[i]);
+				devdata->rcvbuf[i] = NULL;
+				break;
+			}
 			devdata->chstat.extra_rcvbufs_sent++;
 		}
 	}
 	devdata->num_rcv_bufs_could_not_alloc -= rcv_bufs_allocated;
+	return 0;
 }
 
 /*
@@ -1650,8 +1740,12 @@ static int visornic_poll(struct napi_struct *napi, int budget)
 							struct visornic_devdata,
 							napi);
 	int rx_count = 0;
+	int err;
 
-	send_rcv_posts_if_needed(devdata);
+	err = send_rcv_posts_if_needed(devdata);
+	if (err)
+		return err;
+
 	service_resp_queue(devdata->cmdrsp, devdata, &rx_count, budget);
 
 	/* If there aren't any more packets to receive stop the poll */
@@ -2052,11 +2146,11 @@ static int visornic_init(void)
 	if (!visornic_debugfs_dir)
 		return err;
 
-	ret = debugfs_create_file("info", S_IRUSR, visornic_debugfs_dir, NULL,
+	ret = debugfs_create_file("info", 0400, visornic_debugfs_dir, NULL,
 				  &debugfs_info_fops);
 	if (!ret)
 		goto cleanup_debugfs;
-	ret = debugfs_create_file("enable_ints", S_IWUSR, visornic_debugfs_dir,
+	ret = debugfs_create_file("enable_ints", 0200, visornic_debugfs_dir,
 				  NULL, &debugfs_enable_ints_fops);
 	if (!ret)
 		goto cleanup_debugfs;

@@ -33,7 +33,7 @@
 #include "ia_css_buffer.h"
 
 #include "ia_css_binary.h"
-#if !defined(__ISP) && !defined(__SP)
+#if !defined(__ISP)
 #include "sh_css_firmware.h" /* not needed/desired on SP/ISP */
 #endif
 #include "sh_css_legacy.h"
@@ -44,7 +44,6 @@
 #include "ia_css_frame_comm.h"
 #include "ia_css_3a.h"
 #include "ia_css_dvs.h"
-#include "ia_css_lace_stat.h"
 #include "ia_css_metadata.h"
 #include "runtime/bufq/interface/ia_css_bufq.h"
 #include "ia_css_timer.h"
@@ -153,11 +152,7 @@
 #define SIZE_OF_IA_CSS_PTR		sizeof(uint32_t)
 
 /* Number of SP's */
-#if defined(HAS_SEC_SP)
-#define NUM_OF_SPS 2
-#else
 #define NUM_OF_SPS 1
-#endif /* HAS_SEC_SP */
 
 #if defined(HAS_BL)
 #define NUM_OF_BLS 1
@@ -168,9 +163,6 @@
 /* Enum for order of Binaries */
 enum sh_css_order_binaries {
 	SP_FIRMWARE = 0,
-#if defined(HAS_SEC_SP)
-	SP1_FIRMWARE,
-#endif /* HAS_SEC_SP */
 #if defined(HAS_BL)
 	BOOTLOADER_FIRMWARE,
 #endif
@@ -557,12 +549,8 @@ struct sh_css_sp_pipeline {
 	uint32_t	running;	/* needed for pipe termination */
 	hrt_vaddress	sp_stage_addr[SH_CSS_MAX_STAGES];
 	hrt_vaddress	scaler_pp_lut; /* Early bound LUT */
-#ifndef __SP
 	uint32_t	dummy; /* stage ptr is only used on sp but lives in
 				  this struct; needs cleanup */
-#else
-	struct sh_css_sp_stage *stage; /* Current stage for this pipeline */
-#endif
 	int32_t num_execs; /* number of times to run if this is
 			      an acceleration pipe. */
 #if defined(SH_CSS_ENABLE_METADATA)
@@ -797,7 +785,7 @@ struct sh_css_hmm_buffer {
 	 * uint64_t does not exist on SP/ISP.
 	 * Size of the struct is checked by sp.hive.c.
 	 */
-#if !defined(__SP) && !defined(__ISP)
+#if !defined(__ISP)
 	CSS_ALIGN(uint64_t cookie_ptr, 8); /* TODO: check if this alignment is needed */
 	uint64_t kernel_ptr;
 #else
@@ -980,7 +968,6 @@ struct host_sp_queues {
 
 extern int (*sh_css_printf)(const char *fmt, va_list args);
 
-#ifndef __HIVECC
 STORAGE_CLASS_INLINE void
 sh_css_print(const char *fmt, ...)
 {
@@ -999,14 +986,13 @@ sh_css_vprint(const char *fmt, va_list args)
 	if (sh_css_printf)
 		sh_css_printf(fmt, args);
 }
-#endif
 
 /* The following #if is there because this header file is also included
    by SP and ISP code but they do not need this data and HIVECC has alignment
    issue with the firmware struct/union's.
    More permanent solution will be to refactor this include.
 */
-#if !defined(__ISP) && !defined(__SP)
+#if !defined(__ISP)
 hrt_vaddress
 sh_css_params_ddr_address_map(void);
 
@@ -1114,6 +1100,6 @@ ia_css_get_crop_offsets(
 		struct ia_css_pipe *pipe,
 		struct ia_css_frame_info *in_frame);
 #endif
-#endif /* !defined(__ISP) && !defined(__SP) */
+#endif /* !defined(__ISP) */
 
 #endif /* _SH_CSS_INTERNAL_H_ */
