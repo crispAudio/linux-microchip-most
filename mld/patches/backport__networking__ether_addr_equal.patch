@@ -6,10 +6,10 @@ From: Andrey Shvetsov <andrey.shvetsov@k2l.de>
 diff --git a/drivers/staging/most/aim-network/networking.c b/drivers/staging/most/aim-network/networking.c
 --- a/drivers/staging/most/aim-network/networking.c
 +++ b/drivers/staging/most/aim-network/networking.c
-@@ -579,7 +579,7 @@ void most_deliver_netinfo(struct most_interface *iface,
+@@ -554,7 +554,7 @@ static void on_netinfo(struct most_interface *iface,
  				    m[0], m[1], m[2], m[3], m[4], m[5]);
  			ether_addr_copy(dev->dev_addr, m);
- 			complete(&nd->mac_compl);
+ 			netif_dormant_off(dev);
 -		} else if (!ether_addr_equal(dev->dev_addr, m)) {
 +		} else if (memcmp(dev->dev_addr, m, ETH_ALEN)) {
  			netdev_warn(dev, "reject mac %02x-%02x-%02x-%02x-%02x-%02x\n",
