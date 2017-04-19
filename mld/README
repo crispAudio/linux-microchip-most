@@ -39,7 +39,7 @@ mld-1.6.0
   ('ip link' shows different status depending on the MOST lock state,
   see also /sys/class/net/meth0/carrier)
 
-- net: added use of the dormant operating state
+- net: added use of the operational state 'dormant'
   (net device starts successfully even without valid MAC address,
   the property /sys/class/net/meth0/operstate varies between 'down', 'dormant'
   and 'up')
