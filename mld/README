@@ -25,6 +25,33 @@ To see the build instructions:
 HISTORY OF CHANGES
 ==================
 
+mld-1.6.0
+---------
+
+- dim2: enabled flow control for the isochronous channels
+
+- net: fixed race between the create/destroy/use of the device
+
+- removed dependency of HDM's on the networking-aim
+  (networking-aim must not be loaded if not used)
+
+- net: added carrier information based on the NI state
+  ('ip link' shows different status depending on the MOST lock state,
+  see also /sys/class/net/meth0/carrier)
+
+- net: added use of the dormant operating state
+  (net device starts successfully even without valid MAC address,
+  the property /sys/class/net/meth0/operstate varies between 'down', 'dormant'
+  and 'up')
+
+- usb: fixed calculation of the final buffer size for the streaming channels in
+  the case where the buffer size is near to the 64K bytes
+
+- usb: fixed calculation of the final buffer size for the streaming channels in
+  the case where the buffer size is corrected by the driver down to the next
+  appropriate for the hardware value
+
+
 mld-1.5.0
 ---------
 
