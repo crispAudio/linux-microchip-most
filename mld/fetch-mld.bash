@@ -75,8 +75,6 @@ local_fetch() {
 	get_src hdm-dim2/platform/dim2_h2_dt.c
 	get_src hdm-dim2/platform/dim2_mx6q.c
 	get_src hdm-dim2/platform/dim2_mx6q_dt.c
-	get_src hdm-dim2/platform/dim2_zynq_3p.c
-	get_src hdm-dim2/platform/dim2_zynq_6p.c
 	get_src hdm-i2c/hdm_i2c.c
 	get_src hdm-i2c/platform/plat_imx6q.c
 	get_src hdm-i2c/platform/plat_zynq.c
