@@ -12,7 +12,7 @@ obj-m := mostcore.o
 mostcore-y := .src/mostcore/core.o
 
 obj-m += default_conf.o
-default_conf-y := .src/mostcore/default_conf.o
+CFLAGS_default_conf.o := -I$(src)/.src/mostcore
 
 obj-m += aim_cdev.o
 aim_cdev-y := .src/aim-cdev/cdev.o

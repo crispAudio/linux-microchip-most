@@ -25,6 +25,15 @@ To see the build instructions:
 HISTORY OF CHANGES
 ==================
 
+mld-next
+--------
+
+- core: the autoconf feature is moved from the source code to the patch
+  mld/patches/feature__core_autoconf.patch
+  (it makes no difference for the users of the script fetch-mld.bash as it
+  applies the patch automatically)
+
+
 mld-1.6.0
 ---------
 
