@@ -2,7 +2,7 @@
  * mostcore.h - Interface between MostCore,
  *   Hardware Dependent Module (HDM) and Application Interface Module (AIM).
  *
- * Copyright (C) 2013-2017, Microchip Technology Germany II GmbH & Co. KG
+ * Copyright (C) 2013-2015, Microchip Technology Germany II GmbH & Co. KG
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -143,39 +143,6 @@ struct most_channel_config {
 	u16 packets_per_xact;
 };
 
-/**
- * struct most_config_probe - matching rule, channel configuration and
- *     the optional AIM name used for the automatic configuration and linking
- *     of the channel
- * @dev_name: optional mathing device id
- *     ("usb_device 1-1:1.0," "dim2-12345678", etc.)
- * @ch_name: matching channel name ("ep8f", "ca2", etc.)
- * @cfg: configuration that will be applied for the found channel
- * @aim_name: optional name of the AIM that will be linked to the channel
- *     ("cdev", "networking", "v4l", "sound")
- * @aim_param: AIM dependent parameter (it is the character device name
- *     for the cdev AIM, PCM format for the audio AIM, etc.)
- */
-struct most_config_probe {
-	const char *dev_name;
-	const char *ch_name;
-	struct most_channel_config cfg;
-	const char *aim_name;
-	const char *aim_param;
-};
-
-/**
- * struct most_config_set - the configuration set containing
- *     several automatic configurations for the different channels
- * @probes: list of the matching rules and the confugurations,
- *     that must be ended with the empty structure
- * @list: list head used by the MostCore
- */
-struct most_config_set {
-	const struct most_config_probe *probes;
-	struct list_head list;
-};
-
 /*
  * struct mbo - MOST Buffer Object.
  * @context: context for core completion handler
@@ -308,37 +275,6 @@ struct most_aim {
 	int (*tx_completion)(struct most_interface *iface, int channel_idx);
 	void *context;
 };
-
-/**
- * most_register_config_set - registers the configuration set
- *
- * @cfg_set: configuration set to be registered for the future probes
- *
- * The function registers the given configuration set.
- *
- * It is possible to register or deregister several configuration sets
- * independently.  Different configuration sets may contain the
- * overlapped matching rules but later registered configuration set has
- * the higher priority over the prior registered set.
- *
- * The only the first matched configuration is appliead for each
- * channel.
- *
- * The configuration for the channel is applied at the time of
- * registration of the parent most_interface.
- */
-void most_register_config_set(struct most_config_set *cfg_set);
-
-/**
- * most_deregister_config_set - deregisters the prior registered
- *     configuration set
- *
- * @cfg_set: configuration set to be deregistered
- *
- * The calling of this function does not change the current
- * configuration of the cahnnels.
- */
-void most_deregister_config_set(struct most_config_set *cfg_set);
 
 /**
  * most_register_interface - Registers instance of the interface.

@@ -36,8 +36,6 @@ static struct class *most_class;
 static struct device *core_dev;
 static struct ida mdev_id;
 static int dummy_num_buffers;
-static struct list_head config_probes;
-struct mutex config_probes_mt; /* config_probes */
 
 struct most_c_aim_obj {
 	struct most_aim *ptr;
@@ -928,30 +926,6 @@ most_c_obj *get_channel_by_name(char *mdev, char *mdev_ch)
 	return c;
 }
 
-static int link_channel_to_aim(struct most_c_obj *c, struct most_aim *aim,
-			       char *aim_param)
-{
-	int ret;
-	struct most_aim **aim_ptr;
-
-	if (!c->aim0.ptr)
-		aim_ptr = &c->aim0.ptr;
-	else if (!c->aim1.ptr)
-		aim_ptr = &c->aim1.ptr;
-	else
-		return -ENOSPC;
-
-	*aim_ptr = aim;
-	ret = aim->probe_channel(c->iface, c->channel_id,
-				 &c->cfg, &c->kobj, aim_param);
-	if (ret) {
-		*aim_ptr = NULL;
-		return ret;
-	}
-
-	return 0;
-}
-
 /**
  * add_link_store - store() function for add_link attribute
  * @aim_obj: pointer to AIM object
@@ -980,33 +954,45 @@ static ssize_t add_link_store(struct most_aim_obj *aim_obj,
 			      size_t len)
 {
 	struct most_c_obj *c;
+	struct most_aim **aim_ptr;
 	char buffer[STRING_SIZE];
 	char *mdev;
 	char *mdev_ch;
-	char *aim_param;
+	char *mdev_devnod;
 	char devnod_buf[STRING_SIZE];
 	int ret;
 	size_t max_len = min_t(size_t, len + 1, STRING_SIZE);
 
 	strlcpy(buffer, buf, max_len);
 
-	ret = split_string(buffer, &mdev, &mdev_ch, &aim_param);
+	ret = split_string(buffer, &mdev, &mdev_ch, &mdev_devnod);
 	if (ret)
 		return ret;
 
-	if (!aim_param || *aim_param == 0) {
+	if (!mdev_devnod || *mdev_devnod == 0) {
 		snprintf(devnod_buf, sizeof(devnod_buf), "%s-%s", mdev,
 			 mdev_ch);
-		aim_param = devnod_buf;
+		mdev_devnod = devnod_buf;
 	}
 
 	c = get_channel_by_name(mdev, mdev_ch);
 	if (IS_ERR(c))
 		return -ENODEV;
 
-	ret = link_channel_to_aim(c, aim_obj->driver, aim_param);
-	if (ret)
+	if (!c->aim0.ptr)
+		aim_ptr = &c->aim0.ptr;
+	else if (!c->aim1.ptr)
+		aim_ptr = &c->aim1.ptr;
+	else
+		return -ENOSPC;
+
+	*aim_ptr = aim_obj->driver;
+	ret = aim_obj->driver->probe_channel(c->iface, c->channel_id,
+					     &c->cfg, &c->kobj, mdev_devnod);
+	if (ret) {
+		*aim_ptr = NULL;
 		return ret;
+	}
 
 	return len;
 }
@@ -1699,73 +1685,6 @@ int most_deregister_aim(struct most_aim *aim)
 }
 EXPORT_SYMBOL_GPL(most_deregister_aim);
 
-void most_register_config_set(struct most_config_set *cfg_set)
-{
-	mutex_lock(&config_probes_mt);
-	list_add(&cfg_set->list, &config_probes);
-	mutex_unlock(&config_probes_mt);
-}
-EXPORT_SYMBOL(most_register_config_set);
-
-void most_deregister_config_set(struct most_config_set *cfg_set)
-{
-	mutex_lock(&config_probes_mt);
-	list_del(&cfg_set->list);
-	mutex_unlock(&config_probes_mt);
-}
-EXPORT_SYMBOL(most_deregister_config_set);
-
-static int probe_aim(struct most_c_obj *c,
-		     const char *aim_name, const char *aim_param)
-{
-	struct most_aim_obj *aim_obj;
-	char buf[STRING_SIZE];
-
-	list_for_each_entry(aim_obj, &aim_list, list) {
-		if (!strcmp(aim_obj->driver->name, aim_name)) {
-			strlcpy(buf, aim_param ? aim_param : "", sizeof(buf));
-			return link_channel_to_aim(c, aim_obj->driver, buf);
-		}
-	}
-	return 0;
-}
-
-static bool probe_config_set(struct most_c_obj *c,
-			     const char *dev_name, const char *ch_name,
-			     const struct most_config_probe *p)
-{
-	int err;
-
-	for (; p->ch_name; p++) {
-		if ((p->dev_name && strcmp(dev_name, p->dev_name)) ||
-		    strcmp(ch_name, p->ch_name))
-			continue;
-
-		c->cfg = p->cfg;
-		if (p->aim_name) {
-			err = probe_aim(c, p->aim_name, p->aim_param);
-			if (err)
-				pr_err("failed to autolink %s to %s: %d\n",
-				       ch_name, p->aim_name, err);
-		}
-		return true;
-	}
-	return false;
-}
-
-static void find_configuration(struct most_c_obj *c, const char *dev_name,
-			       const char *ch_name)
-{
-	struct most_config_set *plist;
-
-	mutex_lock(&config_probes_mt);
-	list_for_each_entry(plist, &config_probes, list) {
-		if (probe_config_set(c, dev_name, ch_name, plist->probes))
-			break;
-	}
-	mutex_unlock(&config_probes_mt);
-}
-
 /**
  * most_register_interface - registers an interface with core
  * @iface: pointer to the instance of the interface description.
@@ -1843,7 +1762,6 @@ struct kobject *most_register_interface(struct most_interface *iface)
 		mutex_init(&c->start_mutex);
 		mutex_init(&c->nq_mutex);
 		list_add_tail(&c->list, &inst->channel_list);
-		find_configuration(c, iface->description, channel_name);
 	}
 	pr_info("registered new MOST device mdev%d (%s)\n",
 		inst->dev_id, iface->description);
@@ -1947,8 +1865,6 @@ static int __init most_init(void)
 	pr_info("init()\n");
 	INIT_LIST_HEAD(&instance_list);
 	INIT_LIST_HEAD(&aim_list);
-	INIT_LIST_HEAD(&config_probes);
-	mutex_init(&config_probes_mt);
 	ida_init(&mdev_id);
 
 	err = bus_register(&most_bus);
