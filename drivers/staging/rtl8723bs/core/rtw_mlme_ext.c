@@ -4844,7 +4844,7 @@ static void process_80211d(struct adapter *padapter, struct wlan_bssid_ex *bssid
 		}
 		chplan_ap.Len = i;
 
-#ifdef CONFIG_DEBUG_RTL871X
+#ifdef DEBUG_RTL871X
 		i = 0;
 		DBG_871X("%s: AP[%s] channel plan {", __func__, bssid->Ssid.Ssid);
 		while ((i < chplan_ap.Len) && (chplan_ap.Channel[i] != 0)) {
@@ -4855,7 +4855,7 @@ static void process_80211d(struct adapter *padapter, struct wlan_bssid_ex *bssid
 #endif
 
 		memcpy(chplan_sta, pmlmeext->channel_set, sizeof(chplan_sta));
-#ifdef CONFIG_DEBUG_RTL871X
+#ifdef DEBUG_RTL871X
 		i = 0;
 		DBG_871X("%s: STA channel plan {", __func__);
 		while ((i < MAX_CHANNEL_NUM) && (chplan_sta[i].ChannelNum != 0)) {
@@ -4992,7 +4992,7 @@ static void process_80211d(struct adapter *padapter, struct wlan_bssid_ex *bssid
 
 		pmlmeext->update_channel_plan_by_ap_done = 1;
 
-#ifdef CONFIG_DEBUG_RTL871X
+#ifdef DEBUG_RTL871X
 		k = 0;
 		DBG_871X("%s: new STA channel plan {", __func__);
 		while ((k < MAX_CHANNEL_NUM) && (chplan_new[k].ChannelNum != 0)) {
@@ -6677,7 +6677,9 @@ u8 mlme_evt_hdl(struct adapter *padapter, unsigned char *pbuf)
 	#ifdef CHECK_EVENT_SEQ
 	/*  checking event sequence... */
 	if (evt_seq != (atomic_read(&pevt_priv->event_seq) & 0x7f)) {
-		RT_TRACE(_module_rtl871x_cmd_c_, _drv_info_, ("Evetn Seq Error! %d vs %d\n", (evt_seq & 0x7f), (atomic_read(&pevt_priv->event_seq) & 0x7f)));
+		RT_TRACE(_module_rtl871x_cmd_c_, _drv_info_,
+			 ("Event Seq Error! %d vs %d\n", (evt_seq & 0x7f),
+			  (atomic_read(&pevt_priv->event_seq) & 0x7f)));
 
 		pevt_priv->event_seq = (evt_seq+1)&0x7f;
 

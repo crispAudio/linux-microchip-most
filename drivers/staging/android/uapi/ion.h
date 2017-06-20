@@ -20,8 +20,6 @@
 #include <linux/ioctl.h>
 #include <linux/types.h>
 
-typedef int ion_user_handle_t;
-
 /**
  * enum ion_heap_types - list of all possible types of heaps
  * @ION_HEAP_TYPE_SYSTEM:	 memory allocated via vmalloc
@@ -59,12 +57,6 @@ enum ion_heap_type {
  */
 #define ION_FLAG_CACHED 1
 
-/*
- * mappings of this buffer will created at mmap time, if this is set
- * caches must be managed manually
- */
-#define ION_FLAG_CACHED_NEEDS_SYNC 2
-
 /**
  * DOC: Ion Userspace API
  *
@@ -76,7 +68,6 @@ enum ion_heap_type {
 /**
  * struct ion_allocation_data - metadata passed from userspace for allocations
  * @len:		size of the allocation
- * @align:		required alignment of the allocation
  * @heap_id_mask:	mask of heap ids to allocate from
  * @flags:		flags passed to heap
  * @handle:		pointer that will be populated with a cookie to use to
@@ -85,34 +76,11 @@ enum ion_heap_type {
  * Provided by userspace as an argument to the ioctl
  */
 struct ion_allocation_data {
-	size_t len;
-	size_t align;
-	unsigned int heap_id_mask;
-	unsigned int flags;
-	ion_user_handle_t handle;
-};
-
-/**
- * struct ion_fd_data - metadata passed to/from userspace for a handle/fd pair
- * @handle:	a handle
- * @fd:		a file descriptor representing that handle
- *
- * For ION_IOC_SHARE or ION_IOC_MAP userspace populates the handle field with
- * the handle returned from ion alloc, and the kernel returns the file
- * descriptor to share or map in the fd field.  For ION_IOC_IMPORT, userspace
- * provides the file descriptor and the kernel returns the handle.
- */
-struct ion_fd_data {
-	ion_user_handle_t handle;
-	int fd;
-};
-
-/**
- * struct ion_handle_data - a handle passed to/from the kernel
- * @handle:	a handle
- */
-struct ion_handle_data {
-	ion_user_handle_t handle;
+	__u64 len;
+	__u32 heap_id_mask;
+	__u32 flags;
+	__u32 fd;
+	__u32 unused;
 };
 
 #define MAX_HEAP_NAME			32
@@ -155,24 +123,6 @@ struct ion_heap_query {
  */
 #define ION_IOC_ALLOC		_IOWR(ION_IOC_MAGIC, 0, \
 				      struct ion_allocation_data)
-
-/**
- * DOC: ION_IOC_FREE - free memory
- *
- * Takes an ion_handle_data struct and frees the handle.
- */
-#define ION_IOC_FREE		_IOWR(ION_IOC_MAGIC, 1, struct ion_handle_data)
-
-/**
- * DOC: ION_IOC_SHARE - creates a file descriptor to use to share an allocation
- *
- * Takes an ion_fd_data struct with the handle field populated with a valid
- * opaque handle.  Returns the struct with the fd field set to a file
- * descriptor open in the current address space.  This file descriptor
- * can then be passed to another process.  The corresponding opaque handle can
- * be retrieved via ION_IOC_IMPORT.
- */
-#define ION_IOC_SHARE		_IOWR(ION_IOC_MAGIC, 4, struct ion_fd_data)
 
 /**
  * DOC: ION_IOC_HEAP_QUERY - information about available heaps

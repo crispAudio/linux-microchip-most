@@ -31,31 +31,18 @@ mmgr_malloc(const size_t size)
 hrt_vaddress mmgr_alloc_attr(const size_t size, const uint16_t attrs)
 {
 	uint16_t masked_attrs = attrs & MMGR_ATTRIBUTE_MASK;
+	WARN_ON(attrs & MMGR_ATTRIBUTE_CONTIGUOUS);
 
 	if (masked_attrs & MMGR_ATTRIBUTE_CLEARED) {
-		if (masked_attrs & MMGR_ATTRIBUTE_CACHED) {
-			if (masked_attrs & MMGR_ATTRIBUTE_CONTIGUOUS)
-				return (ia_css_ptr) hrt_isp_css_mm_calloc_contiguous(size);
-			else
-				return (ia_css_ptr) hrt_isp_css_mm_calloc_cached(size);
-		} else {
-			if (masked_attrs & MMGR_ATTRIBUTE_CONTIGUOUS)
-				return (ia_css_ptr) hrt_isp_css_mm_calloc_contiguous(size);
-			else
-				return (ia_css_ptr) hrt_isp_css_mm_calloc(size);
-		}
+		if (masked_attrs & MMGR_ATTRIBUTE_CACHED)
+			return (ia_css_ptr) hrt_isp_css_mm_calloc_cached(size);
+		else
+			return (ia_css_ptr) hrt_isp_css_mm_calloc(size);
 	} else {
-		if (masked_attrs & MMGR_ATTRIBUTE_CACHED) {
-			if (masked_attrs & MMGR_ATTRIBUTE_CONTIGUOUS)
-				return (ia_css_ptr) hrt_isp_css_mm_alloc_contiguous(size);
-			else
-				return (ia_css_ptr) hrt_isp_css_mm_alloc_cached(size);
-		} else {
-			if (masked_attrs & MMGR_ATTRIBUTE_CONTIGUOUS)
-				return (ia_css_ptr) hrt_isp_css_mm_alloc_contiguous(size);
-			else
-				return (ia_css_ptr) hrt_isp_css_mm_alloc(size);
-		}
+		if (masked_attrs & MMGR_ATTRIBUTE_CACHED)
+			return (ia_css_ptr) hrt_isp_css_mm_alloc_cached(size);
+		else
+			return (ia_css_ptr) hrt_isp_css_mm_alloc(size);
 	}
 }
 
@@ -65,28 +52,23 @@ mmgr_calloc(const size_t N, const size_t size)
 	return mmgr_alloc_attr(size * N, MMGR_ATTRIBUTE_CLEARED);
 }
 
-void
-mmgr_free(hrt_vaddress vaddr)
+void mmgr_clear(hrt_vaddress vaddr, const size_t size)
 {
-	hrt_isp_css_mm_free(vaddr);
+	if (vaddr)
+		hmm_set(vaddr, 0, size);
 }
 
-void
-mmgr_clear(hrt_vaddress vaddr, const size_t size)
+void mmgr_load(const hrt_vaddress vaddr, void *data, const size_t size)
 {
-	hrt_isp_css_mm_set(vaddr, 0, size);
-}
-
-void
-mmgr_load(const hrt_vaddress vaddr, void *data, const size_t size)
-{
-	hrt_isp_css_mm_load(vaddr, data, size);
+	if (vaddr && data)
+		hmm_load(vaddr, data, size);
 }
 
 void
 mmgr_store(const hrt_vaddress vaddr, const void *data, const size_t size)
 {
-	hrt_isp_css_mm_store(vaddr, data, size);
+	if (vaddr && data)
+		hmm_store(vaddr, data, size);
 }
 
 hrt_vaddress

@@ -23,18 +23,17 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include "ion.h"
-#include "ion_priv.h"
 
 #define ION_CARVEOUT_ALLOCATE_FAIL	-1
 
 struct ion_carveout_heap {
 	struct ion_heap heap;
 	struct gen_pool *pool;
-	ion_phys_addr_t base;
+	phys_addr_t base;
 };
 
-static ion_phys_addr_t ion_carveout_allocate(struct ion_heap *heap,
-					     unsigned long size)
+static phys_addr_t ion_carveout_allocate(struct ion_heap *heap,
+					 unsigned long size)
 {
 	struct ion_carveout_heap *carveout_heap =
 		container_of(heap, struct ion_carveout_heap, heap);
@@ -46,7 +45,7 @@ static ion_phys_addr_t ion_carveout_allocate(struct ion_heap *heap,
 	return offset;
 }
 
-static void ion_carveout_free(struct ion_heap *heap, ion_phys_addr_t addr,
+static void ion_carveout_free(struct ion_heap *heap, phys_addr_t addr,
 			      unsigned long size)
 {
 	struct ion_carveout_heap *carveout_heap =
@@ -63,7 +62,7 @@ static int ion_carveout_heap_allocate(struct ion_heap *heap,
 				      unsigned long flags)
 {
 	struct sg_table *table;
-	ion_phys_addr_t paddr;
+	phys_addr_t paddr;
 	int ret;
 
 	table = kmalloc(sizeof(*table), GFP_KERNEL);
@@ -96,7 +95,7 @@ static void ion_carveout_heap_free(struct ion_buffer *buffer)
 	struct ion_heap *heap = buffer->heap;
 	struct sg_table *table = buffer->sg_table;
 	struct page *page = sg_page(table->sgl);
-	ion_phys_addr_t paddr = PFN_PHYS(page_to_pfn(page));
+	phys_addr_t paddr = PFN_PHYS(page_to_pfn(page));
 
 	ion_heap_buffer_zero(buffer);
 
@@ -145,14 +144,4 @@ struct ion_heap *ion_carveout_heap_create(struct ion_platform_heap *heap_data)
 	carveout_heap->heap.flags = ION_HEAP_FLAG_DEFER_FREE;
 
 	return &carveout_heap->heap;
-}
-
-void ion_carveout_heap_destroy(struct ion_heap *heap)
-{
-	struct ion_carveout_heap *carveout_heap =
-	     container_of(heap, struct  ion_carveout_heap, heap);
-
-	gen_pool_destroy(carveout_heap->pool);
-	kfree(carveout_heap);
-	carveout_heap = NULL;
 }

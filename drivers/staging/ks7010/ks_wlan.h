@@ -58,7 +58,7 @@ struct ks_wlan_parameter {
 		u8 body[32 + 1];
 	} ssid;	/*  SSID */
 	u8 preamble;	/*  Preamble */
-	u8 powermgt;	/*  PowerManagementMode */
+	u8 power_mgmt;
 	u32 scan_type;	/*  AP List Scan Type */
 #define BEACON_LOST_COUNT_MIN 0
 #define BEACON_LOST_COUNT_MAX 65535
@@ -264,10 +264,10 @@ struct local_aplist_t {
 };
 
 struct local_gain_t {
-	u8 TxMode;
-	u8 RxMode;
-	u8 TxGain;
-	u8 RxGain;
+	u8 tx_mode;
+	u8 rx_mode;
+	u8 tx_gain;
+	u8 rx_gain;
 };
 
 struct local_eeprom_sum_t {
@@ -413,7 +413,11 @@ struct wps_status_t {
 #endif /* WPS */
 
 struct ks_wlan_private {
-	struct hw_info_t ks_wlan_hw;	/* hardware information */
+	/* hardware information */
+	struct ks_sdio_card *ks_sdio_card;
+	struct workqueue_struct *wq;
+	struct delayed_work rw_dwork;
+	struct tasklet_struct rx_bh_task;
 
 	struct net_device *net_dev;
 	int reg_net;	/* register_netdev */
@@ -429,7 +433,7 @@ struct ks_wlan_private {
 	u8 *rxp;
 	unsigned int rx_size;
 	struct tasklet_struct sme_task;
-	struct work_struct ks_wlan_wakeup_task;
+	struct work_struct wakeup_work;
 	int scan_ind_count;
 
 	unsigned char eth_addr[ETH_ALEN];
@@ -504,5 +508,7 @@ struct ks_wlan_private {
 
 int ks_wlan_net_start(struct net_device *dev);
 int ks_wlan_net_stop(struct net_device *dev);
+bool is_connect_status(u32 status);
+bool is_disconnect_status(u32 status);
 
 #endif /* _KS_WLAN_H */

@@ -21,7 +21,7 @@
 
 #include <linux/err.h>
 #include <linux/io.h>
-#include <linux/module.h>
+#include <linux/init.h>
 #include <linux/platform_device.h>
 #include "../../include/linux/vlv2_plat_clock.h"
 
@@ -67,7 +67,7 @@ int vlv2_plat_set_clock_freq(int clk_num, int freq_type)
 {
 	void __iomem *addr;
 
-	if (clk_num < 0 && clk_num > MAX_CLK_COUNT) {
+	if (clk_num < 0 || clk_num >= MAX_CLK_COUNT) {
 		pr_err("Clock number out of range (%d)\n", clk_num);
 		return -EINVAL;
 	}
@@ -103,7 +103,7 @@ int vlv2_plat_get_clock_freq(int clk_num)
 {
 	u32 ret;
 
-	if (clk_num < 0 && clk_num > MAX_CLK_COUNT) {
+	if (clk_num < 0 || clk_num >= MAX_CLK_COUNT) {
 		pr_err("Clock number out of range (%d)\n", clk_num);
 		return -EINVAL;
 	}
@@ -133,7 +133,7 @@ int vlv2_plat_configure_clock(int clk_num, u32 conf)
 {
 	void __iomem *addr;
 
-	if (clk_num < 0 && clk_num > MAX_CLK_COUNT) {
+	if (clk_num < 0 || clk_num >= MAX_CLK_COUNT) {
 		pr_err("Clock number out of range (%d)\n", clk_num);
 		return -EINVAL;
 	}
@@ -169,7 +169,7 @@ int vlv2_plat_get_clock_status(int clk_num)
 {
 	int ret;
 
-	if (clk_num < 0 && clk_num > MAX_CLK_COUNT) {
+	if (clk_num < 0 || clk_num >= MAX_CLK_COUNT) {
 		pr_err("Clock number out of range (%d)\n", clk_num);
 		return -EINVAL;
 	}
@@ -205,18 +205,10 @@ static int vlv2_plat_clk_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int vlv2_plat_clk_remove(struct platform_device *pdev)
-{
-	iounmap(pmc_base);
-	pmc_base = NULL;
-	return 0;
-}
-
 static const struct platform_device_id vlv2_plat_clk_id[] = {
 	{"vlv2_plat_clk", 0},
 	{}
 };
-MODULE_DEVICE_TABLE(platform, vlv2_plat_clk_id);
 
 static int vlv2_resume(struct device *device)
 {
@@ -241,7 +233,6 @@ static const struct dev_pm_ops vlv2_pm_ops = {
 
 static struct platform_driver vlv2_plat_clk_driver = {
 	.probe = vlv2_plat_clk_probe,
-	.remove = vlv2_plat_clk_remove,
 	.id_table = vlv2_plat_clk_id,
 	.driver = {
 		.name = "vlv2_plat_clk",
@@ -254,13 +245,3 @@ static int __init vlv2_plat_clk_init(void)
 	return platform_driver_register(&vlv2_plat_clk_driver);
 }
 arch_initcall(vlv2_plat_clk_init);
-
-static void __exit vlv2_plat_clk_exit(void)
-{
-	platform_driver_unregister(&vlv2_plat_clk_driver);
-}
-module_exit(vlv2_plat_clk_exit);
-
-MODULE_AUTHOR("Asutosh Pathak <asutosh.pathak@intel.com>");
-MODULE_DESCRIPTION("Intel VLV2 platform clock driver");
-MODULE_LICENSE("GPL v2");

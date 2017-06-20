@@ -1207,8 +1207,6 @@ void rtw_ndev_destructor(struct net_device *ndev)
 
 	if (ndev->ieee80211_ptr)
 		kfree((u8 *)ndev->ieee80211_ptr);
-
-	free_netdev(ndev);
 }
 
 void rtw_dev_unload(struct adapter *padapter)
@@ -1275,7 +1273,8 @@ void rtw_dev_unload(struct adapter *padapter)
 			}
 			padapter->bSurpriseRemoved = true;
 		}
-		RT_TRACE(_module_hci_intfs_c_, _drv_notice_, ("@ %s: deinit hal complelt!\n", __func__));
+		RT_TRACE(_module_hci_intfs_c_, _drv_notice_,
+			 ("@ %s: deinit hal complete!\n", __func__));
 
 		padapter->bup = false;
 

@@ -542,20 +542,24 @@ check_bss:
 		struct ieee80211_channel *notify_channel;
 		u32 freq;
 		u16 channel = cur_network->network.Configuration.DSConfig;
+		struct cfg80211_roam_info roam_info = {};
 
 		freq = rtw_ieee80211_channel_to_frequency(channel, NL80211_BAND_2GHZ);
 
 		notify_channel = ieee80211_get_channel(wiphy, freq);
 
 		DBG_871X(FUNC_ADPT_FMT" call cfg80211_roamed\n", FUNC_ADPT_ARG(padapter));
-		cfg80211_roamed(padapter->pnetdev
-			, notify_channel
-			, cur_network->network.MacAddress
-			, pmlmepriv->assoc_req+sizeof(struct ieee80211_hdr_3addr)+2
-			, pmlmepriv->assoc_req_len-sizeof(struct ieee80211_hdr_3addr)-2
-			, pmlmepriv->assoc_rsp+sizeof(struct ieee80211_hdr_3addr)+6
-			, pmlmepriv->assoc_rsp_len-sizeof(struct ieee80211_hdr_3addr)-6
-			, GFP_ATOMIC);
+		roam_info.channel = notify_channel;
+		roam_info.bssid = cur_network->network.MacAddress;
+		roam_info.req_ie =
+			pmlmepriv->assoc_req+sizeof(struct ieee80211_hdr_3addr)+2;
+		roam_info.req_ie_len =
+			pmlmepriv->assoc_req_len-sizeof(struct ieee80211_hdr_3addr)-2;
+		roam_info.resp_ie =
+			pmlmepriv->assoc_rsp+sizeof(struct ieee80211_hdr_3addr)+6;
+		roam_info.resp_ie_len =
+			pmlmepriv->assoc_rsp_len-sizeof(struct ieee80211_hdr_3addr)-6;
+		cfg80211_roamed(padapter->pnetdev, &roam_info, GFP_ATOMIC);
 	}
 	else
 	{
@@ -1170,10 +1174,7 @@ static int cfg80211_rtw_add_key(struct wiphy *wiphy, struct net_device *ndev,
 	}
 
 addkey_end:
-	if (param)
-	{
-		kfree((u8 *)param);
-	}
+	kfree((u8 *)param);
 
 	return ret;
 
@@ -1264,7 +1265,7 @@ static int cfg80211_rtw_get_station(struct wiphy *wiphy,
 		goto exit;
 	}
 
-#ifdef CONFIG_DEBUG_CFG80211
+#ifdef DEBUG_CFG80211
 	DBG_871X(FUNC_NDEV_FMT" mac ="MAC_FMT"\n", FUNC_NDEV_ARG(ndev), MAC_ARG(mac));
 #endif
 
@@ -1313,7 +1314,7 @@ extern int netdev_open(struct net_device *pnetdev);
 
 static int cfg80211_rtw_change_iface(struct wiphy *wiphy,
 				     struct net_device *ndev,
-				     enum nl80211_iftype type, u32 *flags,
+				     enum nl80211_iftype type,
 				     struct vif_params *params)
 {
 	enum nl80211_iftype old_type;
@@ -1399,7 +1400,7 @@ void rtw_cfg80211_indicate_scan_done(struct adapter *adapter, bool aborted)
 
 	spin_lock_bh(&pwdev_priv->scan_req_lock);
 	if (pwdev_priv->scan_request != NULL) {
-		#ifdef CONFIG_DEBUG_CFG80211
+		#ifdef DEBUG_CFG80211
 		DBG_871X("%s with scan req\n", __func__);
 		#endif
 
@@ -1415,7 +1416,7 @@ void rtw_cfg80211_indicate_scan_done(struct adapter *adapter, bool aborted)
 
 		pwdev_priv->scan_request = NULL;
 	} else {
-		#ifdef CONFIG_DEBUG_CFG80211
+		#ifdef DEBUG_CFG80211
 		DBG_871X("%s without scan req\n", __func__);
 		#endif
 	}
@@ -1449,7 +1450,7 @@ void rtw_cfg80211_surveydone_event_callback(struct adapter *padapter)
 	struct __queue *queue	= &(pmlmepriv->scanned_queue);
 	struct	wlan_network	*pnetwork = NULL;
 
-#ifdef CONFIG_DEBUG_CFG80211
+#ifdef DEBUG_CFG80211
 	DBG_8192C("%s\n", __func__);
 #endif
 
@@ -1489,7 +1490,7 @@ static int rtw_cfg80211_set_probe_req_wpsp2pie(struct adapter *padapter, char *b
 	u8 *wps_ie;
 	struct mlme_priv *pmlmepriv = &(padapter->mlmepriv);
 
-#ifdef CONFIG_DEBUG_CFG80211
+#ifdef DEBUG_CFG80211
 	DBG_8192C("%s, ielen =%d\n", __func__, len);
 #endif
 
@@ -1497,7 +1498,7 @@ static int rtw_cfg80211_set_probe_req_wpsp2pie(struct adapter *padapter, char *b
 	{
 		if ((wps_ie = rtw_get_wps_ie(buf, len, NULL, &wps_ielen)))
 		{
-			#ifdef CONFIG_DEBUG_CFG80211
+			#ifdef DEBUG_CFG80211
 			DBG_8192C("probe_req_wps_ielen =%d\n", wps_ielen);
 			#endif
 
@@ -1551,7 +1552,7 @@ static int cfg80211_rtw_scan(struct wiphy *wiphy
 	pwdev_priv = adapter_wdev_data(padapter);
 	pmlmepriv = &padapter->mlmepriv;
 
-/* ifdef CONFIG_DEBUG_CFG80211 */
+/* ifdef DEBUG_CFG80211 */
 	DBG_871X(FUNC_ADPT_FMT"\n", FUNC_ADPT_ARG(padapter));
 /* endif */
 
@@ -1561,7 +1562,7 @@ static int cfg80211_rtw_scan(struct wiphy *wiphy
 
 	if (check_fwstate(pmlmepriv, WIFI_AP_STATE) == true)
 	{
-#ifdef CONFIG_DEBUG_CFG80211
+#ifdef DEBUG_CFG80211
 		DBG_871X("%s under WIFI_AP_STATE\n", __func__);
 #endif
 
@@ -1624,7 +1625,7 @@ static int cfg80211_rtw_scan(struct wiphy *wiphy
 	memset(ssid, 0, sizeof(struct ndis_802_11_ssid)*RTW_SSID_SCAN_AMOUNT);
 	/* parsing request ssids, n_ssids */
 	for (i = 0; i < request->n_ssids && i < RTW_SSID_SCAN_AMOUNT; i++) {
-		#ifdef CONFIG_DEBUG_CFG80211
+		#ifdef DEBUG_CFG80211
 		DBG_8192C("ssid =%s, len =%d\n", ssids[i].ssid, ssids[i].ssid_len);
 		#endif
 		memcpy(ssid[i].Ssid, ssids[i].ssid, ssids[i].ssid_len);
@@ -1634,7 +1635,7 @@ static int cfg80211_rtw_scan(struct wiphy *wiphy
 	/* parsing channels, n_channels */
 	memset(ch, 0, sizeof(struct rtw_ieee80211_channel)*RTW_CHANNEL_SCAN_AMOUNT);
 	for (i = 0;i<request->n_channels && i<RTW_CHANNEL_SCAN_AMOUNT;i++) {
-		#ifdef CONFIG_DEBUG_CFG80211
+		#ifdef DEBUG_CFG80211
 		DBG_871X(FUNC_ADPT_FMT CHAN_FMT"\n", FUNC_ADPT_ARG(padapter), CHAN_ARG(request->channels[i]));
 		#endif
 		ch[i].hw_value = request->channels[i]->hw_value;
@@ -1968,8 +1969,7 @@ static int rtw_cfg80211_set_wpa_ie(struct adapter *padapter, u8 *pie, size_t iel
 		pairwise_cipher, padapter->securitypriv.ndisencryptstatus, padapter->securitypriv.ndisauthtype));
 
 exit:
-	if (buf)
-		kfree(buf);
+	kfree(buf);
 	if (ret)
 		_clr_fwstate_(&padapter->mlmepriv, WIFI_UNDER_WPS);
 	return ret;
@@ -2667,7 +2667,8 @@ static int rtw_cfg80211_add_monitor_if (struct adapter *padapter, char *name, st
 	mon_ndev->type = ARPHRD_IEEE80211_RADIOTAP;
 	strncpy(mon_ndev->name, name, IFNAMSIZ);
 	mon_ndev->name[IFNAMSIZ - 1] = 0;
-	mon_ndev->destructor = rtw_ndev_destructor;
+	mon_ndev->needs_free_netdev = true;
+	mon_ndev->priv_destructor = rtw_ndev_destructor;
 
 	mon_ndev->netdev_ops = &rtw_cfg80211_monitor_if_ops;
 
@@ -2715,7 +2716,7 @@ static struct wireless_dev *
 		struct wiphy *wiphy,
 		const char *name,
 		unsigned char name_assign_type,
-		enum nl80211_iftype type, u32 *flags, struct vif_params *params)
+		enum nl80211_iftype type, struct vif_params *params)
 {
 	int ret = 0;
 	struct net_device* ndev = NULL;
@@ -3109,7 +3110,7 @@ static int _cfg80211_rtw_mgmt_tx(struct adapter *padapter, u8 tx_ch, const u8 *b
 		ack = false;
 		ret = _FAIL;
 
-		#ifdef CONFIG_DEBUG_CFG80211
+		#ifdef DEBUG_CFG80211
 		DBG_8192C("%s, ack == _FAIL\n", __func__);
 		#endif
 	}
@@ -3118,7 +3119,7 @@ static int _cfg80211_rtw_mgmt_tx(struct adapter *padapter, u8 tx_ch, const u8 *b
 
 		msleep(50);
 
-		#ifdef CONFIG_DEBUG_CFG80211
+		#ifdef DEBUG_CFG80211
 		DBG_8192C("%s, ack =%d, ok!\n", __func__, ack);
 		#endif
 		ret = _SUCCESS;
@@ -3126,7 +3127,7 @@ static int _cfg80211_rtw_mgmt_tx(struct adapter *padapter, u8 tx_ch, const u8 *b
 
 exit:
 
-	#ifdef CONFIG_DEBUG_CFG80211
+	#ifdef DEBUG_CFG80211
 	DBG_8192C("%s, ret =%d\n", __func__, ret);
 	#endif
 
@@ -3165,12 +3166,12 @@ static int cfg80211_rtw_mgmt_tx(struct wiphy *wiphy,
 	/* cookie generation */
 	*cookie = (unsigned long) buf;
 
-#ifdef CONFIG_DEBUG_CFG80211
+#ifdef DEBUG_CFG80211
 	DBG_871X(FUNC_ADPT_FMT" len =%zu, ch =%d"
 		"\n", FUNC_ADPT_ARG(padapter),
 		len, tx_ch
 	);
-#endif /* CONFIG_DEBUG_CFG80211 */
+#endif /* DEBUG_CFG80211 */
 
 	/* indicate ack before issue frame to avoid racing with rsp frame */
 	rtw_cfg80211_mgmt_tx_status(padapter, *cookie, buf, len, ack, GFP_KERNEL);
@@ -3238,7 +3239,7 @@ static void cfg80211_rtw_mgmt_frame_register(struct wiphy *wiphy,
 
 	adapter = (struct adapter *)rtw_netdev_priv(ndev);
 
-#ifdef CONFIG_DEBUG_CFG80211
+#ifdef DEBUG_CFG80211
 	DBG_871X(FUNC_ADPT_FMT" frame_type:%x, reg:%d\n", FUNC_ADPT_ARG(adapter),
 		frame_type, reg);
 #endif
@@ -3410,7 +3411,7 @@ static void rtw_cfg80211_preinit_wiphy(struct adapter *padapter, struct wiphy *w
 	wiphy->flags |= WIPHY_FLAG_OFFCHAN_TX | WIPHY_FLAG_HAVE_AP_SME;
 
 #if defined(CONFIG_PM)
-	wiphy->flags |= WIPHY_FLAG_SUPPORTS_SCHED_SCAN;
+	wiphy->max_sched_scan_reqs = 1;
 #ifdef CONFIG_PNO_SUPPORT
 	wiphy->max_sched_scan_ssids = MAX_PNO_LIST_COUNT;
 #endif
@@ -3531,7 +3532,6 @@ int rtw_wdev_alloc(struct adapter *padapter, struct device *dev)
 		pwdev_priv->power_mgmt = true;
 	else
 		pwdev_priv->power_mgmt = false;
-	kfree((u8 *)wdev);
 
 	return ret;
 

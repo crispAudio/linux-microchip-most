@@ -251,6 +251,7 @@ int atomisp_freq_scaling(struct atomisp_device *isp,
 {
 	/* FIXME! Only use subdev[0] status yet */
 	struct atomisp_sub_device *asd = &isp->asd[0];
+	const struct atomisp_dfs_config *dfs;
 	unsigned int new_freq;
 	struct atomisp_freq_scaling_rule curr_rules;
 	int i, ret;
@@ -265,20 +266,22 @@ int atomisp_freq_scaling(struct atomisp_device *isp,
 		ATOMISP_PCI_DEVICE_SOC_CHT && ATOMISP_USE_YUVPP(asd))
 		isp->dfs = &dfs_config_cht_soc;
 
-	if (isp->dfs->lowest_freq == 0 || isp->dfs->max_freq_at_vmin == 0 ||
-	    isp->dfs->highest_freq == 0 || isp->dfs->dfs_table_size == 0 ||
-	    !isp->dfs->dfs_table) {
+	dfs = isp->dfs;
+
+	if (dfs->lowest_freq == 0 || dfs->max_freq_at_vmin == 0 ||
+	    dfs->highest_freq == 0 || dfs->dfs_table_size == 0 ||
+	    !dfs->dfs_table) {
 		dev_err(isp->dev, "DFS configuration is invalid.\n");
 		return -EINVAL;
 	}
 
 	if (mode == ATOMISP_DFS_MODE_LOW) {
-		new_freq = isp->dfs->lowest_freq;
+		new_freq = dfs->lowest_freq;
 		goto done;
 	}
 
 	if (mode == ATOMISP_DFS_MODE_MAX) {
-		new_freq = isp->dfs->highest_freq;
+		new_freq = dfs->highest_freq;
 		goto done;
 	}
 
@@ -304,26 +307,26 @@ int atomisp_freq_scaling(struct atomisp_device *isp,
 	}
 
 	/* search for the target frequency by looping freq rules*/
-	for (i = 0; i < isp->dfs->dfs_table_size; i++) {
-		if (curr_rules.width != isp->dfs->dfs_table[i].width &&
-		    isp->dfs->dfs_table[i].width != ISP_FREQ_RULE_ANY)
+	for (i = 0; i < dfs->dfs_table_size; i++) {
+		if (curr_rules.width != dfs->dfs_table[i].width &&
+		    dfs->dfs_table[i].width != ISP_FREQ_RULE_ANY)
 			continue;
-		if (curr_rules.height != isp->dfs->dfs_table[i].height &&
-		    isp->dfs->dfs_table[i].height != ISP_FREQ_RULE_ANY)
+		if (curr_rules.height != dfs->dfs_table[i].height &&
+		    dfs->dfs_table[i].height != ISP_FREQ_RULE_ANY)
 			continue;
-		if (curr_rules.fps != isp->dfs->dfs_table[i].fps &&
-		    isp->dfs->dfs_table[i].fps != ISP_FREQ_RULE_ANY)
+		if (curr_rules.fps != dfs->dfs_table[i].fps &&
+		    dfs->dfs_table[i].fps != ISP_FREQ_RULE_ANY)
 			continue;
-		if (curr_rules.run_mode != isp->dfs->dfs_table[i].run_mode &&
-		    isp->dfs->dfs_table[i].run_mode != ISP_FREQ_RULE_ANY)
+		if (curr_rules.run_mode != dfs->dfs_table[i].run_mode &&
+		    dfs->dfs_table[i].run_mode != ISP_FREQ_RULE_ANY)
 			continue;
 		break;
 	}
 
-	if (i == isp->dfs->dfs_table_size)
-		new_freq = isp->dfs->max_freq_at_vmin;
+	if (i == dfs->dfs_table_size)
+		new_freq = dfs->max_freq_at_vmin;
 	else
-		new_freq = isp->dfs->dfs_table[i].isp_freq;
+		new_freq = dfs->dfs_table[i].isp_freq;
 
 done:
 	dev_dbg(isp->dev, "DFS target frequency=%d.\n", new_freq);
@@ -373,34 +376,16 @@ int atomisp_reset(struct atomisp_device *isp)
 }
 
 /*
- * interrupt enable/disable functions
+ * interrupt disable functions
  */
-static void enable_isp_irq(enum hrt_isp_css_irq irq, bool enable)
+static void disable_isp_irq(enum hrt_isp_css_irq irq)
 {
-	if (enable) {
-		irq_enable_channel(IRQ0_ID, irq);
-		/*sh_css_hrt_irq_enable(irq, true, false);*/
-		switch (irq) { /*We only have sp interrupt right now*/
-		case hrt_isp_css_irq_sp:
-			/*sh_css_hrt_irq_enable_sp(true);*/
-			cnd_sp_irq_enable(SP0_ID, true);
-			break;
-		default:
-			break;
-		}
+	irq_disable_channel(IRQ0_ID, irq);
 
-	} else {
-		/*sh_css_hrt_irq_disable(irq);*/
-		irq_disable_channel(IRQ0_ID, irq);
-		switch (irq) {
-		case hrt_isp_css_irq_sp:
-			/*sh_css_hrt_irq_enable_sp(false);*/
-			cnd_sp_irq_enable(SP0_ID, false);
-			break;
-		default:
-			break;
-		}
-	}
+	if (irq != hrt_isp_css_irq_sp)
+		return;
+
+	cnd_sp_irq_enable(SP0_ID, false);
 }
 
 /*
@@ -548,12 +533,14 @@ __get_asd_from_port(struct atomisp_device *isp, mipi_port_ID_t port)
 	/* Check which isp subdev to send eof */
 	for (i = 0; i < isp->num_of_streams; i++) {
 		struct atomisp_sub_device *asd = &isp->asd[i];
-		struct camera_mipi_info *mipi_info =
-				atomisp_to_sensor_mipi_info(
-					isp->inputs[asd->input_curr].camera);
-		if (isp->asd[i].streaming == ATOMISP_DEVICE_STREAMING_ENABLED &&
+		struct camera_mipi_info *mipi_info;
+
+		mipi_info = atomisp_to_sensor_mipi_info(
+				isp->inputs[asd->input_curr].camera);
+
+		if (asd->streaming == ATOMISP_DEVICE_STREAMING_ENABLED &&
 		    __get_mipi_port(isp, mipi_info->port) == port) {
-			return &isp->asd[i];
+			return asd;
 		}
 	}
 
@@ -1413,7 +1400,7 @@ static void __atomisp_css_recover(struct atomisp_device *isp, bool isp_timeout)
 	}
 
 	/* clear irq */
-	enable_isp_irq(hrt_isp_css_irq_sp, false);
+	disable_isp_irq(hrt_isp_css_irq_sp);
 	clear_isp_irq(hrt_isp_css_irq_sp);
 
 	/* Set the SRSE to 3 before resetting */
@@ -2935,7 +2922,7 @@ int atomisp_get_metadata(struct atomisp_sub_device *asd, int flag,
 				   md_buf->md_vptr,
 				   stream_info->metadata_info.size);
 	} else {
-		hrt_isp_css_mm_load(md_buf->metadata->address,
+		hmm_load(md_buf->metadata->address,
 				    asd->params.metadata_user[md_type],
 				    stream_info->metadata_info.size);
 
@@ -3018,7 +3005,7 @@ int atomisp_get_metadata_by_type(struct atomisp_sub_device *asd, int flag,
 				   md_buf->md_vptr,
 				   stream_info->metadata_info.size);
 	} else {
-		hrt_isp_css_mm_load(md_buf->metadata->address,
+		hmm_load(md_buf->metadata->address,
 				    asd->params.metadata_user[md_type],
 				    stream_info->metadata_info.size);
 

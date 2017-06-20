@@ -17,7 +17,7 @@
 #include <rtw_debug.h>
 #include "rtw_proc.h"
 
-#ifdef CONFIG_PROC_DEBUG
+#ifdef PROC_DEBUG
 
 static struct proc_dir_entry *rtw_proc = NULL;
 
@@ -295,7 +295,7 @@ static ssize_t proc_set_cam(struct file *file, const char __user *buffer, size_t
 	struct adapter *adapter;
 
 	char tmp[32];
-	char cmd[4];
+	char cmd[5];
 	u8 id;
 
 	adapter = (struct adapter *)rtw_netdev_priv(dev);
@@ -784,4 +784,4 @@ void rtw_adapter_proc_replace(struct net_device *dev)
 
 }
 
-#endif /* CONFIG_PROC_DEBUG */
+#endif /* PROC_DEBUG */

@@ -38,7 +38,6 @@ atomisp-objs += \
 	css2400/sh_css_params.o \
 	css2400/sh_css.o \
 	css2400/isp/kernels/hdr/ia_css_hdr.host.o \
-	css2400/isp/kernels/uds/uds_1.0/ia_css_uds.host.o \
 	css2400/isp/kernels/ynr/ynr_2/ia_css_ynr2.host.o \
 	css2400/isp/kernels/ynr/ynr_1.0/ia_css_ynr.host.o \
 	css2400/isp/kernels/conversion/conversion_1.0/ia_css_conversion.host.o \
@@ -65,7 +64,6 @@ atomisp-objs += \
 	css2400/isp/kernels/ctc/ctc_1.0/ia_css_ctc_table.host.o \
 	css2400/isp/kernels/ctc/ctc2/ia_css_ctc2.host.o \
 	css2400/isp/kernels/ctc/ctc1_5/ia_css_ctc1_5.host.o \
-	css2400/isp/kernels/fixedbds/fixedbds_1.0/ia_css_fixedbds.host.o \
 	css2400/isp/kernels/bh/bh_2/ia_css_bh.host.o \
 	css2400/isp/kernels/bnlm/ia_css_bnlm_default.host.o \
 	css2400/isp/kernels/bnlm/ia_css_bnlm.host.o \
@@ -80,12 +78,9 @@ atomisp-objs += \
 	css2400/isp/kernels/sdis/sdis_2/ia_css_sdis2.host.o \
 	css2400/isp/kernels/cnr/cnr_2/ia_css_cnr2.host.o \
 	css2400/isp/kernels/cnr/cnr_1.0/ia_css_cnr.host.o \
-	css2400/isp/kernels/satm/ia_css_satm.host.o \
 	css2400/isp/kernels/xnr/xnr_1.0/ia_css_xnr.host.o \
 	css2400/isp/kernels/xnr/xnr_1.0/ia_css_xnr_table.host.o \
-	css2400/isp/kernels/xnr/xnr3_0_5/ia_css_xnr3_0_5.host.o \
 	css2400/isp/kernels/xnr/xnr_3.0/ia_css_xnr3.host.o \
-	css2400/isp/kernels/xnr/xnr3_0_11/ia_css_xnr3_0_11.host.o \
 	css2400/isp/kernels/de/de_1.0/ia_css_de.host.o \
 	css2400/isp/kernels/de/de_2/ia_css_de2.host.o \
 	css2400/isp/kernels/gc/gc_2/ia_css_gc2.host.o \
@@ -162,17 +157,6 @@ atomisp-objs += \
 	hrt/hive_isp_css_mm_hrt.o \
 	atomisp_v4l2.o
 	
-extra= \
-	hrt/hive_isp_css_mm_hrt.o \
-	hrt/memory_access.o \
-	hrt/device_access.o \
-	hmm/hmm_dynamic_pool.o \
-	hmm/hmm_vm.o \
-	hmm/hmm_reserved_pool.o \
-	hmm/hmm_bo_dev.o \
-	hmm/hmm.o \
-	hmm/hmm_bo.o
-
 # These will be needed when clean merge CHT support nicely into the driver
 # Keep them here handy for when we get to that point
 #
@@ -306,7 +290,6 @@ INCLUDES += \
 	-I$(atomisp)/css2400/isp/kernels/s3a/ \
 	-I$(atomisp)/css2400/isp/kernels/s3a/s3a_1.0/ \
 	-I$(atomisp)/css2400/isp/kernels/s3a_stat_ls/ \
-	-I$(atomisp)/css2400/isp/kernels/satm/ \
 	-I$(atomisp)/css2400/isp/kernels/scale/ \
 	-I$(atomisp)/css2400/isp/kernels/scale/scale_1.0/ \
 	-I$(atomisp)/css2400/isp/kernels/sc/ \
@@ -329,8 +312,6 @@ INCLUDES += \
 	-I$(atomisp)/css2400/isp/kernels/xnr/ \
 	-I$(atomisp)/css2400/isp/kernels/xnr/xnr_1.0/ \
 	-I$(atomisp)/css2400/isp/kernels/xnr/xnr_3.0/ \
-	-I$(atomisp)/css2400/isp/kernels/xnr/xnr3_0_11 \
-	-I$(atomisp)/css2400/isp/kernels/xnr/xnr3_0_5/ \
 	-I$(atomisp)/css2400/isp/kernels/ynr/ \
 	-I$(atomisp)/css2400/isp/kernels/ynr/ynr_1.0/ \
 	-I$(atomisp)/css2400/isp/kernels/ynr/ynr_2/ \
@@ -370,5 +351,5 @@ DEFINES := -DHRT_HW -DHRT_ISP_CSS_CUSTOM_HOST -DHRT_USE_VIR_ADDRS -D__HOST__
 DEFINES += -DATOMISP_POSTFIX=\"css2400b0_v21\" -DISP2400B0
 DEFINES += -DSYSTEM_hive_isp_css_2400_system -DISP2400
 
-ccflags-y += $(INCLUDES) $(DEFINES) -fno-common -Werror
+ccflags-y += $(INCLUDES) $(DEFINES) -fno-common
 

@@ -19,7 +19,7 @@
 
 u32 GlobalDebugLevel = _drv_err_;
 
-#ifdef CONFIG_DEBUG_RTL871X
+#ifdef DEBUG_RTL871X
 
 	u64 GlobalDebugComponents = \
 			_module_rtl871x_xmit_c_ |
@@ -52,7 +52,7 @@ u32 GlobalDebugLevel = _drv_err_;
 			_module_mp_ |
 			_module_efuse_;
 
-#endif /* CONFIG_DEBUG_RTL871X */
+#endif /* DEBUG_RTL871X */
 
 #include <rtw_version.h>
 
@@ -140,7 +140,7 @@ void rf_reg_dump(void *sel, struct adapter *adapter)
 	}
 }
 
-#ifdef CONFIG_PROC_DEBUG
+#ifdef PROC_DEBUG
 ssize_t proc_set_write_reg(struct file *file, const char __user *buffer, size_t count, loff_t *pos, void *data)
 {
 	struct net_device *dev = data;
@@ -605,9 +605,6 @@ ssize_t proc_set_rate_ctl(struct file *file, const char __user *buffer, size_t c
 	return count;
 }
 
-u8 g_fwdl_chksum_fail = 0;
-u8 g_fwdl_wintint_rdy_fail = 0;
-
 ssize_t proc_set_fwdl_test_case(struct file *file, const char __user *buffer, size_t count, loff_t *pos, void *data)
 {
 	char tmp[32];
@@ -621,8 +618,6 @@ ssize_t proc_set_fwdl_test_case(struct file *file, const char __user *buffer, si
 
 	return count;
 }
-
-u32 g_wait_hiq_empty = 0;
 
 ssize_t proc_set_wait_hiq_empty(struct file *file, const char __user *buffer, size_t count, loff_t *pos, void *data)
 {
@@ -1031,7 +1026,7 @@ ssize_t proc_set_ht_enable(struct file *file, const char __user *buffer, size_t 
 	if (buffer && !copy_from_user(tmp, buffer, sizeof(tmp))) {
 		sscanf(tmp, "%d ", &mode);
 
-		if (pregpriv && mode >= 0 && mode < 2) {
+		if (pregpriv && mode < 2) {
 			pregpriv->ht_enable = mode;
 			printk("ht_enable =%d\n", pregpriv->ht_enable);
 		}
@@ -1150,7 +1145,7 @@ ssize_t proc_set_rx_ampdu(struct file *file, const char __user *buffer, size_t c
 
 		sscanf(tmp, "%d ", &mode);
 
-		if (pregpriv && mode >= 0 && mode < 2) {
+		if (pregpriv && mode < 2) {
 			pmlmeinfo->bAcceptAddbaReq = mode;
 			DBG_871X("pmlmeinfo->bAcceptAddbaReq =%d\n", pmlmeinfo->bAcceptAddbaReq);
 			if (mode == 0) {
@@ -1191,7 +1186,7 @@ ssize_t proc_set_en_fwps(struct file *file, const char __user *buffer, size_t co
 	if (buffer && !copy_from_user(tmp, buffer, sizeof(tmp))) {
 		sscanf(tmp, "%d ", &mode);
 
-		if (pregpriv && mode >= 0 && mode < 2) {
+		if (pregpriv && mode < 2) {
 			pregpriv->check_fw_ps = mode;
 			DBG_871X("pregpriv->check_fw_ps =%d\n", pregpriv->check_fw_ps);
 		}

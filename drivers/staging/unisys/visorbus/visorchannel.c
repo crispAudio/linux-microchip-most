@@ -28,11 +28,11 @@
 
 #define MYDRVNAME "visorchannel"
 
-#define SPAR_CONSOLEVIDEO_CHANNEL_PROTOCOL_GUID \
+#define VISOR_CONSOLEVIDEO_CHANNEL_GUID \
 	UUID_LE(0x3cd6e705, 0xd6a2, 0x4aa5, \
 		0xad, 0x5c, 0x7b, 0x8, 0x88, 0x9d, 0xff, 0xe2)
 
-static const uuid_le spar_video_guid = SPAR_CONSOLEVIDEO_CHANNEL_PROTOCOL_GUID;
+static const uuid_le visor_video_guid = VISOR_CONSOLEVIDEO_CHANNEL_GUID;
 
 struct visorchannel {
 	u64 physaddr;
@@ -328,27 +328,24 @@ static int
 signalinsert_inner(struct visorchannel *channel, u32 queue, void *msg)
 {
 	struct signal_queue_header sig_hdr;
-	int error;
+	int err;
 
-	error = sig_read_header(channel, queue, &sig_hdr);
-	if (error)
-		return error;
+	err = sig_read_header(channel, queue, &sig_hdr);
+	if (err)
+		return err;
 
 	sig_hdr.head = (sig_hdr.head + 1) % sig_hdr.max_slots;
 	if (sig_hdr.head == sig_hdr.tail) {
 		sig_hdr.num_overflows++;
-		visorchannel_write(channel,
-				   SIG_QUEUE_OFFSET(&channel->chan_hdr, queue) +
-				   offsetof(struct signal_queue_header,
-					    num_overflows),
-				   &sig_hdr.num_overflows,
-				   sizeof(sig_hdr.num_overflows));
+		err = SIG_WRITE_FIELD(channel, queue, &sig_hdr, num_overflows);
+		if (err)
+			return err;
 		return -EIO;
 	}
 
-	error = sig_write_data(channel, queue, &sig_hdr, sig_hdr.head, msg);
-	if (error)
-		return error;
+	err = sig_write_data(channel, queue, &sig_hdr, sig_hdr.head, msg);
+	if (err)
+		return err;
 
 	sig_hdr.num_sent++;
 
@@ -358,12 +355,12 @@ signalinsert_inner(struct visorchannel *channel, u32 queue, void *msg)
 	 */
 	mb(); /* required for channel synch */
 
-	error = SIG_WRITE_FIELD(channel, queue, &sig_hdr, head);
-	if (error)
-		return error;
-	error = SIG_WRITE_FIELD(channel, queue, &sig_hdr, num_sent);
-	if (error)
-		return error;
+	err = SIG_WRITE_FIELD(channel, queue, &sig_hdr, head);
+	if (err)
+		return err;
+	err = SIG_WRITE_FIELD(channel, queue, &sig_hdr, num_sent);
+	if (err)
+		return err;
 
 	return 0;
 }
@@ -418,7 +415,7 @@ visorchannel_create_guts(u64 physaddr, unsigned long channel_bytes,
 	 * release later on.
 	 */
 	channel->requested = request_mem_region(physaddr, size, MYDRVNAME);
-	if (!channel->requested && uuid_le_cmp(guid, spar_video_guid))
+	if (!channel->requested && uuid_le_cmp(guid, visor_video_guid))
 		/* we only care about errors if this is not the video channel */
 		goto err_destroy_channel;
 
@@ -448,7 +445,7 @@ visorchannel_create_guts(u64 physaddr, unsigned long channel_bytes,
 	channel->mapped = NULL;
 	channel->requested = request_mem_region(channel->physaddr,
 						channel_bytes, MYDRVNAME);
-	if (!channel->requested && uuid_le_cmp(guid, spar_video_guid))
+	if (!channel->requested && uuid_le_cmp(guid, visor_video_guid))
 		/* we only care about errors if this is not the video channel */
 		goto err_destroy_channel;
 

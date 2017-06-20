@@ -37,14 +37,14 @@ static struct dentry *visorhba_debugfs_dir;
 /* GUIDS for HBA channel type supported by this driver */
 static struct visor_channeltype_descriptor visorhba_channel_types[] = {
 	/* Note that the only channel type we expect to be reported by the
-	 * bus driver is the SPAR_VHBA channel.
+	 * bus driver is the VISOR_VHBA channel.
 	 */
-	{ SPAR_VHBA_CHANNEL_PROTOCOL_UUID, "sparvhba" },
+	{ VISOR_VHBA_CHANNEL_UUID, "sparvhba" },
 	{ NULL_UUID_LE, NULL }
 };
 
 MODULE_DEVICE_TABLE(visorbus, visorhba_channel_types);
-MODULE_ALIAS("visorbus:" SPAR_VHBA_CHANNEL_PROTOCOL_UUID_STR);
+MODULE_ALIAS("visorbus:" VISOR_VHBA_CHANNEL_UUID_STR);
 
 struct visordisk_info {
 	u32 valid;
@@ -657,7 +657,7 @@ static int info_debugfs_show(struct seq_file *seq, void *v)
 		seq_printf(seq, "phys_flags_addr = 0x%016llx\n",
 			   phys_flags_addr);
 		seq_printf(seq, "FeatureFlags = %llu\n",
-			   (__le64)readq(devdata->flags_addr));
+			   (u64)readq(devdata->flags_addr));
 	}
 	seq_printf(seq, "acquire_failed_cnt = %llu\n",
 		   devdata->acquire_failed_cnt);
@@ -839,7 +839,7 @@ static void
 do_scsi_nolinuxstat(struct uiscmdrsp *cmdrsp, struct scsi_cmnd *scsicmd)
 {
 	struct scsi_device *scsidev;
-	unsigned char buf[36];
+	unsigned char *buf;
 	struct scatterlist *sg;
 	unsigned int i;
 	char *this_page;
@@ -854,6 +854,10 @@ do_scsi_nolinuxstat(struct uiscmdrsp *cmdrsp, struct scsi_cmnd *scsicmd)
 		if (cmdrsp->scsi.no_disk_result == 0)
 			return;
 
+		buf = kzalloc(sizeof(char) * 36, GFP_KERNEL);
+		if (!buf)
+			return;
+
 		/* Linux scsi code wants a device at Lun 0
 		 * to issue report luns, but we don't want
 		 * a disk there so we'll present a processor
@@ -865,6 +869,7 @@ do_scsi_nolinuxstat(struct uiscmdrsp *cmdrsp, struct scsi_cmnd *scsicmd)
 		if (scsi_sg_count(scsicmd) == 0) {
 			memcpy(scsi_sglist(scsicmd), buf,
 			       cmdrsp->scsi.bufflen);
+			kfree(buf);
 			return;
 		}
 
@@ -876,6 +881,7 @@ do_scsi_nolinuxstat(struct uiscmdrsp *cmdrsp, struct scsi_cmnd *scsicmd)
 			memcpy(this_page, buf + bufind, sg[i].length);
 			kunmap_atomic(this_page_orig);
 		}
+		kfree(buf);
 	} else {
 		devdata = (struct visorhba_devdata *)scsidev->host->hostdata;
 		for_each_vdisk_match(vdisk, devdata, scsidev) {
@@ -1054,8 +1060,7 @@ static int visorhba_probe(struct visor_device *dev)
 	if (!scsihost)
 		return -ENODEV;
 
-	channel_offset = offsetof(struct spar_io_channel_protocol,
-				  vhba.max);
+	channel_offset = offsetof(struct visor_io_channel, vhba.max);
 	err = visorbus_read_channel(dev, channel_offset, &max,
 				    sizeof(struct vhba_config_max));
 	if (err < 0)
@@ -1099,12 +1104,12 @@ static int visorhba_probe(struct visor_device *dev)
 	devdata->serverchangingstate = false;
 	devdata->scsihost = scsihost;
 
-	channel_offset = offsetof(struct spar_io_channel_protocol,
+	channel_offset = offsetof(struct visor_io_channel,
 				  channel_header.features);
 	err = visorbus_read_channel(dev, channel_offset, &features, 8);
 	if (err)
 		goto err_debugfs_info;
-	features |= ULTRA_IO_CHANNEL_IS_POLLING;
+	features |= VISOR_CHANNEL_IS_POLLING;
 	err = visorbus_write_channel(dev, channel_offset, &features, 8);
 	if (err)
 		goto err_debugfs_info;
@@ -1160,7 +1165,7 @@ static void visorhba_remove(struct visor_device *dev)
 	debugfs_remove_recursive(devdata->debugfs_dir);
 }
 
-/* This is used to tell the visor bus driver which types of visor devices
+/* This is used to tell the visorbus driver which types of visor devices
  * we support, and what functions to call when a visor device that we support
  * is attached or removed.
  */
