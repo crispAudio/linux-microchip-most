@@ -9,49 +9,61 @@ ifndef KDIR
 endif
 
 obj-m := mostcore.o
-mostcore-y := .src/mostcore/core.o
+mostcore-y := src/mostcore/core.o
 
 obj-m += default_conf.o
-CFLAGS_default_conf.o := -I$(src)/.src/mostcore
+CFLAGS_default_conf.o := -I$(src)/src/mostcore
 
 obj-m += aim_cdev.o
-aim_cdev-y := .src/aim-cdev/cdev.o
-CFLAGS_cdev.o := -I$(src)/.src/mostcore
+aim_cdev-y := src/aim-cdev/cdev.o
+CFLAGS_cdev.o := -I$(src)/src/mostcore
 
 obj-m += aim_network.o
-aim_network-y := .src/aim-network/networking.o
-CFLAGS_networking.o := -I$(src)/.src/mostcore
+aim_network-y := src/aim-network/networking.o
+CFLAGS_networking.o := -I$(src)/src/mostcore
 
 obj-m += aim_sound.o
-aim_sound-y := .src/aim-sound/sound.o
-CFLAGS_sound.o := -I$(src)/.src/mostcore
+aim_sound-y := src/aim-sound/sound.o
+CFLAGS_sound.o := -I$(src)/src/mostcore
 
 obj-m += aim_v4l2.o
-aim_v4l2-y := .src/aim-v4l2/video.o
-CFLAGS_video.o := -Idrivers/media/video -I$(src)/.src/mostcore
+aim_v4l2-y := src/aim-v4l2/video.o
+CFLAGS_video.o := -Idrivers/media/video -I$(src)/src/mostcore
 
 obj-m += hdm_i2c.o hdm_i2c_pd.o
-hdm_i2c-y := .src/hdm-i2c/hdm_i2c.o
-hdm_i2c_pd-y := .src/hdm-i2c/platform/plat_imx6q.o
-CFLAGS_hdm_i2c.o := -I$(src)/.src/mostcore
+hdm_i2c-y := src/hdm-i2c/hdm_i2c.o
+hdm_i2c_pd-y := src/hdm-i2c/platform/plat_imx6q.o
+CFLAGS_hdm_i2c.o := -I$(src)/src/mostcore
 
 obj-m += hdm_dim2.o hdm_dim2_pd.o
-hdm_dim2-y := .src/hdm-dim2/dim2_hdm.o .src/hdm-dim2/dim2_hal.o .src/hdm-dim2/dim2_sysfs.o
-hdm_dim2_pd-y := .src/hdm-dim2/platform/dim2_mx6q_dt.o
-CFLAGS_dim2_hdm.o := -I$(src)/.src/mostcore -I$(src)/.src/aim-network
+hdm_dim2-y := src/hdm-dim2/dim2_hdm.o src/hdm-dim2/dim2_hal.o src/hdm-dim2/dim2_sysfs.o
+hdm_dim2_pd-y := src/hdm-dim2/platform/dim2_mx6q_dt.o
+CFLAGS_dim2_hdm.o := -I$(src)/src/mostcore -I$(src)/src/aim-network
 
 obj-m += hdm_usb.o
-hdm_usb-y := .src/hdm-usb/hdm_usb.o
-CFLAGS_hdm_usb.o := -I$(src)/.src/mostcore -I$(src)/.src/aim-network
+hdm_usb-y := src/hdm-usb/hdm_usb.o
+CFLAGS_hdm_usb.o := -I$(src)/src/mostcore -I$(src)/src/aim-network
 
 
 PWD := $(shell pwd)
 
 modules:
-	$(MAKE) -C $(KDIR) M=$(PWD) modules
+	$(MAKE) -C $(KDIR) M=$(PWD) modules || $(MAKE) backport_error
 
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) clean
+
+backport_error:
+	@echo ''
+	@echo 'YOU PROBABLY NEED TO APPLY SOME OF THE BACKPORT PATCHES:'
+	@echo ''
+	@echo '  cat patches/backport__networking__alloc_netdev.patch |patch -d src/ -p4'
+	@echo '  cat patches/backport__networking__ether_addr_copy.patch |patch -d src/ -p4'
+	@echo '  cat patches/backport__networking__ether_addr_equal.patch |patch -d src/ -p4'
+	@echo '  cat patches/backport__sound__snd_card_new.patch |patch -d src/ -p4'
+	@echo '  cat patches/backport__sound__snd_pcm_set_ops.patch |patch -d src/ -p4'
+	@echo '  cat patches/backport__hdm-dim2__devm_ioremap_resource.patch |patch -d src/ -p4'
+	@echo ''
 
 help:
 	@echo 'USAGE'

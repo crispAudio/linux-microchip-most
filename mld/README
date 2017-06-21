@@ -7,18 +7,17 @@ See also https://github.com/microchip-ais/linux/tree/mchp-dev/mld
 
 Follow the instructions below to get the needed MOST Linux Driver version:
 
-  $ mkdir mchp-mld
-  $ cd mchp-mld
   $ wget https://raw.githubusercontent.com/microchip-ais/linux/mchp-dev/mld/fetch-mld.bash
   $ chmod +x fetch-mld.bash
   $ ./fetch-mld.bash <BRANCH-OR-TAG>
 
-At the end of this procedure you will find the directory .src with all needed
-sources and the directory .patches with the backport patches needed to build
-the MOST Linux Driver against some older kernels.
+If the fetch-procedure completes successfully, you will find the output
+directory with the sources, Makefile example and the backport patches needed to
+build the MOST Linux Driver off the Linux kernel tree.
 
 To see the build instructions:
 
+  $ cd <OUTPUT-DIRECTORY>
   $ make help
 
 

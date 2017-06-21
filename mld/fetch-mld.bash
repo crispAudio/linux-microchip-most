@@ -1,14 +1,15 @@
 #!/bin/bash
 #
-# This script fetches README, example Makefile and all relevant sources of the
-# MOST Linux Driver from the github repository.
+# This script fetches README, example Makefile, backport- and feature-patches
+# and all relevant sources of the MOST Linux Driver from the github repository.
 #
 # Usage:
-#   ./fetch-mld.bash [<TAG>]
+#   [OUT_DIR=<NON-EXISTING-OUTPUT-DIRECTORY>] ./fetch-mld.bash [<TAG>]
 #
 # The optional <TAG> here is the git tag of the MOST Linux Driver, such as
-# mchp-dev or mld-1.3.12.  The default value for <TAG> is mchp-dev, that is the
-# development state of the MOST Linux Driver.
+# mchp-dev or mld-1.6.0.  The default value for the <TAG> is mchp-dev, that is
+# the development state of the MOST Linux Driver.  The default value for the
+# <OUT_DIR> is YYYY-MM-DD-hhmmss-<TAG>.
 #
 
 set -o nounset
@@ -19,12 +20,12 @@ PRJ=https://raw.githubusercontent.com/microchip-ais/linux
 GIT_REPO=https://github.com/microchip-ais/linux.git
 
 _err() {
-	echo "  ERR: $@" >&2
+	echo "ERROR: $@" >&2
 	exit 1
 }
 
 _warn() {
-	echo "  WARN: $@" >&2
+	echo "WARNING: $@" >&2
 	return 0
 }
 
@@ -37,19 +38,19 @@ _get_file() {
 }
 
 get_if_missing() {
-	[[ -e "$1" ]] || _get_file "mld/$1" "$1"
+	_get_file "mld/$1" "$1" || _err "failed"
 }
 
 get_src() {
-	_get_file "drivers/staging/most/$1" ".src/$1" || _err "failed"
+	_get_file "drivers/staging/most/$1" "src/$1" || _err "failed"
 }
 
 get_patch() {
-	_get_file "mld/patches/$1" ".patches/$1" || _warn "failed"
+	_get_file "mld/patches/$1" "patches/$1" || _warn "failed"
 }
 
 patch_mld() {
-	cat "./.patches/$1" |patch --force -p4 -d .src || _err "failed"
+	cat "patches/$1" |patch --force -p4 -d src || _err "failed"
 }
 
 local_fetch() {
@@ -110,7 +111,8 @@ local_fetch() {
 main() {
 	which wget >/dev/null || _err "wget is not installed"
 
-	rm -rf .src .patches
+	mkdir "${OUT_DIR:=$(date "+%F-%H%M%S")-$TAG}"
+	cd "$OUT_DIR"
 
 	if _get_file "mld/fetch-mld.bash" ".fetch"; then
 		cat .fetch |while read x y; do
@@ -131,9 +133,12 @@ main() {
 		LABEL="$(date --rfc-3339=seconds)"
 	fi
 	sed -i -r -e "/__init/,/return/s,\<pr_.*init.*,pr_info(\"MOST Linux Driver $TAG ${LABEL}\\\\n\");," \
-		.src/mostcore/core.c
-	grep --with-filename "MOST Linux Driver " .src/mostcore/core.c ||
+		src/mostcore/core.c
+	sed -i "s,\.src/,src/,g" Makefile
+	grep --with-filename "MOST Linux Driver " src/mostcore/core.c ||
 		_err "failed to set driver version info"
+
+	echo "output directory: $OUT_DIR"
 }
 
 main
