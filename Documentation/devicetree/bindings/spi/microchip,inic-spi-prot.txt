@@ -1,0 +1,28 @@
+Microchip INIC SPI protocol driver
+
+
+Required properties:
+
+- compatible: Must be "microchip,inic-spi-prot".
+
+- interrupt-parent: The phandle for the interrupt controller that services
+  interrupts for this device.
+
+- interrupts: The interrupt number to the cpu. The interrupt specifier format
+  depends on the interrupt controller.
+
+- spi-max-frequency: Maximum SPI clock frequency of the device in Hz as
+  described in Documentation/devicetree/bindings/spi/spi-bus.txt
+
+
+Example:
+
+&spi0 {
+        status = "okay";
+        protocol-driver {
+                compatible = "microchip,inic-spi-prot";
+                interrupt-parent = <&intc>;
+                interrupts = <0 58 IRQ_TYPE_LEVEL_HIGH>;
+                spi-max-frequency = <25000000>;
+        };
+};
