@@ -36,6 +36,7 @@
 #include <crypto/authenc.h>
 #include <crypto/hash.h>
 #include <linux/version.h>
+#include <linux/clk.h>
 
 /* Registers definitions from shared/hw/ree_include */
 #include "dx_reg_base_host.h"
@@ -54,6 +55,8 @@
 #define DRV_MODULE_VERSION "3.0"
 
 #define SSI_DEV_NAME_STR "cc715ree"
+#define CC_COHERENT_CACHE_PARAMS 0xEEE
+
 #define SSI_CC_HAS_AES_CCM 1
 #define SSI_CC_HAS_AES_GCM 1
 #define SSI_CC_HAS_AES_XTS 1
@@ -90,7 +93,7 @@
 
 /* Logging macros */
 #define SSI_LOG(level, format, ...) \
-	printk(level "cc715ree::%s: " format , __func__, ##__VA_ARGS__)
+	printk(level "cc715ree::%s: " format, __func__, ##__VA_ARGS__)
 #define SSI_LOG_ERR(format, ...) SSI_LOG(KERN_ERR, format, ##__VA_ARGS__)
 #define SSI_LOG_WARNING(format, ...) SSI_LOG(KERN_WARNING, format, ##__VA_ARGS__)
 #define SSI_LOG_NOTICE(format, ...) SSI_LOG(KERN_NOTICE, format, ##__VA_ARGS__)
@@ -104,15 +107,15 @@
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
-#define SSI_MAX_IVGEN_DMA_ADDRESSES 	3
+#define SSI_MAX_IVGEN_DMA_ADDRESSES	3
 struct ssi_crypto_req {
 	void (*user_cb)(struct device *dev, void *req, void __iomem *cc_base);
 	void *user_arg;
 	dma_addr_t ivgen_dma_addr[SSI_MAX_IVGEN_DMA_ADDRESSES];
 	/* For the first 'ivgen_dma_addr_len' addresses of this array,
- 	 * generated IV would be placed in it by send_request().
- 	 * Same generated IV for all addresses!
- 	 */
+	 * generated IV would be placed in it by send_request().
+	 * Same generated IV for all addresses!
+	 */
 	unsigned int ivgen_dma_addr_len; /* Amount of 'ivgen_dma_addr' elements to be filled. */
 	unsigned int ivgen_size; /* The generated IV size required, 8/16 B allowed. */
 	struct completion seq_compl; /* request completion */
@@ -148,7 +151,8 @@ struct ssi_drvdata {
 	void *ivgen_handle;
 	void *sram_mgr_handle;
 	u32 inflight_counter;
-
+	struct clk *clk;
+	bool coherent;
 };
 
 struct ssi_crypto_alg {
@@ -193,6 +197,8 @@ void dump_byte_array(const char *name, const u8 *the_array, unsigned long size);
 
 int init_cc_regs(struct ssi_drvdata *drvdata, bool is_probe);
 void fini_cc_regs(struct ssi_drvdata *drvdata);
+int cc_clk_on(struct ssi_drvdata *drvdata);
+void cc_clk_off(struct ssi_drvdata *drvdata);
 
 #endif /*__SSI_DRIVER_H__*/
 

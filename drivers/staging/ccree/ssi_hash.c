@@ -83,7 +83,6 @@ struct ssi_hash_alg {
 	struct ahash_alg ahash_alg;
 };
 
-
 struct hash_key_req_ctx {
 	u32 keylen;
 	dma_addr_t key_dma_addr;
@@ -97,6 +96,7 @@ struct ssi_hash_ctx {
 	 */
 	u8 digest_buff[SSI_MAX_HASH_DIGEST_SIZE]  ____cacheline_aligned;
 	u8 opad_tmp_keys_buff[SSI_MAX_HASH_OPAD_TMP_KEYS_SIZE]  ____cacheline_aligned;
+
 	dma_addr_t opad_tmp_keys_dma_addr  ____cacheline_aligned;
 	dma_addr_t digest_buff_dma_addr;
 	/* use for hmac with key large then mode block size */
@@ -111,7 +111,7 @@ struct ssi_hash_ctx {
 static void ssi_hash_create_data_desc(
 	struct ahash_req_ctx *areq_ctx,
 	struct ssi_hash_ctx *ctx,
-	unsigned int flow_mode,struct cc_hw_desc desc[],
+	unsigned int flow_mode, struct cc_hw_desc desc[],
 	bool is_not_last_data,
 	unsigned int *seq_size);
 
@@ -158,22 +158,22 @@ static int ssi_hash_map_request(struct device *dev,
 	struct cc_hw_desc desc;
 	int rc = -ENOMEM;
 
-	state->buff0 = kzalloc(SSI_MAX_HASH_BLCK_SIZE ,GFP_KERNEL|GFP_DMA);
+	state->buff0 = kzalloc(SSI_MAX_HASH_BLCK_SIZE, GFP_KERNEL | GFP_DMA);
 	if (!state->buff0) {
 		SSI_LOG_ERR("Allocating buff0 in context failed\n");
 		goto fail0;
 	}
-	state->buff1 = kzalloc(SSI_MAX_HASH_BLCK_SIZE ,GFP_KERNEL|GFP_DMA);
+	state->buff1 = kzalloc(SSI_MAX_HASH_BLCK_SIZE, GFP_KERNEL | GFP_DMA);
 	if (!state->buff1) {
 		SSI_LOG_ERR("Allocating buff1 in context failed\n");
 		goto fail_buff0;
 	}
-	state->digest_result_buff = kzalloc(SSI_MAX_HASH_DIGEST_SIZE ,GFP_KERNEL|GFP_DMA);
+	state->digest_result_buff = kzalloc(SSI_MAX_HASH_DIGEST_SIZE, GFP_KERNEL | GFP_DMA);
 	if (!state->digest_result_buff) {
 		SSI_LOG_ERR("Allocating digest_result_buff in context failed\n");
 		goto fail_buff1;
 	}
-	state->digest_buff = kzalloc(ctx->inter_digestsize, GFP_KERNEL|GFP_DMA);
+	state->digest_buff = kzalloc(ctx->inter_digestsize, GFP_KERNEL | GFP_DMA);
 	if (!state->digest_buff) {
 		SSI_LOG_ERR("Allocating digest-buffer in context failed\n");
 		goto fail_digest_result_buff;
@@ -181,7 +181,7 @@ static int ssi_hash_map_request(struct device *dev,
 
 	SSI_LOG_DEBUG("Allocated digest-buffer in context ctx->digest_buff=@%p\n", state->digest_buff);
 	if (ctx->hw_mode != DRV_CIPHER_XCBC_MAC) {
-		state->digest_bytes_len = kzalloc(HASH_LEN_SIZE, GFP_KERNEL|GFP_DMA);
+		state->digest_bytes_len = kzalloc(HASH_LEN_SIZE, GFP_KERNEL | GFP_DMA);
 		if (!state->digest_bytes_len) {
 			SSI_LOG_ERR("Allocating digest-bytes-len in context failed\n");
 			goto fail1;
@@ -191,7 +191,7 @@ static int ssi_hash_map_request(struct device *dev,
 		state->digest_bytes_len = NULL;
 	}
 
-	state->opad_digest_buff = kzalloc(ctx->inter_digestsize, GFP_KERNEL|GFP_DMA);
+	state->opad_digest_buff = kzalloc(ctx->inter_digestsize, GFP_KERNEL | GFP_DMA);
 	if (!state->opad_digest_buff) {
 		SSI_LOG_ERR("Allocating opad-digest-buffer in context failed\n");
 		goto fail2;
@@ -215,11 +215,10 @@ static int ssi_hash_map_request(struct device *dev,
 		} else { /*sha*/
 			memcpy(state->digest_buff, ctx->digest_buff, ctx->inter_digestsize);
 #if (DX_DEV_SHA_MAX > 256)
-			if (unlikely((ctx->hash_mode == DRV_HASH_SHA512) || (ctx->hash_mode == DRV_HASH_SHA384))) {
+			if (unlikely((ctx->hash_mode == DRV_HASH_SHA512) || (ctx->hash_mode == DRV_HASH_SHA384)))
 				memcpy(state->digest_bytes_len, digest_len_sha512_init, HASH_LEN_SIZE);
-			} else {
+			else
 				memcpy(state->digest_bytes_len, digest_len_init, HASH_LEN_SIZE);
-			}
 #else
 			memcpy(state->digest_bytes_len, digest_len_init, HASH_LEN_SIZE);
 #endif
@@ -298,17 +297,17 @@ fail2:
 fail1:
 	 kfree(state->digest_buff);
 fail_digest_result_buff:
-	 if (state->digest_result_buff != NULL) {
+	 if (state->digest_result_buff) {
 		 kfree(state->digest_result_buff);
 	     state->digest_result_buff = NULL;
 	 }
 fail_buff1:
-	 if (state->buff1 != NULL) {
+	 if (state->buff1) {
 		 kfree(state->buff1);
 	     state->buff1 = NULL;
 	 }
 fail_buff0:
-	 if (state->buff0 != NULL) {
+	 if (state->buff0) {
 		 kfree(state->buff0);
 	     state->buff0 = NULL;
 	 }
@@ -430,8 +429,7 @@ static int ssi_hash_digest(struct ahash_req_ctx *state,
 	int idx = 0;
 	int rc = 0;
 
-
-	SSI_LOG_DEBUG("===== %s-digest (%d) ====\n", is_hmac?"hmac":"hash", nbytes);
+	SSI_LOG_DEBUG("===== %s-digest (%d) ====\n", is_hmac ? "hmac" : "hash", nbytes);
 
 	CHECK_AND_RETURN_UPON_FIPS_ERROR();
 
@@ -480,11 +478,10 @@ static int ssi_hash_digest(struct ahash_req_ctx *state,
 			     NS_BIT);
 	} else {
 		set_din_const(&desc[idx], 0, HASH_LEN_SIZE);
-		if (likely(nbytes != 0)) {
+		if (likely(nbytes != 0))
 			set_cipher_config1(&desc[idx], HASH_PADDING_ENABLED);
-		} else {
+		else
 			set_cipher_do(&desc[idx], DO_PAD);
-		}
 	}
 	set_flow_mode(&desc[idx], S_DIN_to_HASH);
 	set_setup_mode(&desc[idx], SETUP_LOAD_KEY0);
@@ -553,9 +550,8 @@ ctx->drvdata, ctx->hash_mode), HASH_LEN_SIZE);
 	/* TODO */
 	set_dout_dlli(&desc[idx], state->digest_result_dma_addr, digestsize,
 		      NS_BIT, (async_req ? 1 : 0));
-	if (async_req) {
+	if (async_req)
 		set_queue_last_ind(&desc[idx]);
-	}
 	set_flow_mode(&desc[idx], S_HASH_to_DOUT);
 	set_setup_mode(&desc[idx], SETUP_WRITE_STATE0);
 	set_cipher_config1(&desc[idx], HASH_PADDING_DISABLED);
@@ -598,7 +594,7 @@ static int ssi_hash_update(struct ahash_req_ctx *state,
 	int rc;
 
 	SSI_LOG_DEBUG("===== %s-update (%d) ====\n", ctx->is_hmac ?
-					"hmac":"hash", nbytes);
+					"hmac" : "hash", nbytes);
 
 	CHECK_AND_RETURN_UPON_FIPS_ERROR();
 	if (nbytes == 0) {
@@ -656,9 +652,8 @@ static int ssi_hash_update(struct ahash_req_ctx *state,
 	set_cipher_mode(&desc[idx], ctx->hw_mode);
 	set_dout_dlli(&desc[idx], state->digest_bytes_len_dma_addr,
 		      HASH_LEN_SIZE, NS_BIT, (async_req ? 1 : 0));
-	if (async_req) {
+	if (async_req)
 		set_queue_last_ind(&desc[idx]);
-	}
 	set_flow_mode(&desc[idx], S_HASH_to_DOUT);
 	set_setup_mode(&desc[idx], SETUP_WRITE_STATE1);
 	idx++;
@@ -696,11 +691,11 @@ static int ssi_hash_finup(struct ahash_req_ctx *state,
 	int idx = 0;
 	int rc;
 
-	SSI_LOG_DEBUG("===== %s-finup (%d) ====\n", is_hmac?"hmac":"hash", nbytes);
+	SSI_LOG_DEBUG("===== %s-finup (%d) ====\n", is_hmac ? "hmac" : "hash", nbytes);
 
 	CHECK_AND_RETURN_UPON_FIPS_ERROR();
 
-	if (unlikely(ssi_buffer_mgr_map_hash_request_final(ctx->drvdata, state, src , nbytes, 1) != 0)) {
+	if (unlikely(ssi_buffer_mgr_map_hash_request_final(ctx->drvdata, state, src, nbytes, 1) != 0)) {
 		SSI_LOG_ERR("map_ahash_request_final() failed\n");
 		return -ENOMEM;
 	}
@@ -742,7 +737,7 @@ static int ssi_hash_finup(struct ahash_req_ctx *state,
 		set_cipher_mode(&desc[idx], ctx->hw_mode);
 		set_dout_dlli(&desc[idx], state->digest_buff_dma_addr,
 			      digestsize, NS_BIT, 0);
-		ssi_set_hash_endianity(ctx->hash_mode,&desc[idx]);
+		ssi_set_hash_endianity(ctx->hash_mode, &desc[idx]);
 		set_flow_mode(&desc[idx], S_HASH_to_DOUT);
 		set_setup_mode(&desc[idx], SETUP_WRITE_STATE0);
 		idx++;
@@ -786,13 +781,12 @@ ctx->drvdata, ctx->hash_mode), HASH_LEN_SIZE);
 	/* TODO */
 	set_dout_dlli(&desc[idx], state->digest_result_dma_addr, digestsize,
 		      NS_BIT, (async_req ? 1 : 0));
-	if (async_req) {
+	if (async_req)
 		set_queue_last_ind(&desc[idx]);
-	}
 	set_flow_mode(&desc[idx], S_HASH_to_DOUT);
 	set_cipher_config1(&desc[idx], HASH_PADDING_DISABLED);
 	set_setup_mode(&desc[idx], SETUP_WRITE_STATE0);
-	ssi_set_hash_endianity(ctx->hash_mode,&desc[idx]);
+	ssi_set_hash_endianity(ctx->hash_mode, &desc[idx]);
 	set_cipher_mode(&desc[idx], ctx->hw_mode);
 	idx++;
 
@@ -833,7 +827,7 @@ static int ssi_hash_final(struct ahash_req_ctx *state,
 	int idx = 0;
 	int rc;
 
-	SSI_LOG_DEBUG("===== %s-final (%d) ====\n", is_hmac?"hmac":"hash", nbytes);
+	SSI_LOG_DEBUG("===== %s-final (%d) ====\n", is_hmac ? "hmac" : "hash", nbytes);
 
 	CHECK_AND_RETURN_UPON_FIPS_ERROR();
 
@@ -890,7 +884,7 @@ static int ssi_hash_final(struct ahash_req_ctx *state,
 		set_cipher_mode(&desc[idx], ctx->hw_mode);
 		set_dout_dlli(&desc[idx], state->digest_buff_dma_addr,
 			      digestsize, NS_BIT, 0);
-		ssi_set_hash_endianity(ctx->hash_mode,&desc[idx]);
+		ssi_set_hash_endianity(ctx->hash_mode, &desc[idx]);
 		set_flow_mode(&desc[idx], S_HASH_to_DOUT);
 		set_setup_mode(&desc[idx], SETUP_WRITE_STATE0);
 		idx++;
@@ -933,13 +927,12 @@ ctx->drvdata, ctx->hash_mode), HASH_LEN_SIZE);
 	hw_desc_init(&desc[idx]);
 	set_dout_dlli(&desc[idx], state->digest_result_dma_addr, digestsize,
 		      NS_BIT, (async_req ? 1 : 0));
-	if (async_req) {
+	if (async_req)
 		set_queue_last_ind(&desc[idx]);
-	}
 	set_flow_mode(&desc[idx], S_HASH_to_DOUT);
 	set_cipher_config1(&desc[idx], HASH_PADDING_DISABLED);
 	set_setup_mode(&desc[idx], SETUP_WRITE_STATE0);
-	ssi_set_hash_endianity(ctx->hash_mode,&desc[idx]);
+	ssi_set_hash_endianity(ctx->hash_mode, &desc[idx]);
 	set_cipher_mode(&desc[idx], ctx->hw_mode);
 	idx++;
 
@@ -968,6 +961,7 @@ ctx->drvdata, ctx->hash_mode), HASH_LEN_SIZE);
 static int ssi_hash_init(struct ahash_req_ctx *state, struct ssi_hash_ctx *ctx)
 {
 	struct device *dev = &ctx->drvdata->plat_dev->dev;
+
 	state->xcbc_count = 0;
 
 	CHECK_AND_RETURN_UPON_FIPS_ERROR();
@@ -975,22 +969,6 @@ static int ssi_hash_init(struct ahash_req_ctx *state, struct ssi_hash_ctx *ctx)
 
 	return 0;
 }
-
-#ifdef EXPORT_FIXED
-static int ssi_hash_export(struct ssi_hash_ctx *ctx, void *out)
-{
-	CHECK_AND_RETURN_UPON_FIPS_ERROR();
-	memcpy(out, ctx, sizeof(struct ssi_hash_ctx));
-	return 0;
-}
-
-static int ssi_hash_import(struct ssi_hash_ctx *ctx, const void *in)
-{
-	CHECK_AND_RETURN_UPON_FIPS_ERROR();
-	memcpy(ctx, in, sizeof(struct ssi_hash_ctx));
-	return 0;
-}
-#endif
 
 static int ssi_hash_setkey(void *hash,
 			   const u8 *key,
@@ -1073,7 +1051,7 @@ static int ssi_hash_setkey(void *hash,
 			set_flow_mode(&desc[idx], S_HASH_to_DOUT);
 			set_setup_mode(&desc[idx], SETUP_WRITE_STATE0);
 			set_cipher_config1(&desc[idx], HASH_PADDING_DISABLED);
-			ssi_set_hash_endianity(ctx->hash_mode,&desc[idx]);
+			ssi_set_hash_endianity(ctx->hash_mode, &desc[idx]);
 			idx++;
 
 			hw_desc_init(&desc[idx]);
@@ -1186,7 +1164,6 @@ out:
 	return rc;
 }
 
-
 static int ssi_xcbc_setkey(struct crypto_ahash *ahash,
 			const u8 *key, unsigned int keylen)
 {
@@ -1274,11 +1251,13 @@ static int ssi_xcbc_setkey(struct crypto_ahash *ahash,
 
 	return rc;
 }
+
 #if SSI_CC_HAS_CMAC
 static int ssi_cmac_setkey(struct crypto_ahash *ahash,
 			const u8 *key, unsigned int keylen)
 {
 	struct ssi_hash_ctx *ctx = crypto_ahash_ctx(ahash);
+
 	SSI_LOG_DEBUG("===== setkey (%d) ====\n", keylen);
 	CHECK_AND_RETURN_UPON_FIPS_ERROR();
 
@@ -1311,7 +1290,6 @@ static int ssi_cmac_setkey(struct crypto_ahash *ahash,
 
 	ctx->key_params.keylen = keylen;
 
-
 	return 0;
 }
 #endif
@@ -1339,9 +1317,7 @@ static void ssi_hash_free_ctx(struct ssi_hash_ctx *ctx)
 	}
 
 	ctx->key_params.keylen = 0;
-
 }
-
 
 static int ssi_hash_alloc_ctx(struct ssi_hash_ctx *ctx)
 {
@@ -1381,13 +1357,12 @@ fail:
 static int ssi_ahash_cra_init(struct crypto_tfm *tfm)
 {
 	struct ssi_hash_ctx *ctx = crypto_tfm_ctx(tfm);
-	struct hash_alg_common * hash_alg_common =
+	struct hash_alg_common *hash_alg_common =
 		container_of(tfm->__crt_alg, struct hash_alg_common, base);
 	struct ahash_alg *ahash_alg =
 		container_of(hash_alg_common, struct ahash_alg, halg);
 	struct ssi_hash_alg *ssi_alg =
 			container_of(ahash_alg, struct ssi_hash_alg, ahash_alg);
-
 
 	CHECK_AND_RETURN_UPON_FIPS_ERROR();
 	crypto_ahash_set_reqsize(__crypto_ahash_cast(tfm),
@@ -1440,11 +1415,10 @@ static int ssi_mac_update(struct ahash_request *req)
 		return -ENOMEM;
 	}
 
-	if (ctx->hw_mode == DRV_CIPHER_XCBC_MAC) {
+	if (ctx->hw_mode == DRV_CIPHER_XCBC_MAC)
 		ssi_hash_create_xcbc_setup(req, desc, &idx);
-	} else {
+	else
 		ssi_hash_create_cmac_setup(req, desc, &idx);
-	}
 
 	ssi_hash_create_data_desc(state, ctx, DIN_AES_DOUT, desc, true, &idx);
 
@@ -1486,7 +1460,6 @@ static int ssi_mac_final(struct ahash_request *req)
 	u32 rem_cnt = state->buff_index ? state->buff1_cnt :
 			state->buff0_cnt;
 
-
 	CHECK_AND_RETURN_UPON_FIPS_ERROR();
 	if (ctx->hw_mode == DRV_CIPHER_XCBC_MAC) {
 		keySize = CC_AES_128_BIT_KEY_SIZE;
@@ -1525,7 +1498,6 @@ static int ssi_mac_final(struct ahash_request *req)
 		set_setup_mode(&desc[idx], SETUP_LOAD_KEY0);
 		idx++;
 
-
 		/* Initiate decryption of block state to previous block_state-XOR-M[n] */
 		hw_desc_init(&desc[idx]);
 		set_din_type(&desc[idx], DMA_DLLI, state->digest_buff_dma_addr,
@@ -1542,11 +1514,10 @@ static int ssi_mac_final(struct ahash_request *req)
 		idx++;
 	}
 
-	if (ctx->hw_mode == DRV_CIPHER_XCBC_MAC) {
+	if (ctx->hw_mode == DRV_CIPHER_XCBC_MAC)
 		ssi_hash_create_xcbc_setup(req, desc, &idx);
-	} else {
+	else
 		ssi_hash_create_cmac_setup(req, desc, &idx);
-	}
 
 	if (state->xcbc_count == 0) {
 		hw_desc_init(&desc[idx]);
@@ -1782,35 +1753,119 @@ static int ssi_ahash_init(struct ahash_request *req)
 	return ssi_hash_init(state, ctx);
 }
 
-#ifdef EXPORT_FIXED
 static int ssi_ahash_export(struct ahash_request *req, void *out)
 {
 	struct crypto_ahash *ahash = crypto_ahash_reqtfm(req);
 	struct ssi_hash_ctx *ctx = crypto_ahash_ctx(ahash);
+	struct device *dev = &ctx->drvdata->plat_dev->dev;
+	struct ahash_req_ctx *state = ahash_request_ctx(req);
+	u8 *curr_buff = state->buff_index ? state->buff1 : state->buff0;
+	u32 curr_buff_cnt = state->buff_index ? state->buff1_cnt :
+				state->buff0_cnt;
+	const u32 tmp = CC_EXPORT_MAGIC;
 
-	return ssi_hash_export(ctx, out);
+	CHECK_AND_RETURN_UPON_FIPS_ERROR();
+
+	memcpy(out, &tmp, sizeof(u32));
+	out += sizeof(u32);
+
+	dma_sync_single_for_cpu(dev, state->digest_buff_dma_addr,
+				ctx->inter_digestsize, DMA_BIDIRECTIONAL);
+	memcpy(out, state->digest_buff, ctx->inter_digestsize);
+	out += ctx->inter_digestsize;
+
+	if (state->digest_bytes_len_dma_addr) {
+		dma_sync_single_for_cpu(dev, state->digest_bytes_len_dma_addr,
+					HASH_LEN_SIZE, DMA_BIDIRECTIONAL);
+		memcpy(out, state->digest_bytes_len, HASH_LEN_SIZE);
+	} else {
+		/* Poison the unused exported digest len field. */
+		memset(out, 0x5F, HASH_LEN_SIZE);
+	}
+	out += HASH_LEN_SIZE;
+
+	memcpy(out, &curr_buff_cnt, sizeof(u32));
+	out += sizeof(u32);
+
+	memcpy(out, curr_buff, curr_buff_cnt);
+
+	/* No sync for device ineeded since we did not change the data,
+	 * we only copy it
+	 */
+
+	return 0;
 }
 
 static int ssi_ahash_import(struct ahash_request *req, const void *in)
 {
 	struct crypto_ahash *ahash = crypto_ahash_reqtfm(req);
 	struct ssi_hash_ctx *ctx = crypto_ahash_ctx(ahash);
+	struct device *dev = &ctx->drvdata->plat_dev->dev;
+	struct ahash_req_ctx *state = ahash_request_ctx(req);
+	u32 tmp;
+	int rc;
 
-	return ssi_hash_import(ctx, in);
+	CHECK_AND_RETURN_UPON_FIPS_ERROR();
+
+	memcpy(&tmp, in, sizeof(u32));
+	if (tmp != CC_EXPORT_MAGIC) {
+		rc = -EINVAL;
+		goto out;
+	}
+	in += sizeof(u32);
+
+	rc = ssi_hash_init(state, ctx);
+	if (rc)
+		goto out;
+
+	dma_sync_single_for_cpu(dev, state->digest_buff_dma_addr,
+				ctx->inter_digestsize, DMA_BIDIRECTIONAL);
+	memcpy(state->digest_buff, in, ctx->inter_digestsize);
+	in += ctx->inter_digestsize;
+
+	if (state->digest_bytes_len_dma_addr) {
+		dma_sync_single_for_cpu(dev, state->digest_bytes_len_dma_addr,
+					HASH_LEN_SIZE, DMA_BIDIRECTIONAL);
+		memcpy(state->digest_bytes_len, in, HASH_LEN_SIZE);
+	}
+	in += HASH_LEN_SIZE;
+
+	dma_sync_single_for_device(dev, state->digest_buff_dma_addr,
+				   ctx->inter_digestsize, DMA_BIDIRECTIONAL);
+
+	if (state->digest_bytes_len_dma_addr)
+		dma_sync_single_for_device(dev,
+					   state->digest_bytes_len_dma_addr,
+					   HASH_LEN_SIZE, DMA_BIDIRECTIONAL);
+
+	state->buff_index = 0;
+
+	/* Sanity check the data as much as possible */
+	memcpy(&tmp, in, sizeof(u32));
+	if (tmp > SSI_MAX_HASH_BLCK_SIZE) {
+		rc = -EINVAL;
+		goto out;
+	}
+	in += sizeof(u32);
+
+	state->buff0_cnt = tmp;
+	memcpy(state->buff0, in, state->buff0_cnt);
+
+out:
+	return rc;
 }
-#endif
 
 static int ssi_ahash_setkey(struct crypto_ahash *ahash,
 			const u8 *key, unsigned int keylen)
 {
-	return ssi_hash_setkey((void *) ahash, key, keylen, false);
+	return ssi_hash_setkey((void *)ahash, key, keylen, false);
 }
 
 struct ssi_hash_template {
 	char name[CRYPTO_MAX_ALG_NAME];
 	char driver_name[CRYPTO_MAX_ALG_NAME];
-	char hmac_name[CRYPTO_MAX_ALG_NAME];
-	char hmac_driver_name[CRYPTO_MAX_ALG_NAME];
+	char mac_name[CRYPTO_MAX_ALG_NAME];
+	char mac_driver_name[CRYPTO_MAX_ALG_NAME];
 	unsigned int blocksize;
 	bool synchronize;
 	struct ahash_alg template_ahash;
@@ -1820,14 +1875,17 @@ struct ssi_hash_template {
 	struct ssi_drvdata *drvdata;
 };
 
+#define CC_STATE_SIZE(_x) \
+	((_x) + HASH_LEN_SIZE + SSI_MAX_HASH_BLCK_SIZE + (2 * sizeof(u32)))
+
 /* hash descriptors */
 static struct ssi_hash_template driver_hash[] = {
 	//Asynchronize hash template
 	{
 		.name = "sha1",
 		.driver_name = "sha1-dx",
-		.hmac_name = "hmac(sha1)",
-		.hmac_driver_name = "hmac-sha1-dx",
+		.mac_name = "hmac(sha1)",
+		.mac_driver_name = "hmac-sha1-dx",
 		.blocksize = SHA1_BLOCK_SIZE,
 		.synchronize = false,
 		.template_ahash = {
@@ -1836,14 +1894,12 @@ static struct ssi_hash_template driver_hash[] = {
 			.final = ssi_ahash_final,
 			.finup = ssi_ahash_finup,
 			.digest = ssi_ahash_digest,
-#ifdef EXPORT_FIXED
 			.export = ssi_ahash_export,
 			.import = ssi_ahash_import,
-#endif
 			.setkey = ssi_ahash_setkey,
 			.halg = {
 				.digestsize = SHA1_DIGEST_SIZE,
-				.statesize = sizeof(struct sha1_state),
+				.statesize = CC_STATE_SIZE(SHA1_DIGEST_SIZE),
 			},
 		},
 		.hash_mode = DRV_HASH_SHA1,
@@ -1853,8 +1909,8 @@ static struct ssi_hash_template driver_hash[] = {
 	{
 		.name = "sha256",
 		.driver_name = "sha256-dx",
-		.hmac_name = "hmac(sha256)",
-		.hmac_driver_name = "hmac-sha256-dx",
+		.mac_name = "hmac(sha256)",
+		.mac_driver_name = "hmac-sha256-dx",
 		.blocksize = SHA256_BLOCK_SIZE,
 		.template_ahash = {
 			.init = ssi_ahash_init,
@@ -1862,14 +1918,12 @@ static struct ssi_hash_template driver_hash[] = {
 			.final = ssi_ahash_final,
 			.finup = ssi_ahash_finup,
 			.digest = ssi_ahash_digest,
-#ifdef EXPORT_FIXED
 			.export = ssi_ahash_export,
 			.import = ssi_ahash_import,
-#endif
 			.setkey = ssi_ahash_setkey,
 			.halg = {
 				.digestsize = SHA256_DIGEST_SIZE,
-				.statesize = sizeof(struct sha256_state),
+				.statesize = CC_STATE_SIZE(SHA256_DIGEST_SIZE)
 			},
 		},
 		.hash_mode = DRV_HASH_SHA256,
@@ -1879,8 +1933,8 @@ static struct ssi_hash_template driver_hash[] = {
 	{
 		.name = "sha224",
 		.driver_name = "sha224-dx",
-		.hmac_name = "hmac(sha224)",
-		.hmac_driver_name = "hmac-sha224-dx",
+		.mac_name = "hmac(sha224)",
+		.mac_driver_name = "hmac-sha224-dx",
 		.blocksize = SHA224_BLOCK_SIZE,
 		.template_ahash = {
 			.init = ssi_ahash_init,
@@ -1888,14 +1942,12 @@ static struct ssi_hash_template driver_hash[] = {
 			.final = ssi_ahash_final,
 			.finup = ssi_ahash_finup,
 			.digest = ssi_ahash_digest,
-#ifdef EXPORT_FIXED
 			.export = ssi_ahash_export,
 			.import = ssi_ahash_import,
-#endif
 			.setkey = ssi_ahash_setkey,
 			.halg = {
 				.digestsize = SHA224_DIGEST_SIZE,
-				.statesize = sizeof(struct sha256_state),
+				.statesize = CC_STATE_SIZE(SHA224_DIGEST_SIZE),
 			},
 		},
 		.hash_mode = DRV_HASH_SHA224,
@@ -1906,8 +1958,8 @@ static struct ssi_hash_template driver_hash[] = {
 	{
 		.name = "sha384",
 		.driver_name = "sha384-dx",
-		.hmac_name = "hmac(sha384)",
-		.hmac_driver_name = "hmac-sha384-dx",
+		.mac_name = "hmac(sha384)",
+		.mac_driver_name = "hmac-sha384-dx",
 		.blocksize = SHA384_BLOCK_SIZE,
 		.template_ahash = {
 			.init = ssi_ahash_init,
@@ -1915,14 +1967,12 @@ static struct ssi_hash_template driver_hash[] = {
 			.final = ssi_ahash_final,
 			.finup = ssi_ahash_finup,
 			.digest = ssi_ahash_digest,
-#ifdef EXPORT_FIXED
 			.export = ssi_ahash_export,
 			.import = ssi_ahash_import,
-#endif
 			.setkey = ssi_ahash_setkey,
 			.halg = {
 				.digestsize = SHA384_DIGEST_SIZE,
-				.statesize = sizeof(struct sha512_state),
+				.statesize = CC_STATE_SIZE(SHA384_DIGEST_SIZE),
 			},
 		},
 		.hash_mode = DRV_HASH_SHA384,
@@ -1932,8 +1982,8 @@ static struct ssi_hash_template driver_hash[] = {
 	{
 		.name = "sha512",
 		.driver_name = "sha512-dx",
-		.hmac_name = "hmac(sha512)",
-		.hmac_driver_name = "hmac-sha512-dx",
+		.mac_name = "hmac(sha512)",
+		.mac_driver_name = "hmac-sha512-dx",
 		.blocksize = SHA512_BLOCK_SIZE,
 		.template_ahash = {
 			.init = ssi_ahash_init,
@@ -1941,14 +1991,12 @@ static struct ssi_hash_template driver_hash[] = {
 			.final = ssi_ahash_final,
 			.finup = ssi_ahash_finup,
 			.digest = ssi_ahash_digest,
-#ifdef EXPORT_FIXED
 			.export = ssi_ahash_export,
 			.import = ssi_ahash_import,
-#endif
 			.setkey = ssi_ahash_setkey,
 			.halg = {
 				.digestsize = SHA512_DIGEST_SIZE,
-				.statesize = sizeof(struct sha512_state),
+				.statesize = CC_STATE_SIZE(SHA512_DIGEST_SIZE),
 			},
 		},
 		.hash_mode = DRV_HASH_SHA512,
@@ -1959,8 +2007,8 @@ static struct ssi_hash_template driver_hash[] = {
 	{
 		.name = "md5",
 		.driver_name = "md5-dx",
-		.hmac_name = "hmac(md5)",
-		.hmac_driver_name = "hmac-md5-dx",
+		.mac_name = "hmac(md5)",
+		.mac_driver_name = "hmac-md5-dx",
 		.blocksize = MD5_HMAC_BLOCK_SIZE,
 		.template_ahash = {
 			.init = ssi_ahash_init,
@@ -1968,14 +2016,12 @@ static struct ssi_hash_template driver_hash[] = {
 			.final = ssi_ahash_final,
 			.finup = ssi_ahash_finup,
 			.digest = ssi_ahash_digest,
-#ifdef EXPORT_FIXED
 			.export = ssi_ahash_export,
 			.import = ssi_ahash_import,
-#endif
 			.setkey = ssi_ahash_setkey,
 			.halg = {
 				.digestsize = MD5_DIGEST_SIZE,
-				.statesize = sizeof(struct md5_state),
+				.statesize = CC_STATE_SIZE(MD5_DIGEST_SIZE),
 			},
 		},
 		.hash_mode = DRV_HASH_MD5,
@@ -1983,8 +2029,8 @@ static struct ssi_hash_template driver_hash[] = {
 		.inter_digestsize = MD5_DIGEST_SIZE,
 	},
 	{
-		.name = "xcbc(aes)",
-		.driver_name = "xcbc-aes-dx",
+		.mac_name = "xcbc(aes)",
+		.mac_driver_name = "xcbc-aes-dx",
 		.blocksize = AES_BLOCK_SIZE,
 		.template_ahash = {
 			.init = ssi_ahash_init,
@@ -1993,13 +2039,11 @@ static struct ssi_hash_template driver_hash[] = {
 			.finup = ssi_mac_finup,
 			.digest = ssi_mac_digest,
 			.setkey = ssi_xcbc_setkey,
-#ifdef EXPORT_FIXED
 			.export = ssi_ahash_export,
 			.import = ssi_ahash_import,
-#endif
 			.halg = {
 				.digestsize = AES_BLOCK_SIZE,
-				.statesize = sizeof(struct aeshash_state),
+				.statesize = CC_STATE_SIZE(AES_BLOCK_SIZE),
 			},
 		},
 		.hash_mode = DRV_HASH_NULL,
@@ -2008,8 +2052,8 @@ static struct ssi_hash_template driver_hash[] = {
 	},
 #if SSI_CC_HAS_CMAC
 	{
-		.name = "cmac(aes)",
-		.driver_name = "cmac-aes-dx",
+		.mac_name = "cmac(aes)",
+		.mac_driver_name = "cmac-aes-dx",
 		.blocksize = AES_BLOCK_SIZE,
 		.template_ahash = {
 			.init = ssi_ahash_init,
@@ -2018,13 +2062,11 @@ static struct ssi_hash_template driver_hash[] = {
 			.finup = ssi_mac_finup,
 			.digest = ssi_mac_digest,
 			.setkey = ssi_cmac_setkey,
-#ifdef EXPORT_FIXED
 			.export = ssi_ahash_export,
 			.import = ssi_ahash_import,
-#endif
 			.halg = {
 				.digestsize = AES_BLOCK_SIZE,
-				.statesize = sizeof(struct aeshash_state),
+				.statesize = CC_STATE_SIZE(AES_BLOCK_SIZE),
 			},
 		},
 		.hash_mode = DRV_HASH_NULL,
@@ -2054,9 +2096,9 @@ ssi_hash_create_alg(struct ssi_hash_template *template, bool keyed)
 
 	if (keyed) {
 		snprintf(alg->cra_name, CRYPTO_MAX_ALG_NAME, "%s",
-			 template->hmac_name);
+			 template->mac_name);
 		snprintf(alg->cra_driver_name, CRYPTO_MAX_ALG_NAME, "%s",
-			 template->hmac_driver_name);
+			 template->mac_driver_name);
 	} else {
 		halg->setkey = NULL;
 		snprintf(alg->cra_name, CRYPTO_MAX_ALG_NAME, "%s",
@@ -2088,7 +2130,7 @@ int ssi_hash_init_sram_digest_consts(struct ssi_drvdata *drvdata)
 	struct ssi_hash_handle *hash_handle = drvdata->hash_handle;
 	ssi_sram_addr_t sram_buff_ofs = hash_handle->digest_len_sram_addr;
 	unsigned int larval_seq_len = 0;
-	struct cc_hw_desc larval_seq[CC_DIGEST_SIZE_MAX/sizeof(u32)];
+	struct cc_hw_desc larval_seq[CC_DIGEST_SIZE_MAX / sizeof(u32)];
 	int rc = 0;
 #if (DX_DEV_SHA_MAX > 256)
 	int i;
@@ -2203,7 +2245,7 @@ int ssi_hash_alloc(struct ssi_drvdata *drvdata)
 	int alg;
 
 	hash_handle = kzalloc(sizeof(struct ssi_hash_handle), GFP_KERNEL);
-	if (hash_handle == NULL) {
+	if (!hash_handle) {
 		SSI_LOG_ERR("kzalloc failed to allocate %zu B\n",
 			sizeof(struct ssi_hash_handle));
 		rc = -ENOMEM;
@@ -2245,31 +2287,32 @@ int ssi_hash_alloc(struct ssi_drvdata *drvdata)
 	/* ahash registration */
 	for (alg = 0; alg < ARRAY_SIZE(driver_hash); alg++) {
 		struct ssi_hash_alg *t_alg;
+		int hw_mode = driver_hash[alg].hw_mode;
 
 		/* register hmac version */
-
-		if ((((struct ssi_hash_template *)&driver_hash[alg])->hw_mode != DRV_CIPHER_XCBC_MAC) &&
-		    (((struct ssi_hash_template *)&driver_hash[alg])->hw_mode != DRV_CIPHER_CMAC)) {
-			t_alg = ssi_hash_create_alg(&driver_hash[alg], true);
-			if (IS_ERR(t_alg)) {
-				rc = PTR_ERR(t_alg);
-				SSI_LOG_ERR("%s alg allocation failed\n",
-					 driver_hash[alg].driver_name);
-				goto fail;
-			}
-			t_alg->drvdata = drvdata;
-
-			rc = crypto_register_ahash(&t_alg->ahash_alg);
-			if (unlikely(rc)) {
-				SSI_LOG_ERR("%s alg registration failed\n",
-					    driver_hash[alg].driver_name);
-				kfree(t_alg);
-				goto fail;
-			} else {
-				list_add_tail(&t_alg->entry,
-					      &hash_handle->hash_list);
-			}
+		t_alg = ssi_hash_create_alg(&driver_hash[alg], true);
+		if (IS_ERR(t_alg)) {
+			rc = PTR_ERR(t_alg);
+			SSI_LOG_ERR("%s alg allocation failed\n",
+				    driver_hash[alg].driver_name);
+			goto fail;
 		}
+		t_alg->drvdata = drvdata;
+
+		rc = crypto_register_ahash(&t_alg->ahash_alg);
+		if (unlikely(rc)) {
+			SSI_LOG_ERR("%s alg registration failed\n",
+				    driver_hash[alg].driver_name);
+			kfree(t_alg);
+			goto fail;
+		} else {
+			list_add_tail(&t_alg->entry,
+				      &hash_handle->hash_list);
+		}
+
+		if ((hw_mode == DRV_CIPHER_XCBC_MAC) ||
+		    (hw_mode == DRV_CIPHER_CMAC))
+			continue;
 
 		/* register hash version */
 		t_alg = ssi_hash_create_alg(&driver_hash[alg], false);
@@ -2296,7 +2339,7 @@ int ssi_hash_alloc(struct ssi_drvdata *drvdata)
 
 fail:
 
-	if (drvdata->hash_handle != NULL) {
+	if (drvdata->hash_handle) {
 		kfree(drvdata->hash_handle);
 		drvdata->hash_handle = NULL;
 	}
@@ -2308,8 +2351,7 @@ int ssi_hash_free(struct ssi_drvdata *drvdata)
 	struct ssi_hash_alg *t_hash_alg, *hash_n;
 	struct ssi_hash_handle *hash_handle = drvdata->hash_handle;
 
-	if (hash_handle != NULL) {
-
+	if (hash_handle) {
 		list_for_each_entry_safe(t_hash_alg, hash_n, &hash_handle->hash_list, entry) {
 			crypto_unregister_ahash(&t_hash_alg->ahash_alg);
 			list_del(&t_hash_alg->entry);
@@ -2452,9 +2494,8 @@ static void ssi_hash_create_data_desc(struct ahash_req_ctx *areq_ctx,
 		set_flow_mode(&desc[idx], flow_mode);
 		idx++;
 	}
-	if (is_not_last_data) {
+	if (is_not_last_data)
 		set_din_not_last_indication(&desc[(idx - 1)]);
-	}
 	/* return updated desc sequence size */
 	*seq_size = idx;
 }

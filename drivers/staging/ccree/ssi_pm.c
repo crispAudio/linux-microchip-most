@@ -14,7 +14,6 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-
 #include "ssi_config.h"
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
@@ -29,14 +28,11 @@
 #include "ssi_ivgen.h"
 #include "ssi_hash.h"
 #include "ssi_pm.h"
-#include "ssi_pm_ext.h"
 
-
-#if defined (CONFIG_PM_RUNTIME) || defined (CONFIG_PM_SLEEP)
+#if defined(CONFIG_PM_RUNTIME) || defined(CONFIG_PM_SLEEP)
 
 #define POWER_DOWN_ENABLE 0x01
 #define POWER_DOWN_DISABLE 0x00
-
 
 int ssi_power_mgr_runtime_suspend(struct device *dev)
 {
@@ -52,9 +48,7 @@ int ssi_power_mgr_runtime_suspend(struct device *dev)
 		return rc;
 	}
 	fini_cc_regs(drvdata);
-
-	/* Specific HW suspend code */
-	ssi_pm_ext_hw_suspend(dev);
+	cc_clk_off(drvdata);
 	return 0;
 }
 
@@ -66,18 +60,22 @@ int ssi_power_mgr_runtime_resume(struct device *dev)
 
 	SSI_LOG_DEBUG("ssi_power_mgr_runtime_resume , unset HOST_POWER_DOWN_EN\n");
 	WRITE_REGISTER(drvdata->cc_base + CC_REG_OFFSET(HOST_RGF, HOST_POWER_DOWN_EN), POWER_DOWN_DISABLE);
-	/* Specific HW resume code */
-	ssi_pm_ext_hw_resume(dev);
+
+	rc = cc_clk_on(drvdata);
+	if (rc) {
+		SSI_LOG_ERR("failed getting clock back on. We're toast.\n");
+		return rc;
+	}
 
 	rc = init_cc_regs(drvdata, false);
-	if (rc !=0) {
-		SSI_LOG_ERR("init_cc_regs (%x)\n",rc);
+	if (rc != 0) {
+		SSI_LOG_ERR("init_cc_regs (%x)\n", rc);
 		return rc;
 	}
 
 	rc = ssi_request_mgr_runtime_resume_queue(drvdata);
-	if (rc !=0) {
-		SSI_LOG_ERR("ssi_request_mgr_runtime_resume_queue (%x)\n",rc);
+	if (rc != 0) {
+		SSI_LOG_ERR("ssi_request_mgr_runtime_resume_queue (%x)\n", rc);
 		return rc;
 	}
 
@@ -109,26 +107,22 @@ int ssi_power_mgr_runtime_put_suspend(struct device *dev)
 				(struct ssi_drvdata *)dev_get_drvdata(dev))) {
 		pm_runtime_mark_last_busy(dev);
 		rc = pm_runtime_put_autosuspend(dev);
-	}
-	else {
+	} else {
 		/* Something wrong happens*/
 		BUG();
 	}
 	return rc;
-
 }
 
 #endif
 
-
-
 int ssi_power_mgr_init(struct ssi_drvdata *drvdata)
 {
 	int rc = 0;
-#if defined (CONFIG_PM_RUNTIME) || defined (CONFIG_PM_SLEEP)
+#if defined(CONFIG_PM_RUNTIME) || defined(CONFIG_PM_SLEEP)
 	struct platform_device *plat_dev = drvdata->plat_dev;
 	/* must be before the enabling to avoid resdundent suspending */
-	pm_runtime_set_autosuspend_delay(&plat_dev->dev,SSI_SUSPEND_TIMEOUT);
+	pm_runtime_set_autosuspend_delay(&plat_dev->dev, SSI_SUSPEND_TIMEOUT);
 	pm_runtime_use_autosuspend(&plat_dev->dev);
 	/* activate the PM module */
 	rc = pm_runtime_set_active(&plat_dev->dev);
@@ -142,7 +136,7 @@ int ssi_power_mgr_init(struct ssi_drvdata *drvdata)
 
 void ssi_power_mgr_fini(struct ssi_drvdata *drvdata)
 {
-#if defined (CONFIG_PM_RUNTIME) || defined (CONFIG_PM_SLEEP)
+#if defined(CONFIG_PM_RUNTIME) || defined(CONFIG_PM_SLEEP)
 	struct platform_device *plat_dev = drvdata->plat_dev;
 
 	pm_runtime_disable(&plat_dev->dev);
