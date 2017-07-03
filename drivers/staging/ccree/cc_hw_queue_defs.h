@@ -23,8 +23,8 @@
 #include <linux/bitfield.h>
 
 /******************************************************************************
-*				DEFINITIONS
-******************************************************************************/
+ *				DEFINITIONS
+ ******************************************************************************/
 
 #define HW_DESC_SIZE_WORDS		6
 #define HW_QUEUE_SLOTS_MAX              15 /* Max. available slots in HW queue */
@@ -70,8 +70,8 @@
 #define WORD5_DOUT_ADDR_HIGH	CC_GENMASK(5, DOUT_ADDR_HIGH)
 
 /******************************************************************************
-*				TYPE DEFINITIONS
-******************************************************************************/
+ *				TYPE DEFINITIONS
+ ******************************************************************************/
 
 struct cc_hw_desc {
 	union {
@@ -223,18 +223,6 @@ static inline void hw_desc_init(struct cc_hw_desc *pdesc)
 static inline void set_queue_last_ind(struct cc_hw_desc *pdesc)
 {
 	pdesc->word[3] |= FIELD_PREP(WORD3_QUEUE_LAST_IND, 1);
-}
-
-/*
- * Signs the end of HW descriptors flow by asking for completion ack,
- * and release the HW engines
- *
- * @pdesc: pointer HW descriptor struct
- */
-static inline void set_ack_last(struct cc_hw_desc *pdesc)
-{
-	pdesc->word[3] |= FIELD_PREP(WORD3_QUEUE_LAST_IND, 1);
-	pdesc->word[4] |= FIELD_PREP(WORD4_ACK_NEEDED, 1);
 }
 
 /*

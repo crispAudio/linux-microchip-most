@@ -64,7 +64,7 @@ static int ssi_ivgen_generate_pool(
 {
 	unsigned int idx = *iv_seq_len;
 
-	if ( (*iv_seq_len + SSI_IVPOOL_GEN_SEQ_LEN) > SSI_IVPOOL_SEQ_LEN) {
+	if ((*iv_seq_len + SSI_IVPOOL_GEN_SEQ_LEN) > SSI_IVPOOL_SEQ_LEN) {
 		/* The sequence will be longer than allowed */
 		return -EINVAL;
 	}
@@ -143,9 +143,9 @@ int ssi_ivgen_init_sram_pool(struct ssi_drvdata *drvdata)
 
 	/* Generate initial pool */
 	rc = ssi_ivgen_generate_pool(ivgen_ctx, iv_seq, &iv_seq_len);
-	if (unlikely(rc != 0)) {
+	if (unlikely(rc != 0))
 		return rc;
-	}
+
 	/* Fire-and-forget */
 	return send_request_init(drvdata, iv_seq, iv_seq_len);
 }
@@ -160,10 +160,10 @@ void ssi_ivgen_fini(struct ssi_drvdata *drvdata)
 	struct ssi_ivgen_ctx *ivgen_ctx = drvdata->ivgen_handle;
 	struct device *device = &(drvdata->plat_dev->dev);
 
-	if (ivgen_ctx == NULL)
+	if (!ivgen_ctx)
 		return;
 
-	if (ivgen_ctx->pool_meta != NULL) {
+	if (ivgen_ctx->pool_meta) {
 		memset(ivgen_ctx->pool_meta, 0, SSI_IVPOOL_META_SIZE);
 		dma_free_coherent(device, SSI_IVPOOL_META_SIZE,
 			ivgen_ctx->pool_meta, ivgen_ctx->pool_meta_dma);
@@ -251,13 +251,13 @@ int ssi_ivgen_getiv(
 	    (iv_out_size != CTR_RFC3686_IV_SIZE)) {
 		return -EINVAL;
 	}
-	if ( (iv_out_dma_len + 1) > SSI_IVPOOL_SEQ_LEN) {
+	if ((iv_out_dma_len + 1) > SSI_IVPOOL_SEQ_LEN) {
 		/* The sequence will be longer than allowed */
 		return -EINVAL;
 	}
 
 	//check that number of generated IV is limited to max dma address iv buffer size
-	if ( iv_out_dma_len > SSI_MAX_IVGEN_DMA_ADDRESSES) {
+	if (iv_out_dma_len > SSI_MAX_IVGEN_DMA_ADDRESSES) {
 		/* The sequence will be longer than allowed */
 		return -EINVAL;
 	}
@@ -295,5 +295,4 @@ int ssi_ivgen_getiv(
 
 	return 0;
 }
-
 

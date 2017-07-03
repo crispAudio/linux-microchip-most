@@ -7,6 +7,11 @@
 #include "spk_types.h"
 #include "spk_priv.h"
 
+#define DEV_PREFIX_LP "lp"
+
+static const char * const lp_supported[] = { "acntsa", "bns", "dummy",
+	"txprt" };
+
 struct spk_ldisc_data {
 	char buf;
 	struct semaphore sem;
@@ -15,6 +20,43 @@ struct spk_ldisc_data {
 
 static struct spk_synth *spk_ttyio_synth;
 static struct tty_struct *speakup_tty;
+
+static int ser_to_dev(int ser, dev_t *dev_no)
+{
+	if (ser < 0 || ser > (255 - 64)) {
+		pr_err("speakup: Invalid ser param. Must be between 0 and 191 inclusive.\n");
+		return -EINVAL;
+	}
+
+	*dev_no = MKDEV(4, (64 + ser));
+	return 0;
+}
+
+static int get_dev_to_use(struct spk_synth *synth, dev_t *dev_no)
+{
+	/* use ser only when dev is not specified */
+	if (strcmp(synth->dev_name, SYNTH_DEFAULT_DEV) ||
+	    synth->ser == SYNTH_DEFAULT_SER) {
+		/* for /dev/lp* check if synth is supported */
+		if (strncmp(synth->dev_name, DEV_PREFIX_LP,
+		    strlen(DEV_PREFIX_LP)) == 0)
+			if (match_string(lp_supported, ARRAY_SIZE(lp_supported),
+			    synth->name) < 0)  {
+				int i;
+
+				pr_err("speakup: lp* is only supported on:");
+				for (i = 0; i < ARRAY_SIZE(lp_supported); i++)
+					pr_cont(" %s", lp_supported[i]);
+				pr_cont("\n");
+
+				return -ENOTSUPP;
+			}
+
+		return tty_dev_name_to_number(synth->dev_name, dev_no);
+	}
+
+	return ser_to_dev(synth->ser, dev_no);
+}
 
 static int spk_ttyio_ldisc_open(struct tty_struct *tty)
 {
@@ -105,11 +147,12 @@ static inline void get_termios(struct tty_struct *tty, struct ktermios *out_term
 	up_read(&tty->termios_rwsem);
 }
 
-static int spk_ttyio_initialise_ldisc(int ser)
+static int spk_ttyio_initialise_ldisc(struct spk_synth *synth)
 {
 	int ret = 0;
 	struct tty_struct *tty;
 	struct ktermios tmp_termios;
+	dev_t dev;
 
 	ret = tty_register_ldisc(N_SPEAKUP, &spk_ttyio_ldisc_ops);
 	if (ret) {
@@ -117,13 +160,11 @@ static int spk_ttyio_initialise_ldisc(int ser)
 		return ret;
 	}
 
-	if (ser < 0 || ser > (255 - 64)) {
-		pr_err("speakup: Invalid ser param. Must be between 0 and 191 inclusive.\n");
-		return -EINVAL;
-	}
+	ret = get_dev_to_use(synth, &dev);
+	if (ret)
+		return ret;
 
-	/* TODO: support more than ttyS* */
-	tty = tty_open_by_driver(MKDEV(4, (ser +  64)), NULL, NULL);
+	tty = tty_open_by_driver(dev, NULL, NULL);
 	if (IS_ERR(tty))
 		return PTR_ERR(tty);
 
@@ -235,7 +276,7 @@ static void spk_ttyio_flush_buffer(void)
 
 int spk_ttyio_synth_probe(struct spk_synth *synth)
 {
-	int rv = spk_ttyio_initialise_ldisc(synth->ser);
+	int rv = spk_ttyio_initialise_ldisc(synth);
 
 	if (rv)
 		return rv;
