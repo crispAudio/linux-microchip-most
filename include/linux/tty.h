@@ -316,7 +316,6 @@ struct tty_struct {
 
 	struct tty_struct *link;
 	struct fasync_struct *fasync;
-	int alt_speed;		/* For magic substitution of 38400 bps */
 	wait_queue_head_t write_wait;
 	wait_queue_head_t read_wait;
 	struct work_struct hangup_work;
@@ -333,7 +332,7 @@ struct tty_struct {
 	/* If the tty has a pending do_SAK, queue it here - akpm */
 	struct work_struct SAK_work;
 	struct tty_port *port;
-};
+} __randomize_layout;
 
 /* Each of a tty's open files has private_data pointing to tty_file_private */
 struct tty_file_private {
