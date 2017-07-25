@@ -6,7 +6,7 @@ From: Andrey Shvetsov <andrey.shvetsov@k2l.de>
 diff --git a/drivers/staging/most/aim-network/networking.c b/drivers/staging/most/aim-network/networking.c
 --- a/drivers/staging/most/aim-network/networking.c
 +++ b/drivers/staging/most/aim-network/networking.c
-@@ -469,7 +469,7 @@ static int aim_rx_data(struct mbo *mbo)
+@@ -467,7 +467,7 @@ static int aim_rx_data(struct mbo *mbo)
  
  	if (nd->is_mamac) {
  		/* dest */
@@ -14,8 +14,8 @@ diff --git a/drivers/staging/most/aim-network/networking.c b/drivers/staging/mos
 +		memcpy(skb_put(skb, ETH_ALEN), dev->dev_addr, ETH_ALEN);
  
  		/* src */
- 		memcpy(skb_put(skb, 4), &zero, 4);
-@@ -552,7 +552,7 @@ static void on_netinfo(struct most_interface *iface,
+ 		skb_put_data(skb, &zero, 4);
+@@ -549,7 +549,7 @@ static void on_netinfo(struct most_interface *iface,
  		if (!is_valid_ether_addr(dev->dev_addr)) {
  			netdev_info(dev, "set mac %02x-%02x-%02x-%02x-%02x-%02x\n",
  				    m[0], m[1], m[2], m[3], m[4], m[5]);

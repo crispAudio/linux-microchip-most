@@ -6,12 +6,12 @@ From: Andrey Shvetsov <andrey.shvetsov@k2l.de>
 diff --git a/drivers/staging/most/aim-network/networking.c b/drivers/staging/most/aim-network/networking.c
 --- a/drivers/staging/most/aim-network/networking.c
 +++ b/drivers/staging/most/aim-network/networking.c
-@@ -327,7 +327,7 @@ static int aim_probe_channel(struct most_interface *iface, int channel_idx,
- 		struct net_device *dev;
- 
+@@ -316,7 +316,7 @@ static int aim_probe_channel(struct most_interface *iface, int channel_idx,
+ 	nd = get_net_dev(iface);
+ 	if (!nd) {
  		dev = alloc_netdev(sizeof(struct net_dev_context), "meth%d",
 -				   NET_NAME_UNKNOWN, most_nd_setup);
 +				   most_nd_setup);
- 		if (!dev)
- 			return -ENOMEM;
- 
+ 		if (!dev) {
+ 			ret = -ENOMEM;
+ 			goto unlock;
