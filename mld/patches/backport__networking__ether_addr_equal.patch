@@ -6,7 +6,7 @@ From: Andrey Shvetsov <andrey.shvetsov@k2l.de>
 diff --git a/drivers/staging/most/aim-network/networking.c b/drivers/staging/most/aim-network/networking.c
 --- a/drivers/staging/most/aim-network/networking.c
 +++ b/drivers/staging/most/aim-network/networking.c
-@@ -554,7 +554,7 @@ static void on_netinfo(struct most_interface *iface,
+@@ -551,7 +551,7 @@ static void on_netinfo(struct most_interface *iface,
  				    m[0], m[1], m[2], m[3], m[4], m[5]);
  			ether_addr_copy(dev->dev_addr, m);
  			netif_dormant_off(dev);

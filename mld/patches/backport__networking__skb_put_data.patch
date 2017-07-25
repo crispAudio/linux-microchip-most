@@ -1,0 +1,21 @@
+backport: networking: skb_put_data
+
+From: Andrey Shvetsov <andrey.shvetsov@k2l.de>
+
+
+diff --git a/drivers/staging/most/aim-network/networking.c b/drivers/staging/most/aim-network/networking.c
+--- a/drivers/staging/most/aim-network/networking.c
++++ b/drivers/staging/most/aim-network/networking.c
+@@ -419,6 +419,12 @@ static int aim_resume_tx_channel(struct most_interface *iface,
+ 	return 0;
+ }
+ 
++static inline void skb_put_data(struct sk_buff *skb, const void *data,
++				unsigned int len)
++{
++	memcpy(skb_put(skb, len), data, len);
++}
++
+ static int aim_rx_data(struct mbo *mbo)
+ {
+ 	const u32 zero = 0;
