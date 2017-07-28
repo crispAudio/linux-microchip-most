@@ -474,6 +474,23 @@ static ssize_t set_packets_per_xact_store(struct most_c_obj *c,
 	return count;
 }
 
+static ssize_t set_dbr_size_show(struct most_c_obj *c,
+				 struct most_c_attr *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", c->cfg.dbr_size);
+}
+
+static ssize_t set_dbr_size_store(struct most_c_obj *c,
+				  struct most_c_attr *attr, const char *buf,
+				  size_t count)
+{
+	int ret = kstrtou16(buf, 0, &c->cfg.dbr_size);
+
+	if (ret)
+		return ret;
+	return count;
+}
+
 static struct most_c_attr most_c_attrs[] = {
 	__ATTR_RO(available_directions),
 	__ATTR_RO(available_datatypes),
@@ -488,6 +505,7 @@ static struct most_c_attr most_c_attrs[] = {
 	__ATTR_RW(set_datatype),
 	__ATTR_RW(set_subbuffer_size),
 	__ATTR_RW(set_packets_per_xact),
+	__ATTR_RW(set_dbr_size),
 };
 
 /**
@@ -507,6 +525,7 @@ static struct attribute *most_channel_def_attrs[] = {
 	&most_c_attrs[10].attr,
 	&most_c_attrs[11].attr,
 	&most_c_attrs[12].attr,
+	&most_c_attrs[13].attr,
 	NULL,
 };
 
