@@ -535,8 +535,6 @@ static struct kobj_type most_channel_ktype = {
 	.default_attrs = most_channel_def_attrs,
 };
 
-static struct kset *most_channel_kset;
-
 /**
  * create_most_c_obj - allocates a channel object
  * @name: name of the channel object
@@ -554,7 +552,6 @@ create_most_c_obj(const char *name, struct kobject *parent)
 	c = kzalloc(sizeof(*c), GFP_KERNEL);
 	if (!c)
 		return NULL;
-	c->kobj.kset = most_channel_kset;
 	retval = kobject_init_and_add(&c->kobj, &most_channel_ktype, parent,
 				      "%s", name);
 	if (retval) {
