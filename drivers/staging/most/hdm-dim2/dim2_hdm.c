@@ -842,6 +842,7 @@ static int dim2_probe(struct platform_device *pdev)
 	dev->most_iface.enqueue = enqueue;
 	dev->most_iface.poison_channel = poison_channel;
 	dev->most_iface.request_netinfo = request_netinfo;
+	dev->most_iface.extra_attrs = DBR_ATTRS;
 
 	kobj = most_register_interface(&dev->most_iface);
 	if (IS_ERR(kobj)) {

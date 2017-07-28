@@ -491,7 +491,7 @@ static ssize_t set_dbr_size_store(struct most_c_obj *c,
 	return count;
 }
 
-static struct most_c_attr most_c_attrs[] = {
+static struct most_c_attr common_c_attrs[] = {
 	__ATTR_RO(available_directions),
 	__ATTR_RO(available_datatypes),
 	__ATTR_RO(number_of_packet_buffers),
@@ -504,36 +504,11 @@ static struct most_c_attr most_c_attrs[] = {
 	__ATTR_RW(set_direction),
 	__ATTR_RW(set_datatype),
 	__ATTR_RW(set_subbuffer_size),
-	__ATTR_RW(set_packets_per_xact),
-	__ATTR_RW(set_dbr_size),
 };
 
-/**
- * most_channel_def_attrs - array of default attributes of channel object
- */
-static struct attribute *most_channel_def_attrs[] = {
-	&most_c_attrs[0].attr,
-	&most_c_attrs[1].attr,
-	&most_c_attrs[2].attr,
-	&most_c_attrs[3].attr,
-	&most_c_attrs[4].attr,
-	&most_c_attrs[5].attr,
-	&most_c_attrs[6].attr,
-	&most_c_attrs[7].attr,
-	&most_c_attrs[8].attr,
-	&most_c_attrs[9].attr,
-	&most_c_attrs[10].attr,
-	&most_c_attrs[11].attr,
-	&most_c_attrs[12].attr,
-	&most_c_attrs[13].attr,
-	NULL,
-};
+static struct most_c_attr xact_c_attr = __ATTR_RW(set_packets_per_xact);
 
-static struct kobj_type most_channel_ktype = {
-	.sysfs_ops = &most_channel_sysfs_ops,
-	.release = most_channel_release,
-	.default_attrs = most_channel_def_attrs,
-};
+static struct most_c_attr dbr_c_attr = __ATTR_RW(set_dbr_size);
 
 /**
  * create_most_c_obj - allocates a channel object
@@ -543,8 +518,8 @@ static struct kobj_type most_channel_ktype = {
  * This create a channel object and registers it with sysfs.
  * Returns a pointer to the object or NULL when something went wrong.
  */
-static struct most_c_obj *
-create_most_c_obj(const char *name, struct kobject *parent)
+static struct most_c_obj *create_most_c_obj(
+	struct kobj_type *ktype, const char *name, struct kobject *parent)
 {
 	struct most_c_obj *c;
 	int retval;
@@ -552,8 +527,7 @@ create_most_c_obj(const char *name, struct kobject *parent)
 	c = kzalloc(sizeof(*c), GFP_KERNEL);
 	if (!c)
 		return NULL;
-	retval = kobject_init_and_add(&c->kobj, &most_channel_ktype, parent,
-				      "%s", name);
+	retval = kobject_init_and_add(&c->kobj, ktype, parent, "%s", name);
 	if (retval) {
 		kobject_put(&c->kobj);
 		return NULL;
@@ -1739,6 +1713,27 @@ struct kobject *most_register_interface(struct most_interface *iface)
 	}
 
 	iface->priv = inst;
+	iface->ktype.sysfs_ops = &most_channel_sysfs_ops,
+	iface->ktype.release = most_channel_release,
+	iface->ktype.default_attrs = iface->attrs;
+
+	BUILD_BUG_ON(ARRAY_SIZE(iface->attrs) < ARRAY_SIZE(common_c_attrs) + 2);
+	for (i = 0; i < ARRAY_SIZE(common_c_attrs); i++)
+		iface->attrs[i] = &common_c_attrs[i].attr;
+	switch (iface->extra_attrs) {
+	case XACT_ATTRS:
+		iface->attrs[i] = &xact_c_attr.attr;
+		i++;
+		break;
+	case DBR_ATTRS:
+		iface->attrs[i] = &dbr_c_attr.attr;
+		i++;
+		break;
+	default:
+		break;
+	}
+	iface->attrs[i] = NULL;
+
 	INIT_LIST_HEAD(&inst->channel_list);
 	inst->iface = iface;
 	inst->dev_id = id;
@@ -1753,7 +1748,7 @@ struct kobject *most_register_interface(struct most_interface *iface)
 			snprintf(channel_name, STRING_SIZE, "%s", name_suffix);
 
 		/* this increments the reference count of this instance */
-		c = create_most_c_obj(channel_name, &inst->kobj);
+		c = create_most_c_obj(&iface->ktype, channel_name, &inst->kobj);
 		if (!c)
 			goto free_instance;
 		inst->channel[i] = c;
