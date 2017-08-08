@@ -1,7 +1,7 @@
 /*
  * dim2_hdm.h - MediaLB DIM2 HDM Header
  *
- * Copyright (C) 2015, Microchip Technology Germany II GmbH & Co. KG
+ * Copyright (C) 2015-2017, Microchip Technology Germany II GmbH & Co. KG
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -14,14 +14,15 @@
 #ifndef DIM2_HDM_H
 #define	DIM2_HDM_H
 
+#include <linux/types.h>
+
 struct device;
 
 /* platform dependent data for dim2 interface */
 struct dim2_platform_data {
-	int (*init)(struct dim2_platform_data *pd, void __iomem *io_base,
-		    int clk_speed);
+	int (*init)(struct dim2_platform_data *pd, void __iomem *io_base);
 	void (*destroy)(struct dim2_platform_data *pd);
-	void *priv;
+	u8 clk_speed;
 };
 
 #endif	/* DIM2_HDM_H */
