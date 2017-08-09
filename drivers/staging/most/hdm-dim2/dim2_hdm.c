@@ -67,6 +67,7 @@ struct hdm_channel {
 	char name[sizeof "caNNN"];
 	bool is_initialized;
 	struct dim_channel ch;
+	u16 *reset_dbr_size;
 	struct list_head pending_list;	/* before dim_enqueue_buffer() */
 	struct list_head started_list;	/* after dim_enqueue_buffer() */
 	enum most_channel_direction direction;
@@ -499,6 +500,12 @@ static int configure_channel(struct most_interface *most_iface, int ch_idx,
 	if (hdm_ch->is_initialized)
 		return -EPERM;
 
+	/* do not reset if the property was set by user, see poison_channel */
+	hdm_ch->reset_dbr_size = ccfg->dbr_size ? NULL : &ccfg->dbr_size;
+
+	/* zero value is default dbr_size, see dim2 hal */
+	hdm_ch->ch.dbr_size = ccfg->dbr_size;
+
 	switch (ccfg->data_type) {
 	case MOST_CH_CONTROL:
 		new_size = dim_norm_ctrl_async_buffer_size(buf_size);
@@ -579,6 +586,7 @@ static int configure_channel(struct most_interface *most_iface, int ch_idx,
 		dev->atx_idx = ch_idx;
 
 	spin_unlock_irqrestore(&dim_lock, flags);
+	ccfg->dbr_size = hdm_ch->ch.dbr_size;
 
 	return 0;
 }
@@ -694,6 +702,8 @@ static int poison_channel(struct most_interface *most_iface, int ch_idx)
 
 	complete_all_mbos(&hdm_ch->started_list);
 	complete_all_mbos(&hdm_ch->pending_list);
+	if (hdm_ch->reset_dbr_size)
+		*hdm_ch->reset_dbr_size = 0;
 
 	return ret;
 }
@@ -798,6 +808,7 @@ static int dim2_probe(struct platform_device *pdev)
 	dev->most_iface.enqueue = enqueue;
 	dev->most_iface.poison_channel = poison_channel;
 	dev->most_iface.request_netinfo = request_netinfo;
+	dev->most_iface.extra_attrs = DBR_ATTRS;
 
 	kobj = most_register_interface(&dev->most_iface);
 	if (IS_ERR(kobj)) {

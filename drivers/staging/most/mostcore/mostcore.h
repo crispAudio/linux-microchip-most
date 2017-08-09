@@ -23,8 +23,9 @@
 #define __MOST_CORE_H__
 
 #include <linux/types.h>
+#include <linux/kobject.h> /* struct kobj_type */
+#include <linux/sysfs.h> /* struct attribute */
 
-struct kobject;
 struct module;
 
 /**
@@ -141,6 +142,7 @@ struct most_channel_config {
 	u16 extra_len;
 	u16 subbuffer_size;
 	u16 packets_per_xact;
+	u16 dbr_size;
 };
 
 /*
@@ -252,6 +254,9 @@ struct most_interface {
 				void (*on_netinfo)(struct most_interface *iface,
 						   unsigned char link_stat,
 						   unsigned char *mac_addr));
+	struct attribute *attrs[14];
+	struct kobj_type ktype;
+	enum { NONE_ATTRS /* default */, XACT_ATTRS, DBR_ATTRS } extra_attrs;
 	void *priv;
 };
 
