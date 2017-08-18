@@ -27,6 +27,8 @@ HISTORY OF CHANGES
 mld-next
 --------
 
+- add driver and the make example for the SPI interface
+
 - core: the autoconf feature is moved from the source code to the patch
   mld/patches/feature__core_autoconf.patch
   (it makes no difference for the users of the script fetch-mld.bash as it

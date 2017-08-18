@@ -6,7 +6,7 @@ From: Andrey Shvetsov <andrey.shvetsov@k2l.de>
 diff --git a/drivers/staging/most/hdm-dim2/dim2_hdm.c b/drivers/staging/most/hdm-dim2/dim2_hdm.c
 --- a/drivers/staging/most/hdm-dim2/dim2_hdm.c
 +++ b/drivers/staging/most/hdm-dim2/dim2_hdm.c
-@@ -907,6 +907,7 @@ static int dim2_remove(struct platform_device *pdev)
+@@ -884,6 +884,7 @@ static int dim2_remove(struct platform_device *pdev)
  	.id_table = dim2_id,
  	.driver = {
  		.name = "hdm_dim2",

@@ -42,7 +42,7 @@ get_if_missing() {
 }
 
 get_src() {
-	_get_file "drivers/staging/most/$1" "src/$1" || _err "failed"
+	_get_file "drivers/staging/most/$1" "$1" || _err "failed"
 }
 
 get_patch() {
@@ -50,7 +50,7 @@ get_patch() {
 }
 
 patch_mld() {
-	cat "patches/$1" |patch --force -p4 -d src || _err "failed"
+	cat "patches/$1" |patch --force -p4 || _err "failed"
 }
 
 local_fetch() {
@@ -85,6 +85,7 @@ local_fetch() {
 	get_src hdm-i2s/i2s_clkgen.c
 	get_src hdm-i2s/i2s_hdm.c
 	get_src hdm-i2s/configure.sh
+	get_src hdm-spi/spi-prot.c
 	get_src hdm-usb/hdm_usb.c
 	get_src mostcore/core.c
 	get_src mostcore/mostcore.h
@@ -96,6 +97,7 @@ local_fetch() {
 	get_patch backport__networking__alloc_netdev.patch
 	get_patch backport__networking__ether_addr_copy.patch
 	get_patch backport__networking__ether_addr_equal.patch
+	get_patch backport__networking__skb_put_data.patch
 	get_patch backport__hdm-dim2__devm_ioremap_resource.patch
 	get_patch feature__core_autoconf.patch
 
@@ -131,9 +133,9 @@ main() {
 		LABEL="$(date --rfc-3339=seconds)"
 	fi
 	sed -i -r -e "/__init/,/return/s,\<pr_.*init.*,pr_info(\"MOST Linux Driver $TAG ${LABEL}\\\\n\");," \
-		src/mostcore/core.c
-	sed -i "s,\.src/,src/,g" Makefile
-	grep --with-filename "MOST Linux Driver " src/mostcore/core.c ||
+		mostcore/core.c
+	sed -i -r "s,( -d |\.|\<)src/,,g" Makefile
+	grep --with-filename "MOST Linux Driver " mostcore/core.c ||
 		_err "failed to set driver version info"
 
 	echo "output directory: $OUT_DIR"

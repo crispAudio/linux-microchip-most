@@ -6,7 +6,7 @@ From: Andrey Shvetsov <andrey.shvetsov@k2l.de>
 diff --git a/drivers/staging/most/hdm-dim2/dim2_hdm.c b/drivers/staging/most/hdm-dim2/dim2_hdm.c
 --- a/drivers/staging/most/hdm-dim2/dim2_hdm.c
 +++ b/drivers/staging/most/hdm-dim2/dim2_hdm.c
-@@ -732,6 +732,40 @@ static int poison_channel(struct most_interface *most_iface, int ch_idx)
+@@ -708,6 +708,40 @@ static int poison_channel(struct most_interface *most_iface, int ch_idx)
  	return ret;
  }
  
@@ -47,7 +47,7 @@ diff --git a/drivers/staging/most/hdm-dim2/dim2_hdm.c b/drivers/staging/most/hdm
  /*
   * dim2_probe - dim2 probe handler
   * @pdev: platform device structure
-@@ -755,13 +789,14 @@ static int dim2_probe(struct platform_device *pdev)
+@@ -731,13 +765,14 @@ static int dim2_probe(struct platform_device *pdev)
  
  	platform_set_drvdata(pdev, dev);
  	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -63,7 +63,7 @@ diff --git a/drivers/staging/most/hdm-dim2/dim2_hdm.c b/drivers/staging/most/hdm
  		return -ENODEV;
  	}
  
-@@ -769,12 +804,14 @@ static int dim2_probe(struct platform_device *pdev)
+@@ -745,12 +780,14 @@ static int dim2_probe(struct platform_device *pdev)
  			       "dim2_ahb0_int", dev);
  	if (ret) {
  		dev_err(&pdev->dev, "failed to request ahb0_int irq %d\n", irq);
@@ -78,7 +78,7 @@ diff --git a/drivers/staging/most/hdm-dim2/dim2_hdm.c b/drivers/staging/most/hdm
  		return -ENODEV;
  	}
  
-@@ -782,6 +819,7 @@ static int dim2_probe(struct platform_device *pdev)
+@@ -758,6 +795,7 @@ static int dim2_probe(struct platform_device *pdev)
  			       "dim2_mlb_int", dev);
  	if (ret) {
  		dev_err(&pdev->dev, "failed to request mlb_int irq %d\n", irq);
@@ -86,7 +86,7 @@ diff --git a/drivers/staging/most/hdm-dim2/dim2_hdm.c b/drivers/staging/most/hdm
  		return ret;
  	}
  
-@@ -858,6 +896,7 @@ static int dim2_probe(struct platform_device *pdev)
+@@ -835,6 +873,7 @@ static int dim2_probe(struct platform_device *pdev)
  	most_deregister_interface(&dev->most_iface);
  err_stop_thread:
  	kthread_stop(dev->netinfo_task);
@@ -94,7 +94,7 @@ diff --git a/drivers/staging/most/hdm-dim2/dim2_hdm.c b/drivers/staging/most/hdm
  
  	return ret;
  }
-@@ -884,6 +923,7 @@ static int dim2_remove(struct platform_device *pdev)
+@@ -861,6 +900,7 @@ static int dim2_remove(struct platform_device *pdev)
  	dim2_sysfs_destroy(&dev->bus);
  	most_deregister_interface(&dev->most_iface);
  	kthread_stop(dev->netinfo_task);
