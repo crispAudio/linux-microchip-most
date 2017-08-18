@@ -44,6 +44,10 @@ obj-m += hdm_usb.o
 hdm_usb-y := src/hdm-usb/hdm_usb.o
 CFLAGS_hdm_usb.o := -I$(src)/src/mostcore
 
+obj-m += hdm_spi.o
+hdm_spi-y := hdm-spi/spi-prot.o
+CFLAGS_spi-prot.o := -I$(src)/mostcore
+
 
 PWD := $(shell pwd)
 
