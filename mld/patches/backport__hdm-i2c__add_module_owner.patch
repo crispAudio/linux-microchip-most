@@ -6,7 +6,7 @@ From: Andrey Shvetsov <andrey.shvetsov@k2l.de>
 diff --git a/drivers/staging/most/hdm-i2c/hdm_i2c.c b/drivers/staging/most/hdm-i2c/hdm_i2c.c
 --- a/drivers/staging/most/hdm-i2c/hdm_i2c.c
 +++ b/drivers/staging/most/hdm-i2c/hdm_i2c.c
-@@ -409,6 +409,7 @@ static int i2c_remove(struct i2c_client *client)
+@@ -404,6 +404,7 @@ static int i2c_remove(struct i2c_client *client)
  static struct i2c_driver i2c_driver = {
  	.driver = {
  		.name = "hdm_i2c",
