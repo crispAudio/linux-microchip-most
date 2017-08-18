@@ -42,7 +42,7 @@ get_if_missing() {
 }
 
 get_src() {
-	_get_file "drivers/staging/most/$1" "src/$1" || _err "failed"
+	_get_file "drivers/staging/most/$1" "$1" || _err "failed"
 }
 
 get_patch() {
@@ -50,7 +50,7 @@ get_patch() {
 }
 
 patch_mld() {
-	cat "patches/$1" |patch --force -p4 -d src || _err "failed"
+	cat "patches/$1" |patch --force -p4 || _err "failed"
 }
 
 local_fetch() {
@@ -133,9 +133,9 @@ main() {
 		LABEL="$(date --rfc-3339=seconds)"
 	fi
 	sed -i -r -e "/__init/,/return/s,\<pr_.*init.*,pr_info(\"MOST Linux Driver $TAG ${LABEL}\\\\n\");," \
-		src/mostcore/core.c
-	sed -i "s,\.src/,src/,g" Makefile
-	grep --with-filename "MOST Linux Driver " src/mostcore/core.c ||
+		mostcore/core.c
+	sed -i -r "s,( -d |\.|\<)src/,,g" Makefile
+	grep --with-filename "MOST Linux Driver " mostcore/core.c ||
 		_err "failed to set driver version info"
 
 	echo "output directory: $OUT_DIR"
