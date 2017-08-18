@@ -38,11 +38,11 @@ CFLAGS_hdm_i2c.o := -I$(src)/src/mostcore
 obj-m += hdm_dim2.o hdm_dim2_pd.o
 hdm_dim2-y := src/hdm-dim2/dim2_hdm.o src/hdm-dim2/dim2_hal.o src/hdm-dim2/dim2_sysfs.o
 hdm_dim2_pd-y := src/hdm-dim2/platform/dim2_mx6q_dt.o
-CFLAGS_dim2_hdm.o := -I$(src)/src/mostcore -I$(src)/src/aim-network
+CFLAGS_dim2_hdm.o := -I$(src)/src/mostcore
 
 obj-m += hdm_usb.o
 hdm_usb-y := src/hdm-usb/hdm_usb.o
-CFLAGS_hdm_usb.o := -I$(src)/src/mostcore -I$(src)/src/aim-network
+CFLAGS_hdm_usb.o := -I$(src)/src/mostcore
 
 
 PWD := $(shell pwd)
