@@ -508,7 +508,7 @@ static inline void dci_ctrl_write(struct dci_ctrl_reg *dci_reg, u32 cmd)
 {
 	struct hdm_device *mdev;
 
-	cmd |= DCI_CTRL_ERRD_BM | DCI_CTRL_ONTFM_BM | DCI_CTRL_CMDDONEM_BM;
+	cmd |= DCI_CTRL_ERRDM_BM | DCI_CTRL_ONTFM_BM | DCI_CTRL_CMDDONEM_BM;
 	mdev = container_of(dci_reg, struct hdm_device, dci_reg);
 	write_spi_reg(mdev, DCI_CTRL_ADDR, cmd & ~dci_reg->active_int);
 }
@@ -549,7 +549,7 @@ static void start_dci_request(struct hdm_device *mdev)
 		return;
 
 	mdev->service_dci = dci_service_cmd;
-	mdev->dci_reg.active_int = DCI_CTRL_ERRD_BM | DCI_CTRL_CMDDONEM_BM;
+	mdev->dci_reg.active_int = DCI_CTRL_ERRDM_BM | DCI_CTRL_CMDDONEM_BM;
 	dci_ctrl_write(&mdev->dci_reg, 0);
 
 	dci_request(mdev);
@@ -724,7 +724,7 @@ static void dci_service_cmd(struct hdm_device *mdev, u32 dci_ctrl)
 		dci_request(mdev);
 	} else {
 		mdev->service_dci = dci_service_ntf;
-		mdev->dci_reg.active_int = DCI_CTRL_ERRD_BM | DCI_CTRL_ONTFM_BM;
+		mdev->dci_reg.active_int = DCI_CTRL_ERRDM_BM | DCI_CTRL_ONTFM_BM;
 		dci_ctrl_write(&mdev->dci_reg, cmd_done);
 	}
 }
@@ -1343,7 +1343,7 @@ static int spi_hdm_probe(struct spi_device *spi)
 	mutex_init(&mdev->dci_mt);
 	mutex_init(&mdev->ni_mt);
 	mdev->service_dci = dci_service_ntf;
-	mdev->dci_reg.active_int = DCI_CTRL_ERRD_BM | DCI_CTRL_ONTFM_BM;
+	mdev->dci_reg.active_int = DCI_CTRL_ERRDM_BM | DCI_CTRL_ONTFM_BM;
 	dci_ctrl_write(&mdev->dci_reg, 0);
 
 	INIT_LIST_HEAD(&mdev->active_dci_jobs);
