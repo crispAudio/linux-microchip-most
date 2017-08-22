@@ -626,6 +626,22 @@ _error:
 	return retval;
 }
 
+static void *hdm_dma_alloc(struct mbo *mbo, u32 size)
+{
+	struct most_dev *mdev = to_mdev(mbo->ifp);
+
+	return usb_alloc_coherent(mdev->usb_device, size, GFP_KERNEL,
+				  &mbo->bus_address);
+}
+
+static void hdm_dma_free(struct mbo *mbo, u32 size)
+{
+	struct most_dev *mdev = to_mdev(mbo->ifp);
+
+	usb_free_coherent(mdev->usb_device, size, mbo->virt_address,
+			  mbo->bus_address);
+}
+
 /**
  * hdm_configure_channel - receive channel configuration from core
  * @iface: interface
@@ -1150,6 +1166,8 @@ hdm_probe(struct usb_interface *interface, const struct usb_device_id *id)
 	mdev->iface.request_netinfo = hdm_request_netinfo;
 	mdev->iface.enqueue = hdm_enqueue;
 	mdev->iface.poison_channel = hdm_poison_channel;
+	mdev->iface.dma_alloc = hdm_dma_alloc;
+	mdev->iface.dma_free = hdm_dma_free;
 	mdev->iface.description = mdev->description;
 	mdev->iface.num_channels = num_endpoints;
 	mdev->iface.extra_attrs = XACT_ATTRS;
