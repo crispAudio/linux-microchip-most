@@ -67,9 +67,11 @@ static DEFINE_MUTEX(minor_lock); /* Protect idr accesses */
 static struct class *pi433_class; /* mainly for udev to create /dev/pi433 */
 
 /* tx config is instance specific
-	so with each open a new tx config struct is needed */
+ * so with each open a new tx config struct is needed
+ */
 /* rx config is device specific
-	so we have just one rx config, ebedded in device struct */
+ * so we have just one rx config, ebedded in device struct
+ */
 struct pi433_device {
 	/* device handling related values */
 	dev_t			devt;
@@ -90,6 +92,7 @@ struct pi433_device {
 	struct task_struct	*tx_task_struct;
 	wait_queue_head_t	tx_wait_queue;
 	u8			free_in_fifo;
+	char			buffer[MAX_MSG_SIZE];
 
 	/* rx related values */
 	struct pi433_rx_cfg	rx_cfg;
@@ -182,6 +185,7 @@ static void *DIO_irq_handler[NUM_DIO] = {
 static int
 rf69_set_rx_cfg(struct pi433_device *dev, struct pi433_rx_cfg *rx_cfg)
 {
+	int ret;
 	int payload_length;
 
 	/* receiver config */
@@ -208,7 +212,15 @@ rf69_set_rx_cfg(struct pi433_device *dev, struct pi433_rx_cfg *rx_cfg)
 	{
 		SET_CHECKED(rf69_set_fifo_fill_condition(dev->spi, always));
 	}
-	SET_CHECKED(rf69_set_packet_format  (dev->spi, rx_cfg->enable_length_byte));
+	if (rx_cfg->enable_length_byte == optionOn) {
+		ret = rf69_set_packet_format(dev->spi, packetLengthVar);
+		if (ret < 0)
+			return ret;
+	} else {
+		ret = rf69_set_packet_format(dev->spi, packetLengthFix);
+		if (ret < 0)
+			return ret;
+	}
 	SET_CHECKED(rf69_set_adressFiltering(dev->spi, rx_cfg->enable_address_filtering));
 	SET_CHECKED(rf69_set_crc_enable	    (dev->spi, rx_cfg->enable_crc));
 
@@ -247,6 +259,8 @@ rf69_set_rx_cfg(struct pi433_device *dev, struct pi433_rx_cfg *rx_cfg)
 static int
 rf69_set_tx_cfg(struct pi433_device *dev, struct pi433_tx_cfg *tx_cfg)
 {
+	int ret;
+
 	SET_CHECKED(rf69_set_frequency	(dev->spi, tx_cfg->frequency));
 	SET_CHECKED(rf69_set_bit_rate	(dev->spi, tx_cfg->bit_rate));
 	SET_CHECKED(rf69_set_modulation	(dev->spi, tx_cfg->modulation));
@@ -265,7 +279,15 @@ rf69_set_tx_cfg(struct pi433_device *dev, struct pi433_tx_cfg *tx_cfg)
 		SET_CHECKED(rf69_set_preamble_length(dev->spi, 0));
 	}
 	SET_CHECKED(rf69_set_sync_enable  (dev->spi, tx_cfg->enable_sync));
-	SET_CHECKED(rf69_set_packet_format(dev->spi, tx_cfg->enable_length_byte));
+	if (tx_cfg->enable_length_byte == optionOn) {
+		ret = rf69_set_packet_format(dev->spi, packetLengthVar);
+		if (ret < 0)
+			return ret;
+	} else {
+		ret = rf69_set_packet_format(dev->spi, packetLengthFix);
+		if (ret < 0)
+			return ret;
+	}
 	SET_CHECKED(rf69_set_crc_enable	  (dev->spi, tx_cfg->enable_crc));
 
 	/* configure sync, if enabled */
@@ -313,7 +335,7 @@ pi433_start_rx(struct pi433_device *dev)
 
 /*-------------------------------------------------------------------------*/
 
-int
+static int
 pi433_receive(void *data)
 {
 	struct pi433_device *dev = data;
@@ -463,13 +485,13 @@ abort:
 		return bytes_total;
 }
 
-int
+static int
 pi433_tx_thread(void *data)
 {
 	struct pi433_device *device = data;
 	struct spi_device *spi = device->spi; /* needed for SET_CHECKED */
 	struct pi433_tx_cfg tx_cfg;
-	u8     buffer[MAX_MSG_SIZE];
+	u8     *buffer = device->buffer;
 	size_t size;
 	bool   rx_interrupted = false;
 	int    position, repetitions;
@@ -486,9 +508,10 @@ pi433_tx_thread(void *data)
 			return 0;
 
 		/* get data from fifo in the following order:
-		   - tx_cfg
-		   - size of message
-		   - message */
+		 * - tx_cfg
+		 * - size of message
+		 * - message
+		 */
 		mutex_lock(&device->tx_fifo_lock);
 
 		retval = kfifo_out(&device->tx_fifo, &tx_cfg, sizeof(tx_cfg));
@@ -537,23 +560,26 @@ pi433_tx_thread(void *data)
 		mutex_unlock(&device->tx_fifo_lock);
 
 		/* if rx is active, we need to interrupt the waiting for
-		   incoming telegrams, to be able to send something.
-		   We are only allowed, if currently no reception takes
-		   place otherwise we need to  wait for the incoming telegram
-		   to finish */
+		 * incoming telegrams, to be able to send something.
+		 * We are only allowed, if currently no reception takes
+		 * place otherwise we need to  wait for the incoming telegram
+		 * to finish
+		 */
 		wait_event_interruptible(device->tx_wait_queue,
 					 !device->rx_active ||
 					  device->interrupt_rx_allowed == true);
 
 		/* prevent race conditions
-		   irq will be reenabled after tx config is set */
+		 * irq will be reenabled after tx config is set
+		 */
 		disable_irq(device->irq_num[DIO0]);
 		device->tx_active = true;
 
 		if (device->rx_active && rx_interrupted == false)
 		{
 			/* rx is currently waiting for a telegram;
-			   we need to set the radio module to standby */
+			 * we need to set the radio module to standby
+			 */
 			SET_CHECKED(rf69_set_mode(device->spi, standby));
 			rx_interrupted = true;
 		}
@@ -689,7 +715,7 @@ pi433_read(struct file *filp, char __user *buf, size_t size, loff_t *f_pos)
 	{
 		retval = copy_to_user(buf, device->rx_buffer, bytes_received);
 		if (retval)
-			return retval;
+			return -EFAULT;
 	}
 
 	return bytes_received;
@@ -712,9 +738,10 @@ pi433_write(struct file *filp, const char __user *buf,
 		return -EMSGSIZE;
 
 	/* write the following sequence into fifo:
-	   - tx_cfg
-	   - size of message
-	   - message */
+	 * - tx_cfg
+	 * - size of message
+	 * - message
+	 */
 	mutex_lock(&device->tx_fifo_lock);
 	retval = kfifo_in(&device->tx_fifo, &instance->tx_cfg, sizeof(instance->tx_cfg));
 	if ( retval != sizeof(instance->tx_cfg) )
@@ -1098,14 +1125,13 @@ static int pi433_probe(struct spi_device *spi)
 	if (retval < 0)
 		return retval;
 
-	switch(retval)
-	{
-		case 0x24:
-			dev_dbg(&spi->dev, "found pi433 (ver. 0x%x)", retval);
-			break;
-		default:
-			dev_dbg(&spi->dev, "unknown chip version: 0x%x", retval);
-			return -ENODEV;
+	switch (retval) {
+	case 0x24:
+		dev_dbg(&spi->dev, "found pi433 (ver. 0x%x)", retval);
+		break;
+	default:
+		dev_dbg(&spi->dev, "unknown chip version: 0x%x", retval);
+		return -ENODEV;
 	}
 
 	/* Allocate driver data */
@@ -1152,7 +1178,7 @@ static int pi433_probe(struct spi_device *spi)
 	device->tx_task_struct = kthread_run(pi433_tx_thread,
 					     device,
 					     "pi433_tx_task");
-	if (device->tx_task_struct < 0)
+	if (IS_ERR(device->tx_task_struct))
 	{
 		dev_dbg(device->dev, "start of send thread failed");
 		goto send_thread_failed;
@@ -1269,7 +1295,8 @@ static int __init pi433_init(void)
 	int status;
 
 	/* If MAX_MSG_SIZE is smaller then FIFO_SIZE, the driver won't
-           work stable - risk of buffer overflow */
+	 * work stable - risk of buffer overflow
+	 */
 	if (MAX_MSG_SIZE < FIFO_SIZE)
 		return -EINVAL;
 

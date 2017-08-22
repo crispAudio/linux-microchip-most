@@ -100,7 +100,7 @@ int request_mgr_init(struct ssi_drvdata *drvdata)
 	struct ssi_request_mgr_handle *req_mgr_h;
 	int rc = 0;
 
-	req_mgr_h = kzalloc(sizeof(struct ssi_request_mgr_handle), GFP_KERNEL);
+	req_mgr_h = kzalloc(sizeof(*req_mgr_h), GFP_KERNEL);
 	if (!req_mgr_h) {
 		rc = -ENOMEM;
 		goto req_mgr_init_err;
@@ -136,7 +136,9 @@ int request_mgr_init(struct ssi_drvdata *drvdata)
 
 	/* Allocate DMA word for "dummy" completion descriptor use */
 	req_mgr_h->dummy_comp_buff = dma_alloc_coherent(&drvdata->plat_dev->dev,
-		sizeof(u32), &req_mgr_h->dummy_comp_buff_dma, GFP_KERNEL);
+							sizeof(u32),
+							&req_mgr_h->dummy_comp_buff_dma,
+							GFP_KERNEL);
 	if (!req_mgr_h->dummy_comp_buff) {
 		SSI_LOG_ERR("Not enough memory to allocate DMA (%zu) dropped "
 			   "buffer\n", sizeof(u32));

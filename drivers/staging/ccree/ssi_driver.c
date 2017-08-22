@@ -81,7 +81,7 @@ void dump_byte_array(const char *name, const u8 *the_array, unsigned long size)
 	char line_buf[80];
 
 	if (!the_array) {
-		SSI_LOG_ERR("cannot %s - NULL pointer\n", __func__);
+		SSI_LOG_ERR("cannot dump array - NULL pointer\n");
 		return;
 	}
 
@@ -223,7 +223,8 @@ static int init_cc_resources(struct platform_device *plat_dev)
 	struct resource *req_mem_cc_regs = NULL;
 	void __iomem *cc_base = NULL;
 	bool irq_registered = false;
-	struct ssi_drvdata *new_drvdata = kzalloc(sizeof(struct ssi_drvdata), GFP_KERNEL);
+	struct ssi_drvdata *new_drvdata = kzalloc(sizeof(*new_drvdata),
+						  GFP_KERNEL);
 	struct device *dev = &plat_dev->dev;
 	struct device_node *np = dev->of_node;
 	u32 signature_val;
@@ -549,7 +550,7 @@ static int cc7x_remove(struct platform_device *plat_dev)
 }
 
 #if defined(CONFIG_PM_RUNTIME) || defined(CONFIG_PM_SLEEP)
-static struct dev_pm_ops arm_cc7x_driver_pm = {
+static const struct dev_pm_ops arm_cc7x_driver_pm = {
 	SET_RUNTIME_PM_OPS(ssi_power_mgr_runtime_suspend, ssi_power_mgr_runtime_resume, NULL)
 };
 #endif
