@@ -55,6 +55,7 @@ struct hdm_i2c {
 		struct list_head list;
 		struct mutex list_mutex;
 		bool int_disabled;
+		unsigned int delay;
 	} rx;
 	char name[64];
 };
@@ -81,6 +82,7 @@ static int configure_channel(struct most_interface *most_iface,
 {
 	int ret;
 	struct hdm_i2c *dev = to_hdm(most_iface);
+	unsigned int delay;
 
 	BUG_ON(ch_idx < 0 || ch_idx >= NUM_CHANNELS);
 	BUG_ON(dev->is_open[ch_idx]);
@@ -111,6 +113,8 @@ static int configure_channel(struct most_interface *most_iface,
 				return ret;
 			}
 		} else if (scan_rate) {
+			delay = msecs_to_jiffies(MSEC_PER_SEC / scan_rate);
+			dev->rx.delay = delay ? delay : 1;
 			pr_info("polling rate is %d Hz\n", scan_rate);
 		}
 	}
@@ -271,9 +275,7 @@ static void pending_rx_work(struct work_struct *work)
 
 	if (dev->polling_mode) {
 		if (dev->is_open[CH_RX] && scan_rate)
-			schedule_delayed_work(&dev->rx.dwork,
-					      msecs_to_jiffies(MSEC_PER_SEC
-							       / scan_rate));
+			schedule_delayed_work(&dev->rx.dwork, dev->rx.delay);
 	} else {
 		dev->rx.int_disabled = false;
 		enable_irq(dev->client->irq);
