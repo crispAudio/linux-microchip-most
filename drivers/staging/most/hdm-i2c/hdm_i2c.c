@@ -1,7 +1,7 @@
 /*
  * hdm_i2c.c - Hardware Dependent Module for I2C Interface
  *
- * Copyright (C) 2013-2015, Microchip Technology Germany II GmbH & Co. KG
+ * Copyright (C) 2013-2017, Microchip Technology Germany II GmbH & Co. KG
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -17,7 +17,6 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/i2c.h>
-#include <linux/sched.h>
 #include <linux/interrupt.h>
 #include <linux/err.h>
 
@@ -53,9 +52,9 @@ struct hdm_i2c {
 	struct i2c_client *client;
 	struct rx {
 		struct delayed_work dwork;
-		wait_queue_head_t waitq;
 		struct list_head list;
 		struct mutex list_mutex;
+		bool int_disabled;
 	} rx;
 	char name[64];
 };
@@ -63,6 +62,7 @@ struct hdm_i2c {
 #define to_hdm(iface) container_of(iface, struct hdm_i2c, most_iface)
 
 static irqreturn_t most_irq_handler(int, void *);
+static void pending_rx_work(struct work_struct *);
 
 /**
  * configure_channel - called from MOST core to configure a channel
@@ -99,6 +99,7 @@ static int configure_channel(struct most_interface *most_iface,
 		dev->polling_mode = polling_req || dev->client->irq <= 0;
 		if (!dev->polling_mode) {
 			pr_info("Requesting IRQ: %d\n", dev->client->irq);
+			dev->rx.int_disabled = false;
 			ret = request_irq(dev->client->irq, most_irq_handler, 0,
 					  dev->client->name, dev);
 			if (ret) {
@@ -110,8 +111,6 @@ static int configure_channel(struct most_interface *most_iface,
 	}
 	if ((channel_config->direction == MOST_CH_RX) && (dev->polling_mode)) {
 		pr_info("Using polling at rate: %d times/sec\n", scan_rate);
-		schedule_delayed_work(&dev->rx.dwork,
-				      msecs_to_jiffies(MSEC_PER_SEC / 4));
 	}
 	dev->is_open[ch_idx] = true;
 
@@ -140,10 +139,16 @@ static int enqueue(struct most_interface *most_iface,
 
 	if (ch_idx == CH_RX) {
 		/* RX */
+		if (!dev->polling_mode)
+			disable_irq(dev->client->irq);
+		cancel_delayed_work_sync(&dev->rx.dwork);
 		mutex_lock(&dev->rx.list_mutex);
 		list_add_tail(&mbo->list, &dev->rx.list);
 		mutex_unlock(&dev->rx.list_mutex);
-		wake_up_interruptible(&dev->rx.waitq);
+		if (dev->rx.int_disabled || dev->polling_mode)
+			pending_rx_work(&dev->rx.dwork.work);
+		if (!dev->polling_mode)
+			enable_irq(dev->client->irq);
 	} else {
 		/* TX */
 		ret = i2c_master_send(dev->client, mbo->virt_address,
@@ -200,7 +205,6 @@ static int poison_channel(struct most_interface *most_iface,
 			mutex_lock(&dev->rx.list_mutex);
 		}
 		mutex_unlock(&dev->rx.list_mutex);
-		wake_up_interruptible(&dev->rx.waitq);
 	}
 
 	return 0;
@@ -210,7 +214,7 @@ static void do_rx_work(struct hdm_i2c *dev)
 {
 	struct mbo *mbo;
 	unsigned char msg[MAX_BUF_SIZE_CONTROL];
-	int ret, ch_idx = CH_RX;
+	int ret;
 	u16 pml, data_size;
 
 	/* Read PML (2 bytes) */
@@ -233,29 +237,7 @@ static void do_rx_work(struct hdm_i2c *dev)
 		return;
 	}
 
-	for (;;) {
-		/* Conditions to wait for: poisoned channel or free buffer
-		 * available for reading
-		 */
-		if (wait_event_interruptible(dev->rx.waitq,
-					     !dev->is_open[ch_idx] ||
-					     !list_empty(&dev->rx.list))) {
-			pr_err("wait_event_interruptible() failed\n");
-			return;
-		}
-
-		if (!dev->is_open[ch_idx])
-			return;
-
-		mutex_lock(&dev->rx.list_mutex);
-
-		/* list may be empty if poison or remove is called */
-		if (!list_empty(&dev->rx.list))
-			break;
-
-		mutex_unlock(&dev->rx.list_mutex);
-	}
-
+	mutex_lock(&dev->rx.list_mutex);
 	mbo = list_first_mbo(&dev->rx.list);
 	list_del(&mbo->list);
 	mutex_unlock(&dev->rx.list_mutex);
@@ -275,6 +257,13 @@ static void do_rx_work(struct hdm_i2c *dev)
 static void pending_rx_work(struct work_struct *work)
 {
 	struct hdm_i2c *dev = container_of(work, struct hdm_i2c, rx.dwork.work);
+	bool empty;
+
+	mutex_lock(&dev->rx.list_mutex);
+	empty = list_empty(&dev->rx.list);
+	mutex_unlock(&dev->rx.list_mutex);
+	if (empty)
+		return;
 
 	do_rx_work(dev);
 
@@ -284,6 +273,7 @@ static void pending_rx_work(struct work_struct *work)
 					      msecs_to_jiffies(MSEC_PER_SEC
 							       / scan_rate));
 	} else {
+		dev->rx.int_disabled = false;
 		enable_irq(dev->client->irq);
 	}
 }
@@ -311,7 +301,7 @@ static irqreturn_t most_irq_handler(int irq, void *_dev)
 	struct hdm_i2c *dev = _dev;
 
 	disable_irq_nosync(irq);
-
+	dev->rx.int_disabled = true;
 	schedule_delayed_work(&dev->rx.dwork, 0);
 
 	return IRQ_HANDLED;
@@ -361,7 +351,6 @@ static int i2c_probe(struct i2c_client *client, const struct i2c_device_id *id)
 
 	INIT_LIST_HEAD(&dev->rx.list);
 	mutex_init(&dev->rx.list_mutex);
-	init_waitqueue_head(&dev->rx.waitq);
 
 	INIT_DELAYED_WORK(&dev->rx.dwork, pending_rx_work);
 
@@ -414,7 +403,6 @@ static struct i2c_driver i2c_driver = {
 
 module_i2c_driver(i2c_driver);
 
-MODULE_AUTHOR("Jain Roy Ambi <JainRoy.Ambi@microchip.com>");
 MODULE_AUTHOR("Andrey Shvetsov <andrey.shvetsov@k2l.de>");
 MODULE_DESCRIPTION("I2C Hardware Dependent Module");
 MODULE_LICENSE("GPL");
