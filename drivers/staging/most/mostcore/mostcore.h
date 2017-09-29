@@ -241,10 +241,13 @@ struct mbo {
  */
 struct most_interface {
 	struct module *mod;
+	struct device *dev;
 	enum most_interface_type interface;
 	const char *description;
 	int num_channels;
 	struct most_channel_capability *channel_vector;
+	void *(*dma_alloc)(struct mbo *mbo, u32 size);
+	void (*dma_free)(struct mbo *mbo, u32 size);
 	int (*configure)(struct most_interface *iface, int channel_idx,
 			 struct most_channel_config *channel_config);
 	int (*enqueue)(struct most_interface *iface, int channel_idx,
