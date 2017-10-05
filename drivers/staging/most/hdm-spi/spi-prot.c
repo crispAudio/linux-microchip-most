@@ -38,13 +38,6 @@
 #define ASYNC_ADDR 0x12
 #define CTRL_ADDR 0x14
 
-#define GINT_CHSTS_INTM \
-	(BIT(GINT_CHSTS_DCITSM_B) | \
-	 BIT(GINT_CHSTS_CTISM_B) | \
-	 BIT(GINT_CHSTS_CRISM_B) | \
-	 BIT(GINT_CHSTS_ATISM_B) | \
-	 BIT(GINT_CHSTS_ARISM_B))
-
 /* Interrupt Status Mask R/W-0 */
 #define GINT_CHSTS_DCITSM_B 28 /* dci */
 #define GINT_CHSTS_CTISM_B 27 /* control tx */
@@ -52,12 +45,35 @@
 #define GINT_CHSTS_ATISM_B 25 /* asynchronous tx */
 #define GINT_CHSTS_ARISM_B 24 /* asynchronous rx */
 
+#define GINT_CHSTS_INTM \
+	(BIT(GINT_CHSTS_DCITSM_B) | \
+	 BIT(GINT_CHSTS_CTISM_B) | \
+	 BIT(GINT_CHSTS_CRISM_B) | \
+	 BIT(GINT_CHSTS_ATISM_B) | \
+	 BIT(GINT_CHSTS_ARISM_B))
+
 /* Interrupt Status R-0 */
 #define GINT_CHSTS_DCITS_B 20 /* dci */
 #define GINT_CHSTS_CTIS_B 19 /* control tx */
 #define GINT_CHSTS_CRIS_B 18 /* control rx */
 #define GINT_CHSTS_ATIS_B 17 /* asynchronous tx */
 #define GINT_CHSTS_ARIS_B 16 /* asynchronous rx */
+
+/* Errors */
+#define GINT_CHSTS_SPI_ERR_B 15
+#define GINT_CHSTS_DCI_ERR_B 14
+#define GINT_CHSTS_CRX_ERR_B 7
+#define GINT_CHSTS_CTX_ERR_B 5
+#define GINT_CHSTS_ARX_ERR_B 3
+#define GINT_CHSTS_ATX_ERR_B 1
+
+#define GINT_CHSTS_ERRM \
+	(BIT(GINT_CHSTS_SPI_ERR_B) | \
+	 BIT(GINT_CHSTS_DCI_ERR_B) | \
+	 BIT(GINT_CHSTS_CRX_ERR_B) | \
+	 BIT(GINT_CHSTS_CTX_ERR_B) | \
+	 BIT(GINT_CHSTS_ARX_ERR_B) | \
+	 BIT(GINT_CHSTS_ATX_ERR_B))
 
 /* DCI_CTRL */
 #define DCI_CTRL_ERRDM_BM BIT(26) /* ERRDM */
@@ -108,6 +124,7 @@ struct channel_class {
 	u8 buf_info_cmd;
 	u8 int_mask_bit;
 	u8 int_status_bit;
+	u8 err_status_bit;
 	u16 (*get_spi_buf_sz)(struct hdm_device *, struct hdm_channel *);
 	void (*xfer)(struct hdm_device *, struct hdm_channel *);
 	bool (*xfer_mbo)(struct hdm_device *, struct hdm_channel *,
@@ -249,15 +266,18 @@ static inline void disable_ch_int(struct global_ch_int *gint, u8 int_mask_bit)
 	set_bit(int_mask_bit, &gint->aim_mask);
 }
 
-static inline void flush_int_mask(struct global_ch_int *gint)
+static inline void write_gint(struct global_ch_int *gint, u32 error_mask)
 {
 	struct hdm_device *mdev = container_of(gint, struct hdm_device, gint);
 
-	if (gint->spi_mask == gint->aim_mask)
-		return;
-
 	gint->spi_mask = gint->aim_mask;
-	write_spi_reg(mdev, GINT_CHSTS_ADDR, gint->aim_mask);
+	write_spi_reg(mdev, GINT_CHSTS_ADDR, gint->aim_mask | error_mask);
+}
+
+static inline void flush_int_mask(struct global_ch_int *gint)
+{
+	if (gint->spi_mask != gint->aim_mask)
+		write_gint(gint, 0);
 }
 
 static void ch_init(struct hdm_channel *c, const struct channel_class *cl,
@@ -1077,6 +1097,7 @@ static const struct channel_class ch_class[CH_NUM] = {
 		.xch_cmd = SPI_WR | ASYNC_ADDR,
 		.buf_info_cmd = 0x4,
 		.int_status_bit = GINT_CHSTS_ARIS_B,
+		.err_status_bit = GINT_CHSTS_ARX_ERR_B,
 		.int_mask_bit = GINT_CHSTS_ARISM_B,
 		.get_spi_buf_sz = get_tx_buf_sz,
 		.xfer = xfer_tx,
@@ -1089,6 +1110,7 @@ static const struct channel_class ch_class[CH_NUM] = {
 		.xch_cmd = SPI_RD | ASYNC_ADDR,
 		.buf_info_cmd = 0x5,
 		.int_status_bit = GINT_CHSTS_ATIS_B,
+		.err_status_bit = GINT_CHSTS_ATX_ERR_B,
 		.int_mask_bit = GINT_CHSTS_ATISM_B,
 		.get_spi_buf_sz = get_rx_buf_sz,
 		.xfer = xfer_rx,
@@ -1101,6 +1123,7 @@ static const struct channel_class ch_class[CH_NUM] = {
 		.xch_cmd = SPI_WR | CTRL_ADDR,
 		.buf_info_cmd = 0x6,
 		.int_status_bit = GINT_CHSTS_CRIS_B,
+		.err_status_bit = GINT_CHSTS_CRX_ERR_B,
 		.int_mask_bit = GINT_CHSTS_CRISM_B,
 		.get_spi_buf_sz = get_tx_buf_sz,
 		.xfer = xfer_tx,
@@ -1113,6 +1136,7 @@ static const struct channel_class ch_class[CH_NUM] = {
 		.xch_cmd = SPI_RD | CTRL_ADDR,
 		.buf_info_cmd = 0x7,
 		.int_status_bit = GINT_CHSTS_CTIS_B,
+		.err_status_bit = GINT_CHSTS_CTX_ERR_B,
 		.int_mask_bit = GINT_CHSTS_CTISM_B,
 		.get_spi_buf_sz = get_rx_buf_sz,
 		.xfer = xfer_rx,
@@ -1258,9 +1282,19 @@ static void sint_work_fn(struct work_struct *ws)
 		mutex_unlock(&mdev->dci_mt);
 	}
 
+	if (status_reg & BIT(GINT_CHSTS_SPI_ERR_B))
+		dev_warn(&mdev->spi->dev, "SPI protocol error\n");
+	if (status_reg & BIT(GINT_CHSTS_DCI_ERR_B))
+		dev_warn(&mdev->spi->dev, "DCI error\n");
+
 	for (i = 0; i < CH_NUM; i++) {
 		struct hdm_channel *c = mdev->ch + i;
 		const struct channel_class *cl = ch_class + i;
+
+		if (status_reg & BIT(cl->err_status_bit)) {
+			dev_warn(&mdev->spi->dev, "%s: channel state error\n",
+				 cl->name);
+		}
 
 		if (!(status_reg & BIT(cl->int_status_bit)))
 			continue; /* not for this channel */
@@ -1272,7 +1306,11 @@ static void sint_work_fn(struct work_struct *ws)
 		}
 		mutex_unlock(&c->cl_lock);
 	}
-	flush_int_mask(&mdev->gint);
+
+	if (status_reg & GINT_CHSTS_ERRM)
+		write_gint(&mdev->gint, status_reg & GINT_CHSTS_ERRM);
+	else
+		flush_int_mask(&mdev->gint);
 	enable_irq(mdev->irq);
 }
 
