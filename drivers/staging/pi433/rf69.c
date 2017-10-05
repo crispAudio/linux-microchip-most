@@ -678,7 +678,7 @@ int rf69_set_preamble_length(struct spi_device *spi, u16 preambleLength)
 	u8 msb, lsb;
 
 	#ifdef DEBUG
-		dev_dbg(&spi->dev, "set: preample length");
+		dev_dbg(&spi->dev, "set: preamble length");
 	#endif
 
 	/* no value check needed - u16 exactly matches register size */
@@ -690,9 +690,7 @@ int rf69_set_preamble_length(struct spi_device *spi, u16 preambleLength)
 	/* transmit to chip */
 	retval = WRITE_REG(REG_PREAMBLE_MSB, msb);
 	if (retval) return retval;
-	retval = WRITE_REG(REG_PREAMBLE_LSB, lsb);
-
-	return retval;
+	return WRITE_REG(REG_PREAMBLE_LSB, lsb);
 }
 
 int rf69_set_sync_enable(struct spi_device *spi, enum optionOnOff optionOnOff)

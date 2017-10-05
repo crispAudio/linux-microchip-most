@@ -129,34 +129,32 @@ struct pi433_instance {
 /*-------------------------------------------------------------------------*/
 
 /* GPIO interrupt handlers */
-static irq_handler_t
-DIO0_irq_handler(unsigned int irq, void *dev_id, struct pt_regs *regs)
+static irqreturn_t DIO0_irq_handler(int irq, void *dev_id)
 {
 	struct pi433_device *device = dev_id;
 
 	if      (device->irq_state[DIO0] == DIO_PacketSent)
 	{
 		device->free_in_fifo = FIFO_SIZE;
-		printk("DIO0 irq: Packet sent\n"); // TODO: printk() should include KERN_ facility level
+		dev_dbg(device->dev, "DIO0 irq: Packet sent\n");
 		wake_up_interruptible(&device->fifo_wait_queue);
 	}
 	else if (device->irq_state[DIO0] == DIO_Rssi_DIO0)
 	{
-		printk("DIO0 irq: RSSI level over threshold\n");
+		dev_dbg(device->dev, "DIO0 irq: RSSI level over threshold\n");
 		wake_up_interruptible(&device->rx_wait_queue);
 	}
 	else if (device->irq_state[DIO0] == DIO_PayloadReady)
 	{
-		printk("DIO0 irq: PayloadReady\n");
+		dev_dbg(device->dev, "DIO0 irq: PayloadReady\n");
 		device->free_in_fifo = 0;
 		wake_up_interruptible(&device->fifo_wait_queue);
 	}
 
-	return (irq_handler_t) IRQ_HANDLED;
+	return IRQ_HANDLED;
 }
 
-static irq_handler_t
-DIO1_irq_handler(unsigned int irq, void *dev_id, struct pt_regs *regs)
+static irqreturn_t DIO1_irq_handler(int irq, void *dev_id)
 {
 	struct pi433_device *device = dev_id;
 
@@ -169,16 +167,12 @@ DIO1_irq_handler(unsigned int irq, void *dev_id, struct pt_regs *regs)
 		if (device->rx_active)	device->free_in_fifo = FIFO_THRESHOLD - 1;
 		else			device->free_in_fifo = FIFO_SIZE - FIFO_THRESHOLD - 1;
 	}
-	printk("DIO1 irq: %d bytes free in fifo\n", device->free_in_fifo); // TODO: printk() should include KERN_ facility level
+	dev_dbg(device->dev,
+		"DIO1 irq: %d bytes free in fifo\n", device->free_in_fifo);
 	wake_up_interruptible(&device->fifo_wait_queue);
 
-	return (irq_handler_t) IRQ_HANDLED;
+	return IRQ_HANDLED;
 }
-
-static void *DIO_irq_handler[NUM_DIO] = {
-	DIO0_irq_handler,
-	DIO1_irq_handler
-};
 
 /*-------------------------------------------------------------------------*/
 
@@ -473,7 +467,7 @@ pi433_receive(void *data)
 	}
 
 
-	/* rx done, wait was interrupted or error occured */
+	/* rx done, wait was interrupted or error occurred */
 abort:
 	dev->interrupt_rx_allowed = true;
 	SET_CHECKED(rf69_set_mode(dev->spi, standby));
@@ -982,6 +976,10 @@ static int setup_GPIOs(struct pi433_device *device)
 	char 	name[5];
 	int	retval;
 	int	i;
+	const irq_handler_t DIO_irq_handler[NUM_DIO] = {
+		DIO0_irq_handler,
+		DIO1_irq_handler
+	};
 
 	for (i=0; i<NUM_DIO; i++)
 	{
@@ -1033,7 +1031,7 @@ static int setup_GPIOs(struct pi433_device *device)
 		if (retval)
 			return retval;
 
-		dev_dbg(&device->spi->dev, "%s succesfully configured", name);
+		dev_dbg(&device->spi->dev, "%s successfully configured", name);
 	}
 
 	return 0;

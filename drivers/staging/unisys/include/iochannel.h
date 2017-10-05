@@ -1,5 +1,19 @@
-/* Copyright (C) 2010 - 2016 UNISYS CORPORATION */
-/* All rights reserved. */
+/*
+ * Copyright (C) 2010 - 2016 UNISYS CORPORATION
+ * All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or (at
+ * your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE, GOOD TITLE or
+ * NON INFRINGEMENT.  See the GNU General Public License for more
+ * details.
+ */
+
 #ifndef __IOCHANNEL_H__
 #define __IOCHANNEL_H__
 
@@ -28,8 +42,9 @@
  */
 
 #include <linux/uuid.h>
-#include <linux/dma-direction.h>
-#include "channel.h"
+#include <linux/skbuff.h>
+
+#include "visorchannel.h"
 
 /*
  * Must increment these whenever you insert or delete fields within this channel
@@ -46,20 +61,25 @@
  * IO Partition is defined below.
  */
 
-/* Defines and enums. */
-#define MINNUM(a, b) (((a) < (b)) ? (a) : (b))
-#define MAXNUM(a, b) (((a) > (b)) ? (a) : (b))
-
-/* Define the two queues per data channel between iopart and ioguestparts. */
-
-/* Used by ioguestpart to 'insert' signals to iopart. */
+/*
+ * Define the two queues per data channel between iopart and ioguestparts.
+ *	IOCHAN_TO_IOPART -- used by guest to 'insert' signals to iopart.
+ *	IOCHAN_FROM_IOPART -- used by guest to 'remove' signals from IO part.
+ */
 #define IOCHAN_TO_IOPART 0
-
-/* Used by ioguestpart to 'remove' signals from iopart, same previous queue. */
 #define IOCHAN_FROM_IOPART 1
 
 /* Size of cdb - i.e., SCSI cmnd */
 #define MAX_CMND_SIZE 16
+
+/* Unisys-specific DMA direction values */
+enum uis_dma_data_direction {
+	UIS_DMA_BIDIRECTIONAL = 0,
+	UIS_DMA_TO_DEVICE = 1,
+	UIS_DMA_FROM_DEVICE = 2,
+	UIS_DMA_NONE = 3
+};
+
 #define MAX_SENSE_SIZE 64
 #define MAX_PHYS_INFO 64
 
@@ -133,8 +153,6 @@ struct guest_phys_info {
 	u64 length;
 } __packed;
 
-#define GPI_ENTRIES_PER_PAGE (PAGE_SIZE / sizeof(struct guest_phys_info))
-
 /*
  * struct uisscsi_dest
  * @channel: Bus number.
@@ -184,7 +202,7 @@ struct vhba_config_max {
  * @bufflen:		Length of data to be transferred out or in.
  * @guest_phys_entries:	Number of entries in scatter-gather list.
  * @struct gpi_list:	Physical address information for each fragment.
- * @enum data_dir:	Direction of the data, if any.
+ * @data_dir:		Direction of the data, if any.
  * @struct vdest:	Identifies the virtual hba, id, channel, lun to which
  *			cmd was sent.
  * @linuxstat:		Original Linux status used by Linux vdisk.
@@ -207,7 +225,7 @@ struct uiscmdrsp_scsi {
 	u32 bufflen;
 	u16 guest_phys_entries;
 	struct guest_phys_info gpi_list[MAX_PHYS_INFO];
-	enum dma_data_direction data_dir;
+	u32 data_dir;
 	struct uisscsi_dest vdest;
 	/* Needed to queue the rsp back to cmd originator. */
 	int linuxstat;
@@ -330,10 +348,9 @@ struct sense_data {
  *		    the start of the NETWORK LAYER HEADER.
  *
  * NOTE:
- * The full packet is described in frags but the ethernet header is
- * separately kept in ethhdr so that uisnic doesn't have "MAP" the
- * guest memory to get to the header. uisnic needs ethhdr to
- * determine how to route the packet.
+ * The full packet is described in frags but the ethernet header is separately
+ * kept in ethhdr so that uisnic doesn't have "MAP" the guest memory to get to
+ * the header. uisnic needs ethhdr to determine how to route the packet.
  */
 struct net_pkt_xmt {
 	int len;
@@ -492,36 +509,6 @@ struct uiscmdrsp_disknotify {
 	u32 channel, id, lun;
 } __packed;
 
-/*
- * struct uiscmdrsp_vdiskmgmt - The following is used by virthba/vSCSI to send
- *				the Acquire/Release commands to the IOVM.
- * @enum vdisktype:	 The type of task.
- * @struct vdest:	 The vdisk for which this task mgmt is generated.
- * @handle:		 This is a handle that the guest has saved off for its
- *			 own use. It's value is preserved by iopart and returned
- *			 as in the task mgmt rsp.
- * @notify_handle:	 For Linux guests, this is a pointer to wait_queue_head
- *			 that a thread is waiting on to see if the tskmgmt
- *			 command has completed. When the rsp is received by
- *			 guest, the thread receiving the response uses this to
- *			 notify the thread waiting for taskmgmt command
- *			 completion. It's value is preserved by iopart and
- *			 returned as in the task mgmt rsp.
- * @notifyresult_handle: Handle to the location in guest where the result of the
- *			 taskmgmt command (result field) is saved to when the
- *			 response is handled. It's value is preserved by iopart
- *			 and returned as in the task mgmt rsp.
- * @result: Result of taskmgmt command - set by IOPart.
- */
-struct uiscmdrsp_vdiskmgmt {
-	enum vdisk_mgmt_types vdisktype;
-	struct uisscsi_dest vdest;
-	u64 handle;
-	u64 notify_handle;
-	u64 notifyresult_handle;
-	char result;
-} __packed;
-
 /* Keeping cmd and rsp info in one structure for now cmd rsp packet for SCSI */
 struct uiscmdrsp {
 	char cmdtype;
@@ -530,13 +517,11 @@ struct uiscmdrsp {
 #define CMD_NET_TYPE	      2
 #define CMD_SCSITASKMGMT_TYPE 3
 #define CMD_NOTIFYGUEST_TYPE  4
-#define CMD_VDISKMGMT_TYPE    5
 	union {
 		struct uiscmdrsp_scsi scsi;
 		struct uiscmdrsp_net net;
 		struct uiscmdrsp_scsitaskmgmt scsitaskmgmt;
 		struct uiscmdrsp_disknotify disknotify;
-		struct uiscmdrsp_vdiskmgmt vdiskmgmt;
 	};
 	/* Send the response when the cmd is done (scsi and scsittaskmgmt). */
 	void *private_data;
@@ -564,7 +549,7 @@ struct iochannel_vnic {
 	/* 4 bytes */
 	u32 mtu;
 	/* 16 bytes */
-	uuid_le zone_uuid;
+	guid_t zone_guid;
 } __packed;
 
 /*

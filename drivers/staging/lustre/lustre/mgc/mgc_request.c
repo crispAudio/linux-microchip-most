@@ -39,12 +39,12 @@
 
 #include <linux/module.h>
 
-#include "../include/lprocfs_status.h"
-#include "../include/lustre_dlm.h"
-#include "../include/lustre_disk.h"
-#include "../include/lustre_log.h"
-#include "../include/lustre_swab.h"
-#include "../include/obd_class.h"
+#include <lprocfs_status.h>
+#include <lustre_dlm.h>
+#include <lustre_disk.h>
+#include <lustre_log.h>
+#include <lustre_swab.h>
+#include <obd_class.h>
 
 #include "mgc_internal.h"
 
@@ -1155,6 +1155,7 @@ static int mgc_apply_recover_logs(struct obd_device *mgc,
 		char *cname;
 		char *params;
 		char *uuid;
+		size_t len;
 
 		rc = -EINVAL;
 		if (datalen < sizeof(*entry))
@@ -1283,17 +1284,19 @@ static int mgc_apply_recover_logs(struct obd_device *mgc,
 		lustre_cfg_bufs_set_string(&bufs, 1, params);
 
 		rc = -ENOMEM;
-		lcfg = lustre_cfg_new(LCFG_PARAM, &bufs);
-		if (IS_ERR(lcfg)) {
-			CERROR("mgc: cannot allocate memory\n");
+		len = lustre_cfg_len(bufs.lcfg_bufcount, bufs.lcfg_buflen);
+		lcfg = kzalloc(len, GFP_NOFS);
+		if (!lcfg) {
+			rc = -ENOMEM;
 			break;
 		}
+		lustre_cfg_init(lcfg, LCFG_PARAM, &bufs);
 
 		CDEBUG(D_INFO, "ir apply logs %lld/%lld for %s -> %s\n",
 		       prev_version, max_version, obdname, params);
 
 		rc = class_process_config(lcfg);
-		lustre_cfg_free(lcfg);
+		kfree(lcfg);
 		if (rc)
 			CDEBUG(D_INFO, "process config for %s error %d\n",
 			       obdname, rc);

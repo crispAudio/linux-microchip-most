@@ -829,7 +829,7 @@ static void pwr_rpwm_timeout_handler(void *FunctionContext)
 	struct pwrctrl_priv *pwrpriv;
 
 
-	padapter = (struct adapter *)FunctionContext;
+	padapter = FunctionContext;
 	pwrpriv = adapter_to_pwrctl(padapter);
 	DBG_871X("+%s: rpwm = 0x%02X cpwm = 0x%02X\n", __func__, pwrpriv->rpwm, pwrpriv->cpwm);
 
@@ -1193,8 +1193,6 @@ void rtw_init_pwrctrl_priv(struct adapter *padapter)
 
 void rtw_free_pwrctrl_priv(struct adapter *adapter)
 {
-	/* memset((unsigned char *)pwrctrlpriv, 0, sizeof(struct pwrctrl_priv)); */
-
 #ifdef CONFIG_PNO_SUPPORT
 	if (pwrctrlpriv->pnlo_info != NULL)
 		printk("****** pnlo_info memory leak********\n");

@@ -26,13 +26,12 @@
  */
 
 #include <linux/uuid.h>
-#include <linux/ctype.h>
-#include "channel.h"
+#include "visorchannel.h"
 
 /* {193b331b-c58f-11da-95a9-00e08161165f} */
-#define VISOR_VBUS_CHANNEL_UUID \
-	UUID_LE(0x193b331b, 0xc58f, 0x11da, \
-		0x95, 0xa9, 0x0, 0xe0, 0x81, 0x61, 0x16, 0x5f)
+#define VISOR_VBUS_CHANNEL_GUID						\
+	GUID_INIT(0x193b331b, 0xc58f, 0x11da,				\
+		  0x95, 0xa9, 0x0, 0xe0, 0x81, 0x61, 0x16, 0x5f)
 
 /*
  * Must increment this whenever you insert or delete fields within this channel
@@ -43,17 +42,16 @@
  */
 #define VISOR_VBUS_CHANNEL_VERSIONID 1
 
-static const uuid_le visor_vbus_channel_uuid = VISOR_VBUS_CHANNEL_UUID;
-
-/* struct visor_vbus_deviceinfo
+/*
+ * struct visor_vbus_deviceinfo
  * @devtype:  Short string identifying the device type.
  * @drvname:  Driver .sys file name.
  * @infostrs: Kernel vversion.
  * @reserved: Pad size to 256 bytes.
  *
- * An array of this struct is present in the channel area for each vbus.
- * (See vbuschannel.h.). It is filled in by the client side to provide info
- * about the device and driver from the client's perspective.
+ * An array of this struct is present in the channel area for each vbus. It is
+ * filled in by the client side to provide info about the device and driver from
+ * the client's perspective.
  */
 struct visor_vbus_deviceinfo {
 	u8 devtype[16];
@@ -74,7 +72,7 @@ struct visor_vbus_deviceinfo {
  *			      BusInfo struct.
  * @dev_info_offset:	      Byte offset from beginning of this struct to the
  *			      DevInfo array.
- * @reserved:		      Natural Alignment
+ * @reserved:		      Natural alignment.
  */
 struct visor_vbus_headerinfo {
 	u32 struct_bytes;
@@ -98,7 +96,6 @@ struct visor_vbus_headerinfo {
 struct visor_vbus_channel {
 	struct channel_header channel_header;
 	struct visor_vbus_headerinfo hdr_info;
-	/* The remainder of this channel is filled in by the client */
 	struct visor_vbus_deviceinfo chp_info;
 	struct visor_vbus_deviceinfo bus_info;
 	struct visor_vbus_deviceinfo dev_info[0];

@@ -34,16 +34,8 @@
 #ifndef __LNET_LNET_SOCKLND_H__
 #define __LNET_LNET_SOCKLND_H__
 
-#include "types.h"
-
-#define SOCKLND_CONN_NONE     (-1)
-#define SOCKLND_CONN_ANY	0
-#define SOCKLND_CONN_CONTROL	1
-#define SOCKLND_CONN_BULK_IN	2
-#define SOCKLND_CONN_BULK_OUT	3
-#define SOCKLND_CONN_NTYPES	4
-
-#define SOCKLND_CONN_ACK	SOCKLND_CONN_BULK_IN
+#include <uapi/linux/lnet/lnet-types.h>
+#include <uapi/linux/lnet/socklnd.h>
 
 struct ksock_hello_msg {
 	__u32		kshm_magic;	/* magic number of socklnd message */

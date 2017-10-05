@@ -131,14 +131,10 @@ sh_css_load_blob_info(const char *fw, const struct ia_css_fw_info *bi, struct ia
 
 	if (bi->type == ia_css_isp_firmware || bi->type == ia_css_sp_firmware) {
 		char *namebuffer;
-		int namelength = (int)strlen(name);
 
-		namebuffer = (char *) kmalloc(namelength + 1, GFP_KERNEL);
-		if (namebuffer == NULL)
+		namebuffer = kstrdup(name, GFP_KERNEL);
+		if (!namebuffer)
 			return IA_CSS_ERR_CANNOT_ALLOCATE_MEMORY;
-
-		memcpy(namebuffer, name, namelength + 1);
-
 		bd->name = fw_minibuffer[index].name = namebuffer;
 	} else {
 		bd->name = name;
@@ -149,8 +145,8 @@ sh_css_load_blob_info(const char *fw, const struct ia_css_fw_info *bi, struct ia
 		size_t configstruct_size = sizeof(struct ia_css_config_memory_offsets);
 		size_t statestruct_size = sizeof(struct ia_css_state_memory_offsets);
 
-		char *parambuf = (char *)kmalloc(paramstruct_size + configstruct_size + statestruct_size,
-							GFP_KERNEL);
+		char *parambuf = kmalloc(paramstruct_size + configstruct_size + statestruct_size,
+					 GFP_KERNEL);
 		if (parambuf == NULL)
 			return IA_CSS_ERR_CANNOT_ALLOCATE_MEMORY;
 

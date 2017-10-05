@@ -40,10 +40,9 @@
 
 #define DEBUG_SUBSYSTEM S_LLITE
 
-#include "../include/obd_support.h"
-#include "../include/lustre_fid.h"
-#include "../include/lustre_dlm.h"
-#include "../include/lustre_ver.h"
+#include <obd_support.h>
+#include <lustre_fid.h>
+#include <lustre_dlm.h>
 #include "llite_internal.h"
 
 static int ll_create_it(struct inode *dir, struct dentry *dentry,
@@ -562,8 +561,7 @@ static struct dentry *ll_lookup_it(struct inode *parent, struct dentry *dentry,
 		}
 	}
 
-	if (it->it_op & IT_OPEN && it->it_flags & FMODE_WRITE &&
-	    dentry->d_sb->s_flags & MS_RDONLY)
+	if (it->it_op & IT_OPEN && it->it_flags & FMODE_WRITE && sb_rdonly(dentry->d_sb))
 		return ERR_PTR(-EROFS);
 
 	if (it->it_op & IT_CREAT)

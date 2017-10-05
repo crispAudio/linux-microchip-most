@@ -666,7 +666,7 @@ static int ina2xx_capture_thread(void *data)
 {
 	struct iio_dev *indio_dev = data;
 	struct ina2xx_chip_info *chip = iio_priv(indio_dev);
-	unsigned int sampling_us = SAMPLING_PERIOD(chip);
+	int sampling_us = SAMPLING_PERIOD(chip);
 	int buffer_us;
 
 	/*
@@ -778,7 +778,6 @@ static const struct attribute_group ina226_attribute_group = {
 };
 
 static const struct iio_info ina219_info = {
-	.driver_module = THIS_MODULE,
 	.attrs = &ina219_attribute_group,
 	.read_raw = ina2xx_read_raw,
 	.write_raw = ina2xx_write_raw,
@@ -786,7 +785,6 @@ static const struct iio_info ina219_info = {
 };
 
 static const struct iio_info ina226_info = {
-	.driver_module = THIS_MODULE,
 	.attrs = &ina226_attribute_group,
 	.read_raw = ina2xx_read_raw,
 	.write_raw = ina2xx_write_raw,

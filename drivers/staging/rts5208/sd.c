@@ -1654,7 +1654,7 @@ static int sd_ddr_tuning_rx_cmd(struct rtsx_chip *chip, u8 sample_point)
 	return STATUS_SUCCESS;
 }
 
-static int mmc_ddr_tunning_rx_cmd(struct rtsx_chip *chip, u8 sample_point)
+static int mmc_ddr_tuning_rx_cmd(struct rtsx_chip *chip, u8 sample_point)
 {
 	struct sd_info *sd_card = &chip->sd_card;
 	int retval;
@@ -1933,7 +1933,7 @@ static int sd_tuning_rx(struct rtsx_chip *chip)
 
 	} else {
 		if (CHK_MMC_DDR52(sd_card)) {
-			tuning_cmd = mmc_ddr_tunning_rx_cmd;
+			tuning_cmd = mmc_ddr_tuning_rx_cmd;
 		} else {
 			rtsx_trace(chip);
 			return STATUS_FAIL;
@@ -4122,12 +4122,6 @@ RTY_SEND_CMD:
 		if (cmd_idx == SELECT_CARD) {
 			if (rsp_type == SD_RSP_TYPE_R2) {
 				if ((ptr[3] & 0x1E) != 0x04) {
-					rtsx_trace(chip);
-					return STATUS_FAIL;
-				}
-
-			} else if (rsp_type == SD_RSP_TYPE_R0) {
-				if ((ptr[3] & 0x1E) != 0x03) {
 					rtsx_trace(chip);
 					return STATUS_FAIL;
 				}
