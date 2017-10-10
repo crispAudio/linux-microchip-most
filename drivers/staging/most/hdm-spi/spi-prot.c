@@ -433,8 +433,27 @@ static void xfer_rx(struct hdm_device *mdev, struct hdm_channel *c)
 /* tx path { */
 
 /* implements xfer_mbo */
-static bool mbo_to_buf(struct hdm_device *mdev, struct hdm_channel *c,
-		       struct mbo *mbo)
+static bool ctrl_mbo_to_buf(struct hdm_device *mdev, struct hdm_channel *c,
+			    struct mbo *mbo)
+{
+	u32 msg_len = mbo->buffer_length;
+
+	if (c->data_sz)
+		return false;
+
+	if (WARN_ONCE(msg_len > c->buf_sz - 4,
+		      "%s: too big message (%d)\n", c->cl->name, msg_len))
+		return false;
+
+	memcpy(c->data + c->data_sz, mbo->virt_address, msg_len);
+	c->data_sz += msg_len;
+	mbo->processed_length = msg_len;
+	return true;
+}
+
+/* implements xfer_mbo */
+static bool async_mbo_to_buf(struct hdm_device *mdev, struct hdm_channel *c,
+			     struct mbo *mbo)
 {
 	u32 msg_len = mbo->buffer_length;
 	u16 spi_data_sz = c->data_sz + c->spi_data_gap + msg_len + EOP_SIZE;
@@ -444,9 +463,6 @@ static bool mbo_to_buf(struct hdm_device *mdev, struct hdm_channel *c,
 			  "%s: too big message (%d)\n", c->cl->name, msg_len);
 		return false;
 	}
-
-	if (c->cl->type == MOST_CH_CONTROL && c->data_sz)
-		return false;
 
 	memcpy(c->data + c->data_sz, mbo->virt_address, msg_len);
 	c->data_sz += msg_len;
@@ -1080,7 +1096,7 @@ static const struct channel_class ch_class[CH_NUM] = {
 		.int_mask_bit = GINT_CHSTS_ARISM_B,
 		.get_spi_buf_sz = get_tx_buf_sz,
 		.xfer = xfer_tx,
-		.xfer_mbo = mbo_to_buf,
+		.xfer_mbo = async_mbo_to_buf,
 	},
 	[CH_ASYNC_RX] = {
 		.name = "arx",
@@ -1104,7 +1120,7 @@ static const struct channel_class ch_class[CH_NUM] = {
 		.int_mask_bit = GINT_CHSTS_CRISM_B,
 		.get_spi_buf_sz = get_tx_buf_sz,
 		.xfer = xfer_tx,
-		.xfer_mbo = mbo_to_buf,
+		.xfer_mbo = ctrl_mbo_to_buf,
 	},
 	[CH_CTRL_RX] = {
 		.name = "crx",
