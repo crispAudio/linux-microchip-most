@@ -1,0 +1,22 @@
+backport: core: __ATTR_WO, __ATTR_RW
+
+From: Andrey Shvetsov <andrey.shvetsov@k2l.de>
+
+
+diff --git a/drivers/staging/most/mostcore/core.c b/drivers/staging/most/mostcore/core.c
+--- a/drivers/staging/most/mostcore/core.c
++++ b/drivers/staging/most/mostcore/core.c
+@@ -493,6 +493,13 @@ static ssize_t set_dbr_size_store(struct most_c_obj *c,
+ 	return count;
+ }
+ 
++#define __ATTR_WO(_name) {						\
++	.attr	= { .name = __stringify(_name), .mode = 00200 },	\
++	.store	= _name##_store,					\
++}
++
++#define __ATTR_RW(_name) __ATTR(_name, 00644, _name##_show, _name##_store)
++
+ static struct most_c_attr common_c_attrs[] = {
+ 	__ATTR_RO(available_directions),
+ 	__ATTR_RO(available_datatypes),

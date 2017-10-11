@@ -16,7 +16,7 @@ Signed-off-by: Christian Gromm <christian.gromm@microchip.com>
 diff --git a/drivers/staging/most/mostcore/core.c b/drivers/staging/most/mostcore/core.c
 --- a/drivers/staging/most/mostcore/core.c
 +++ b/drivers/staging/most/mostcore/core.c
-@@ -36,6 +36,8 @@
+@@ -36,6 +36,8 @@ static struct class *most_class;
  static struct device *core_dev;
  static struct ida mdev_id;
  static int dummy_num_buffers;
@@ -25,7 +25,7 @@ diff --git a/drivers/staging/most/mostcore/core.c b/drivers/staging/most/mostcor
  
  struct most_c_aim_obj {
  	struct most_aim *ptr;
-@@ -916,6 +918,30 @@ most_c_obj *get_channel_by_name(char *mdev, char *mdev_ch)
+@@ -918,6 +920,30 @@ most_c_obj *get_channel_by_name(char *mdev, char *mdev_ch)
  	return c;
  }
  
@@ -56,7 +56,7 @@ diff --git a/drivers/staging/most/mostcore/core.c b/drivers/staging/most/mostcor
  /**
   * add_link_store - store() function for add_link attribute
   * @aim_obj: pointer to AIM object
-@@ -944,45 +970,33 @@ static ssize_t add_link_store(struct most_aim_obj *aim_obj,
+@@ -946,45 +972,33 @@ static ssize_t add_link_store(struct most_aim_obj *aim_obj,
  			      size_t len)
  {
  	struct most_c_obj *c;
@@ -108,7 +108,7 @@ diff --git a/drivers/staging/most/mostcore/core.c b/drivers/staging/most/mostcor
  
  	return len;
  }
-@@ -1676,6 +1690,73 @@ int most_deregister_aim(struct most_aim *aim)
+@@ -1681,6 +1695,73 @@ int most_deregister_aim(struct most_aim *aim)
  }
  EXPORT_SYMBOL_GPL(most_deregister_aim);
  
@@ -182,7 +182,7 @@ diff --git a/drivers/staging/most/mostcore/core.c b/drivers/staging/most/mostcor
  /**
   * most_register_interface - registers an interface with core
   * @iface: pointer to the instance of the interface description.
-@@ -1774,6 +1855,7 @@ struct kobject *most_register_interface(struct most_interface *iface)
+@@ -1779,6 +1860,7 @@ struct kobject *most_register_interface(struct most_interface *iface)
  		mutex_init(&c->start_mutex);
  		mutex_init(&c->nq_mutex);
  		list_add_tail(&c->list, &inst->channel_list);
@@ -190,7 +190,7 @@ diff --git a/drivers/staging/most/mostcore/core.c b/drivers/staging/most/mostcor
  	}
  	pr_info("registered new MOST device mdev%d (%s)\n",
  		inst->dev_id, iface->description);
-@@ -1877,6 +1959,8 @@ static int __init most_init(void)
+@@ -1882,6 +1964,8 @@ static int __init most_init(void)
  	pr_info("init()\n");
  	INIT_LIST_HEAD(&instance_list);
  	INIT_LIST_HEAD(&aim_list);
@@ -242,10 +242,11 @@ diff --git a/drivers/staging/most/mostcore/mostcore.h b/drivers/staging/most/mos
  /*
   * struct mbo - MOST Buffer Object.
   * @context: context for core completion handler
-@@ -282,6 +315,37 @@ struct most_aim {
+@@ -284,6 +317,37 @@ struct most_aim {
+ 	void *context;
  };
  
- /**
++/**
 + * most_register_config_set - registers the configuration set
 + *
 + * @cfg_set: configuration set to be registered for the future probes
@@ -276,7 +277,6 @@ diff --git a/drivers/staging/most/mostcore/mostcore.h b/drivers/staging/most/mos
 + */
 +void most_deregister_config_set(struct most_config_set *cfg_set);
 +
-+/**
+ /**
   * most_register_interface - Registers instance of the interface.
   * @iface: Pointer to the interface instance description.
-  *

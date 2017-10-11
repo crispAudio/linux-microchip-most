@@ -10,7 +10,7 @@ diff --git a/drivers/staging/most/aim-sound/sound.c b/drivers/staging/most/aim-s
  	if (ret < 0)
  		return ret;
  
--	ret = snd_card_new(NULL, -1, card_name, THIS_MODULE,
+-	ret = snd_card_new(iface->dev, -1, card_name, THIS_MODULE,
 -			   sizeof(*channel), &card);
 +	ret = snd_card_create(-1, card_name, THIS_MODULE,
 +			      sizeof(*channel), &card);

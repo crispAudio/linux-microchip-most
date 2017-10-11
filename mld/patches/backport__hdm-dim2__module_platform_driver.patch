@@ -1,0 +1,36 @@
+backport: hdm-dim2: module_platform_driver 
+
+From: Andrey Shvetsov <andrey.shvetsov@k2l.de>
+
+
+diff --git a/drivers/staging/most/hdm-dim2/dim2_hdm.c b/drivers/staging/most/hdm-dim2/dim2_hdm.c
+--- a/drivers/staging/most/hdm-dim2/dim2_hdm.c
++++ b/drivers/staging/most/hdm-dim2/dim2_hdm.c
+@@ -899,7 +899,26 @@ static struct platform_driver dim2_driver = {
+ 	},
+ };
+ 
+-module_platform_driver(dim2_driver);
++/**
++ * dim2_hdm_init - Driver Registration Routine
++ */
++static int __init dim2_hdm_init(void)
++{
++	pr_info("dim2_hdm_init()\n");
++	return platform_driver_register(&dim2_driver);
++}
++
++/**
++ * dim2_hdm_exit - Driver Cleanup Routine
++ **/
++static void __exit dim2_hdm_exit(void)
++{
++	pr_info("dim2_hdm_exit()\n");
++	platform_driver_unregister(&dim2_driver);
++}
++
++module_init(dim2_hdm_init);
++module_exit(dim2_hdm_exit);
+ 
+ MODULE_AUTHOR("Jain Roy Ambi <JainRoy.Ambi@microchip.com>");
+ MODULE_AUTHOR("Andrey Shvetsov <andrey.shvetsov@k2l.de>");

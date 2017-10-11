@@ -1,0 +1,131 @@
+#!/bin/bash
+#
+# This script helps to work with the backport- and feature-patches
+# of the MOST Linux Driver.
+#
+# For usage:
+#   ./patchwork help
+#
+
+set -o nounset
+set -o errexit
+
+show_usage() {
+	cat <<EOF
+patchwork - Utility to work with MOST Linus Driver pathes.
+
+Usage:
+  export KDIR=...
+  export CROSS_COMPILE=...
+  export ARCH=...
+  ./patchwork [test|patch|unpatch]
+
+Parameters
+  test - (default) select all necessary kernel specific backport patches
+  patch - patch all necessary kernel specific backport and recommended patches
+  unpatch - revert all applied patches ('cat .patched' shows all applied patches)
+  help - shows this help
+EOF
+}
+
+make_generator() {
+	echo "obj-m := t.o"
+	echo "CFLAGS_t.o := -Werror=implicit-int -Werror=implicit-function-declaration"
+}
+
+pd_test_generator() {
+	echo "#include <linux/platform_device.h>"
+	echo "static struct platform_driver xx;"
+	echo "module_platform_driver(xx);"
+}
+
+usbd_test_generator() {
+	echo "#include <linux/usb.h>"
+	echo "static struct usb_driver xx;"
+	echo "module_usb_driver(xx);"
+}
+
+attr_test_generator() {
+	echo "#include <linux/sysfs.h>"
+	echo "static void rw_show(void) {}"
+	echo "static void rw_store(void) {}"
+	echo "static void wo_store(void) {}"
+	echo "static struct {"
+	echo "  struct attribute attr;"
+	echo "  void (*show)(void);"
+	echo "  void (*store)(void);"
+	echo "} xx[] = { __ATTR_RW(rw), __ATTR_WO(wo) };"
+	echo "void test(void) { (void)xx; }"
+}
+
+fn_test_generator() {
+	echo "#include <$1>"
+	echo "void test(void) { $2; }"
+}
+
+show_if_unapplied() {
+	local PATCH="$1__$2.patch"
+	>>.patched
+	cat .patched |grep -q "^${PATCH}$" || echo "$PATCH"
+}
+
+check_mk() {
+	local TEST_GEN="$1_test_generator"
+	local PATCH="backport__$2.patch"
+	shift 2
+
+	>>.patched
+	cat .patched |grep -q "^${PATCH}$" && return # bye if already applied
+
+	rm -rf _tmp
+	mkdir _tmp
+	make_generator > _tmp/Makefile
+	$TEST_GEN "$@" > _tmp/t.c
+	echo "$PATCH" >>.make.log
+	make -C ${KDIR:-/lib/modules/$(uname -r)/build} M=$(pwd)/_tmp modules >>.make.log 2>&1 ||
+		echo "$PATCH"
+	echo >>.make.log
+}
+
+show_mandatory_if_unapplied() {
+	>.make.log
+
+	check_mk fn core__ida_simple_get "linux/idr.h" "ida_simple_get(0,0,0,0)"
+	check_mk fn hdm-dim2__devm_ioremap_resource "linux/device.h" "devm_ioremap_resource(0,0)"
+	check_mk fn networking__alloc_netdev "linux/netdevice.h" "alloc_netdev(0,0,0,0)"
+	check_mk fn networking__ether_addr_copy "linux/etherdevice.h" "ether_addr_copy(0,0)"
+	check_mk fn networking__ether_addr_equal "linux/etherdevice.h" "ether_addr_equal(0,0)"
+	check_mk fn networking__skb_put_data "linux/skbuff.h" "skb_put_data(0,0,0)"
+	check_mk fn sound__snd_card_new "sound/core.h" "snd_card_new(0,0,0,0,0,0)"
+
+	check_mk pd hdm-dim2__module_platform_driver
+	check_mk usbd usb__module_usb_driver
+	check_mk attr core__attr
+}
+
+case "${1:-test}" in
+(test)
+	show_mandatory_if_unapplied
+	;;
+(patch)
+	(show_if_unapplied backport hdm-dim2__add_module_owner
+	 show_if_unapplied backport hdm-i2c__add_module_owner
+	 show_mandatory_if_unapplied
+	 show_if_unapplied feature core_autoconf) |
+		while read x; do echo "apply $x ..."
+			patch -p4 --force < patches/$x && echo "$x" >>.patched
+			echo
+		done
+	;;
+(unpatch)
+	>>.patched
+	tac .patched |
+		while read x; do echo "unapply $x ..."
+			patch -p4 --force -R < patches/$x
+			echo
+		done && >.patched
+	;;
+(*)
+	show_usage
+	;;
+esac

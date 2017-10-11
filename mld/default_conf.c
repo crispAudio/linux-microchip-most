@@ -46,8 +46,7 @@ static struct most_config_probe config_probes[] = {
 			.num_buffers = 20,
 			.buffer_size = 1522,
 		},
-		.aim_name = "cdev",
-		.aim_param = "inic-mlb-arx",
+		.aim_name = "networking",
 	},
 	{
 		.ch_name = "ca8",
@@ -57,8 +56,7 @@ static struct most_config_probe config_probes[] = {
 			.num_buffers = 20,
 			.buffer_size = 1522,
 		},
-		.aim_name = "cdev",
-		.aim_param = "inic-mlb-atx",
+		.aim_name = "networking",
 	},
 
 	/* USB */
@@ -92,8 +90,7 @@ static struct most_config_probe config_probes[] = {
 			.num_buffers = 20,
 			.buffer_size = 1522,
 		},
-		.aim_name = "cdev",
-		.aim_param = "inic-usb-arx",
+		.aim_name = "networking",
 	},
 	{
 		.ch_name = "ep0e",
@@ -103,8 +100,75 @@ static struct most_config_probe config_probes[] = {
 			.num_buffers = 20,
 			.buffer_size = 1522,
 		},
+		.aim_name = "networking",
+	},
+	{
+		.ch_name = "ep87",
+		.cfg = {
+			.direction = MOST_CH_RX,
+			.data_type = MOST_CH_CONTROL,
+			.num_buffers = 16,
+			.buffer_size = 64,
+		},
 		.aim_name = "cdev",
-		.aim_param = "inic-usb-atx",
+		.aim_param = "inic-usb-crx",
+	},
+	{
+		.ch_name = "ep07",
+		.cfg = {
+			.direction = MOST_CH_TX,
+			.data_type = MOST_CH_CONTROL,
+			.num_buffers = 16,
+			.buffer_size = 64,
+		},
+		.aim_name = "cdev",
+		.aim_param = "inic-usb-ctx",
+	},
+	{
+		.ch_name = "ep86",
+		.cfg = {
+			.direction = MOST_CH_RX,
+			.data_type = MOST_CH_ASYNC,
+			.num_buffers = 20,
+			.buffer_size = 1522,
+		},
+		.aim_name = "networking",
+	},
+	{
+		.ch_name = "ep06",
+		.cfg = {
+			.direction = MOST_CH_TX,
+			.data_type = MOST_CH_ASYNC,
+			.num_buffers = 20,
+			.buffer_size = 1522,
+		},
+		.aim_name = "networking",
+	},
+	{
+		.ch_name = "ep01",
+		.cfg = {
+			.direction = MOST_CH_TX,
+			.data_type = MOST_CH_SYNC,
+			.num_buffers = 4,
+			.buffer_size = 2 * 12 * 42,
+			.subbuffer_size = 12,
+			.packets_per_xact = 42,
+		},
+		.aim_name = "cdev",
+		.aim_param = "inic-usb-stx1-5.1",
+	},
+	{
+		.ch_name = "ep02",
+		.cfg = {
+			.direction = MOST_CH_TX,
+			.data_type = MOST_CH_SYNC,
+			.num_buffers = 4,
+			.buffer_size = 2 * 4 * 128,
+			.subbuffer_size = 4,
+			.packets_per_xact = 128,
+		},
+		.aim_name = "cdev",
+		.aim_param = "inic-usb-stx2-2.0",
 	},
 	{
 		.ch_name = "ep81",

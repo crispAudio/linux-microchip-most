@@ -6,8 +6,8 @@ From: Andrey Shvetsov <andrey.shvetsov@k2l.de>
 diff --git a/drivers/staging/most/hdm-dim2/dim2_hdm.c b/drivers/staging/most/hdm-dim2/dim2_hdm.c
 --- a/drivers/staging/most/hdm-dim2/dim2_hdm.c
 +++ b/drivers/staging/most/hdm-dim2/dim2_hdm.c
-@@ -708,6 +708,40 @@ static int poison_channel(struct most_interface *most_iface, int ch_idx)
- 	return ret;
+@@ -718,6 +718,40 @@ static void dma_free(struct mbo *mbo, u32 size)
+ 	dma_free_coherent(NULL, size, mbo->virt_address, mbo->bus_address);
  }
  
 +static void __iomem *my_ioremap_resource(struct device *dev, struct resource *res)
@@ -47,7 +47,7 @@ diff --git a/drivers/staging/most/hdm-dim2/dim2_hdm.c b/drivers/staging/most/hdm
  /*
   * dim2_probe - dim2 probe handler
   * @pdev: platform device structure
-@@ -731,13 +765,14 @@ static int dim2_probe(struct platform_device *pdev)
+@@ -741,42 +775,46 @@ static int dim2_probe(struct platform_device *pdev)
  
  	platform_set_drvdata(pdev, dev);
  	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -58,43 +58,59 @@ diff --git a/drivers/staging/most/hdm-dim2/dim2_hdm.c b/drivers/staging/most/hdm
  
  	irq = platform_get_irq(pdev, 0);
  	if (irq < 0) {
- 		dev_err(&pdev->dev, "failed to get ahb0_int irq\n");
-+		my_unmap_release(pdev, dev->io_base);
- 		return -ENODEV;
+ 		dev_err(&pdev->dev, "failed to get ahb0_int irq: %d\n", irq);
+-		return irq;
++		ret = irq;
++		goto err_unmap_release;
  	}
  
-@@ -745,12 +780,14 @@ static int dim2_probe(struct platform_device *pdev)
+ 	ret = devm_request_irq(&pdev->dev, irq, dim2_ahb_isr, 0,
  			       "dim2_ahb0_int", dev);
  	if (ret) {
  		dev_err(&pdev->dev, "failed to request ahb0_int irq %d\n", irq);
-+		my_unmap_release(pdev, dev->io_base);
- 		return ret;
+-		return ret;
++		goto err_unmap_release;
  	}
  
  	irq = platform_get_irq(pdev, 1);
  	if (irq < 0) {
- 		dev_err(&pdev->dev, "failed to get mlb_int irq\n");
-+		my_unmap_release(pdev, dev->io_base);
- 		return -ENODEV;
+ 		dev_err(&pdev->dev, "failed to get mlb_int irq: %d\n", irq);
+-		return irq;
++		ret = irq;
++		goto err_unmap_release;
  	}
  
-@@ -758,6 +795,7 @@ static int dim2_probe(struct platform_device *pdev)
+ 	ret = devm_request_irq(&pdev->dev, irq, dim2_mlb_isr, 0,
  			       "dim2_mlb_int", dev);
  	if (ret) {
  		dev_err(&pdev->dev, "failed to request mlb_int irq %d\n", irq);
-+		my_unmap_release(pdev, dev->io_base);
- 		return ret;
+-		return ret;
++		goto err_unmap_release;
  	}
  
-@@ -835,6 +873,7 @@ static int dim2_probe(struct platform_device *pdev)
+ 	init_waitqueue_head(&dev->netinfo_waitq);
+ 	dev->deliver_netinfo = 0;
+ 	dev->netinfo_task = kthread_run(&deliver_netinfo_thread, (void *)dev,
+ 					"dim2_netinfo");
+-	if (IS_ERR(dev->netinfo_task))
+-		return PTR_ERR(dev->netinfo_task);
++	if (IS_ERR(dev->netinfo_task)) {
++		ret = PTR_ERR(dev->netinfo_task);
++		goto err_unmap_release;
++	}
+ 
+ 	for (i = 0; i < DMA_CHANNELS; i++) {
+ 		struct most_channel_capability *cap = dev->capabilities + i;
+@@ -847,6 +885,8 @@ static int dim2_probe(struct platform_device *pdev)
  	most_deregister_interface(&dev->most_iface);
  err_stop_thread:
  	kthread_stop(dev->netinfo_task);
++err_unmap_release:
 +	my_unmap_release(pdev, dev->io_base);
  
  	return ret;
  }
-@@ -861,6 +900,7 @@ static int dim2_remove(struct platform_device *pdev)
+@@ -873,6 +913,7 @@ static int dim2_remove(struct platform_device *pdev)
  	dim2_sysfs_destroy(&dev->bus);
  	most_deregister_interface(&dev->most_iface);
  	kthread_stop(dev->netinfo_task);
