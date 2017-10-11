@@ -1,0 +1,56 @@
+backport: core: ida_simple_get, ida_simple_remove
+
+From: Andrey Shvetsov <andrey.shvetsov@k2l.de>
+
+
+diff --git a/drivers/staging/most/aim-cdev/cdev.c b/drivers/staging/most/aim-cdev/cdev.c
+--- a/drivers/staging/most/aim-cdev/cdev.c
++++ b/drivers/staging/most/aim-cdev/cdev.c
+@@ -30,6 +30,11 @@ static struct ida minor_id;
+ static unsigned int major;
+ static struct most_aim cdev_aim;
+ 
++int ida_simple_get(struct ida *ida, unsigned int start, unsigned int end,
++		   gfp_t gfp_mask);
++
++void ida_simple_remove(struct ida *ida, unsigned int id);
++
+ struct aim_channel {
+ 	wait_queue_head_t wq;
+ 	spinlock_t unlink;	/* synchronization lock to unlink channels */
+diff --git a/drivers/staging/most/mostcore/core.c b/drivers/staging/most/mostcore/core.c
+--- a/drivers/staging/most/mostcore/core.c
++++ b/drivers/staging/most/mostcore/core.c
+@@ -29,6 +29,32 @@
+ #include <linux/idr.h>
+ #include "mostcore.h"
+ 
++#include <linux/atomic.h>
++
++
++static atomic_t minor;
++
++static inline void ida_init_(struct ida *ida) { ida_init(ida); }
++
++#define ida_init(x)  do { atomic_set(&minor, -1); ida_init_(x); } while(0)
++
++int ida_simple_get(struct ida *ida, unsigned int start, unsigned int end,
++		   gfp_t gfp_mask)
++{
++	int m = atomic_inc_return(&minor);
++	if (m > 250) {
++		atomic_dec(&minor);
++		return -EFAULT;
++	}
++	return m;
++}
++EXPORT_SYMBOL_GPL(ida_simple_get);
++
++void ida_simple_remove(struct ida *ida, unsigned int id)
++{
++}
++EXPORT_SYMBOL_GPL(ida_simple_remove);
++
+ #define MAX_CHANNELS	64
+ #define STRING_SIZE	80
+ 

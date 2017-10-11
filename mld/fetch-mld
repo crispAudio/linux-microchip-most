@@ -4,7 +4,7 @@
 # and all relevant sources of the MOST Linux Driver from the github repository.
 #
 # Usage:
-#   [OUT_DIR=<NON-EXISTING-OUTPUT-DIRECTORY>] ./fetch-mld.bash [<TAG>]
+#   [OUT_DIR=<NON-EXISTING-OUTPUT-DIRECTORY>] ./fetch-mld [<TAG>]
 #
 # The optional <TAG> here is the git tag of the MOST Linux Driver, such as
 # mchp-dev or mld-1.6.0.  The default value for the <TAG> is mchp-dev, that is
@@ -14,6 +14,9 @@
 
 set -o nounset
 set -o errexit
+
+# increment this whenever we make backward incompatible changes to this script
+VERSION=100
 
 TAG=${1:-${MLD_TAG:-mchp-dev}}
 PRJ=https://raw.githubusercontent.com/microchip-ais/linux
@@ -49,14 +52,11 @@ get_patch() {
 	_get_file "mld/patches/$1" "patches/$1" || _warn "failed"
 }
 
-patch_mld() {
-	cat "patches/$1" |patch --force -p4 || _err "failed"
-}
-
 local_fetch() {
-	get_if_missing README
+	get_if_missing README.md
 	get_if_missing Makefile
 	get_if_missing default_conf.c
+	get_if_missing patchwork
 
 	get_src Documentation/ABI/sysfs-class-most.txt
 	get_src Documentation/driver_usage.txt
@@ -90,22 +90,20 @@ local_fetch() {
 	get_src mostcore/core.c
 	get_src mostcore/mostcore.h
 
+	get_patch backport__core__attr.patch
+	get_patch backport__core__ida_simple_get.patch
 	get_patch backport__hdm-dim2__add_module_owner.patch
+	get_patch backport__hdm-dim2__devm_ioremap_resource.patch
+	get_patch backport__hdm-dim2__module_platform_driver.patch
 	get_patch backport__hdm-i2c__add_module_owner.patch
-	get_patch backport__sound__snd_card_new.patch
-	get_patch backport__sound__snd_pcm_set_ops.patch
 	get_patch backport__networking__alloc_netdev.patch
 	get_patch backport__networking__ether_addr_copy.patch
 	get_patch backport__networking__ether_addr_equal.patch
 	get_patch backport__networking__skb_put_data.patch
-	get_patch backport__hdm-dim2__devm_ioremap_resource.patch
+	get_patch backport__sound__snd_card_new.patch
+	get_patch backport__sound__snd_pcm_set_ops.patch
+	get_patch backport__usb__module_usb_driver.patch
 	get_patch feature__core_autoconf.patch
-
-	# apply the universal patches only
-	# the rest depends on your kernel
-	patch_mld backport__hdm-dim2__add_module_owner.patch
-	patch_mld backport__hdm-i2c__add_module_owner.patch
-	patch_mld feature__core_autoconf.patch
 }
 
 main() {
@@ -114,16 +112,23 @@ main() {
 	mkdir "${OUT_DIR:=$(date "+%F-%H%M%S")-$TAG}"
 	cd "$OUT_DIR"
 
-	if _get_file "mld/fetch-mld.bash" ".fetch"; then
-		cat .fetch |while read x y; do
-			case $x in
-			(get_if_missing|get_src|get_patch|patch_mld) $x "$y";;
-			esac
-		done
-	else
-		echo "file not found, try to fetch using the local fetch function"
-		local_fetch
+	if ! _get_file "mld/fetch-mld" ".fetch" &&
+	   ! _get_file "mld/fetch-mld.bash" ".fetch"; then
+		_err "file mld/fetch-mld not found"
+		exit 1
 	fi
+
+	local DL_VER="$(cat .fetch |grep "^VERSION=" |sed "s,^VERSION=,,")"
+	[ ${DL_VER:-0} -le $VERSION ] ||
+		_err "newer version detected, please update (cp $OUT_DIR/.fetch fetch-mld; chmod +x fetch-mld)"
+
+	cat .fetch |sed -n "/^local_fetch/,/^}/p" |while read x y; do
+		case $x in
+		(get_if_missing|get_src|get_patch) $x "$y";;
+		esac
+	done
+
+	[ -e patchwork ] && chmod +x patchwork
 
 	echo "add version info ..."
 
