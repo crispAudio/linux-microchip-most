@@ -83,6 +83,8 @@ command | action
 
 ### mchp-dev
 
+- **usb**: clear functional stall on OUT endpoint
+
 
 ### mld-1.8.2
 
