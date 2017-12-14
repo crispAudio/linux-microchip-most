@@ -55,7 +55,7 @@ static inline bool ch_has_mbo(struct aim_channel *c)
 	return channel_has_mbo(c->iface, c->channel_id, &cdev_aim) > 0;
 }
 
-static inline bool ch_get_mbo(struct aim_channel *c, struct mbo **mbo)
+static inline struct mbo *ch_get_mbo(struct aim_channel *c, struct mbo **mbo)
 {
 	if (!kfifo_peek(&c->fifo, mbo)) {
 		*mbo = most_get_mbo(c->iface, c->channel_id, &cdev_aim);
