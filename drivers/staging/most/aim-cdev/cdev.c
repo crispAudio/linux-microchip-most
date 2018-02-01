@@ -294,13 +294,15 @@ static unsigned int aim_poll(struct file *filp, poll_table *wait)
 
 	poll_wait(filp, &c->wq, wait);
 
+	mutex_lock(&c->io_mutex);
 	if (c->cfg->direction == MOST_CH_RX) {
-		if (!kfifo_is_empty(&c->fifo))
+		if (!c->dev || !kfifo_is_empty(&c->fifo))
 			mask |= POLLIN | POLLRDNORM;
 	} else {
-		if (!kfifo_is_empty(&c->fifo) || ch_has_mbo(c))
+		if (!c->dev || !kfifo_is_empty(&c->fifo) || ch_has_mbo(c))
 			mask |= POLLOUT | POLLWRNORM;
 	}
+	mutex_unlock(&c->io_mutex);
 	return mask;
 }
 
