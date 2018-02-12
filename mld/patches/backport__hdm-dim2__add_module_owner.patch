@@ -6,11 +6,11 @@ From: Andrey Shvetsov <andrey.shvetsov@k2l.de>
 diff --git a/drivers/staging/most/hdm-dim2/dim2_hdm.c b/drivers/staging/most/hdm-dim2/dim2_hdm.c
 --- a/drivers/staging/most/hdm-dim2/dim2_hdm.c
 +++ b/drivers/staging/most/hdm-dim2/dim2_hdm.c
-@@ -896,6 +896,7 @@ static struct platform_driver dim2_driver = {
- 	.id_table = dim2_id,
+@@ -1101,6 +1101,7 @@ static struct platform_driver dim2_driver = {
+ 	.remove = dim2_remove,
  	.driver = {
  		.name = "hdm_dim2",
 +		.owner = THIS_MODULE,
+ 		.of_match_table = dim2_of_match,
  	},
  };
- 
