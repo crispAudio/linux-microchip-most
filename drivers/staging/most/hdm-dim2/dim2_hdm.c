@@ -14,6 +14,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/module.h>
+#include <linux/of_platform.h>
 #include <linux/printk.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
@@ -21,13 +22,13 @@
 #include <linux/interrupt.h>
 #include <linux/slab.h>
 #include <linux/io.h>
+#include <linux/clk.h>
 #include <linux/dma-mapping.h>
 #include <linux/sched.h>
 #include <linux/kthread.h>
 
 #include <mostcore.h>
 #include "dim2_hal.h"
-#include "dim2_hdm.h"
 #include "dim2_errors.h"
 #include "dim2_sysfs.h"
 
@@ -93,6 +94,9 @@ struct dim2_hdm {
 	struct most_interface most_iface;
 	char name[16 + sizeof "dim2-"];
 	void __iomem *io_base;
+	u8 clk_speed;
+	struct clk *clk;
+	struct clk *clk_pll;
 	struct task_struct *netinfo_task;
 	wait_queue_head_t netinfo_waitq;
 	int deliver_netinfo;
@@ -102,6 +106,12 @@ struct dim2_hdm {
 	struct medialb_bus bus;
 	void (*on_netinfo)(struct most_interface *,
 			   unsigned char, unsigned char *);
+	void (*disable_platform)(struct platform_device *);
+};
+
+struct dim2_platform_data {
+	int (*enable)(struct platform_device *);
+	void (*disable)(struct platform_device *);
 };
 
 #define iface_to_hdm(iface) container_of(iface, struct dim2_hdm, most_iface)
@@ -152,38 +162,6 @@ void dimcb_on_error(u8 error_id, const char *error_message)
 {
 	pr_err("dimcb_on_error: error_id - %d, error_message - %s\n", error_id,
 	       error_message);
-}
-
-/**
- * startup_dim - initialize the dim2 interface
- * @pdev: platform device
- */
-static int startup_dim(struct platform_device *pdev)
-{
-	struct dim2_hdm *dev = platform_get_drvdata(pdev);
-	struct dim2_platform_data *pdata = pdev->dev.platform_data;
-	u8 hal_ret;
-	int ret;
-
-	if (!pdata) {
-		pr_err("missing platform data\n");
-		return -EINVAL;
-	}
-
-	ret = pdata->init ? pdata->init(pdata, dev->io_base) : 0;
-	if (ret)
-		return ret;
-
-	pr_info("sync: num of frames per sub-buffer: %u\n", fcnt);
-	hal_ret = dim_startup(dev->io_base, pdata->clk_speed, fcnt);
-	if (hal_ret != DIM_NO_ERROR) {
-		pr_err("dim_startup failed: %d\n", hal_ret);
-		if (pdata && pdata->destroy)
-			pdata->destroy(pdata);
-		return -ENODEV;
-	}
-
-	return 0;
 }
 
 /**
@@ -710,12 +688,54 @@ static int poison_channel(struct most_interface *most_iface, int ch_idx)
 
 static void *dma_alloc(struct mbo *mbo, u32 size)
 {
-	return dma_alloc_coherent(NULL, size, &mbo->bus_address, GFP_KERNEL);
+	struct device *dev = mbo->ifp->dev;
+
+	return dma_alloc_coherent(dev, size, &mbo->bus_address, GFP_KERNEL);
 }
 
 static void dma_free(struct mbo *mbo, u32 size)
 {
-	dma_free_coherent(NULL, size, mbo->virt_address, mbo->bus_address);
+	struct device *dev = mbo->ifp->dev;
+
+	dma_free_coherent(dev, size, mbo->virt_address, mbo->bus_address);
+}
+
+static const struct of_device_id dim2_of_match[];
+
+static struct {
+	const char *clock_speed;
+	u8 clk_speed;
+} clk_mt[] = {
+	{ "256fs", CLK_256FS },
+	{ "512fs", CLK_512FS },
+	{ "1024fs", CLK_1024FS },
+	{ "2048fs", CLK_2048FS },
+	{ "3072fs", CLK_3072FS },
+	{ "4096fs", CLK_4096FS },
+	{ "6144fs", CLK_6144FS },
+	{ "8192fs", CLK_8192FS },
+};
+
+/**
+ * get_dim2_clk_speed - converts string to DIM2 clock speed value
+ *
+ * @clock_speed: string in the format "{NUMBER}fs"
+ * @val: pointer to get one of the CLK_{NUMBER}FS values
+ *
+ * By success stores one of the CLK_{NUMBER}FS in the *val and returns 0,
+ * otherwise returns -EINVAL.
+ */
+static int get_dim2_clk_speed(const char *clock_speed, u8 *val)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(clk_mt); i++) {
+		if (!strcmp(clock_speed, clk_mt[i].clock_speed)) {
+			*val = clk_mt[i].clk_speed;
+			return 0;
+		}
+	}
+	return -EINVAL;
 }
 
 /*
@@ -727,11 +747,16 @@ static void dma_free(struct mbo *mbo, u32 size)
  */
 static int dim2_probe(struct platform_device *pdev)
 {
+	const struct dim2_platform_data *pdata;
+	const char *clock_speed;
 	struct dim2_hdm *dev;
 	struct resource *res;
 	int ret, i;
 	struct kobject *kobj;
+	u8 hal_ret;
 	int irq;
+
+	enum { MLB_INT_IDX, AHB0_INT_IDX };
 
 	dev = devm_kzalloc(&pdev->dev, sizeof(*dev), GFP_KERNEL);
 	if (!dev)
@@ -740,43 +765,76 @@ static int dim2_probe(struct platform_device *pdev)
 	dev->atx_idx = -1;
 
 	platform_set_drvdata(pdev, dev);
+
+	ret = of_property_read_string(pdev->dev.of_node,
+				      "microchip,clock-speed", &clock_speed);
+	if (ret) {
+		dev_err(&pdev->dev, "missing dt property clock-speed\n");
+		return ret;
+	}
+
+	ret = get_dim2_clk_speed(clock_speed, &dev->clk_speed);
+	if (ret) {
+		dev_err(&pdev->dev, "bad dt property clock-speed\n");
+		return ret;
+	}
+
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	dev->io_base = devm_ioremap_resource(&pdev->dev, res);
 	if (IS_ERR(dev->io_base))
 		return PTR_ERR(dev->io_base);
 
-	irq = platform_get_irq(pdev, 0);
+	pdata = of_match_node(dim2_of_match, pdev->dev.of_node)->data;
+	ret = pdata && pdata->enable ? pdata->enable(pdev) : 0;
+	if (ret)
+		return ret;
+
+	dev->disable_platform = pdata ? pdata->disable : 0;
+
+	dev_info(&pdev->dev, "sync: num of frames per sub-buffer: %u\n", fcnt);
+	hal_ret = dim_startup(dev->io_base, dev->clk_speed, fcnt);
+	if (hal_ret != DIM_NO_ERROR) {
+		dev_err(&pdev->dev, "dim_startup failed: %d\n", hal_ret);
+		ret = -ENODEV;
+		goto err_disable_platform;
+	}
+
+	irq = platform_get_irq(pdev, AHB0_INT_IDX);
 	if (irq < 0) {
 		dev_err(&pdev->dev, "failed to get ahb0_int irq: %d\n", irq);
-		return irq;
+		ret = irq;
+		goto err_shutdown_dim;
 	}
 
 	ret = devm_request_irq(&pdev->dev, irq, dim2_ahb_isr, 0,
 			       "dim2_ahb0_int", dev);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to request ahb0_int irq %d\n", irq);
-		return ret;
+		goto err_shutdown_dim;
 	}
 
-	irq = platform_get_irq(pdev, 1);
+	irq = platform_get_irq(pdev, MLB_INT_IDX);
 	if (irq < 0) {
 		dev_err(&pdev->dev, "failed to get mlb_int irq: %d\n", irq);
-		return irq;
+		ret = irq;
+		goto err_shutdown_dim;
 	}
 
 	ret = devm_request_irq(&pdev->dev, irq, dim2_mlb_isr, 0,
 			       "dim2_mlb_int", dev);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to request mlb_int irq %d\n", irq);
-		return ret;
+		goto err_shutdown_dim;
 	}
 
 	init_waitqueue_head(&dev->netinfo_waitq);
 	dev->deliver_netinfo = 0;
-	dev->netinfo_task = kthread_run(&deliver_netinfo_thread, (void *)dev,
+	dev->netinfo_task = kthread_run(&deliver_netinfo_thread, dev,
 					"dim2_netinfo");
-	if (IS_ERR(dev->netinfo_task))
-		return PTR_ERR(dev->netinfo_task);
+	if (IS_ERR(dev->netinfo_task)) {
+		ret = PTR_ERR(dev->netinfo_task);
+		goto err_shutdown_dim;
+	}
 
 	for (i = 0; i < DMA_CHANNELS; i++) {
 		struct most_channel_capability *cap = dev->capabilities + i;
@@ -821,6 +879,7 @@ static int dim2_probe(struct platform_device *pdev)
 	dev->most_iface.poison_channel = poison_channel;
 	dev->most_iface.request_netinfo = request_netinfo;
 	dev->most_iface.extra_attrs = DBR_ATTRS;
+	dev->most_iface.dev = &pdev->dev;
 
 	kobj = most_register_interface(&dev->most_iface);
 	if (IS_ERR(kobj)) {
@@ -833,20 +892,17 @@ static int dim2_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_unreg_iface;
 
-	ret = startup_dim(pdev);
-	if (ret) {
-		dev_err(&pdev->dev, "failed to initialize DIM2\n");
-		goto err_destroy_bus;
-	}
-
 	return 0;
 
-err_destroy_bus:
-	dim2_sysfs_destroy(&dev->bus);
 err_unreg_iface:
 	most_deregister_interface(&dev->most_iface);
 err_stop_thread:
 	kthread_stop(dev->netinfo_task);
+err_shutdown_dim:
+	dim_shutdown();
+err_disable_platform:
+	if (dev->disable_platform)
+		dev->disable_platform(pdev);
 
 	return ret;
 }
@@ -860,48 +916,197 @@ err_stop_thread:
 static int dim2_remove(struct platform_device *pdev)
 {
 	struct dim2_hdm *dev = platform_get_drvdata(pdev);
-	struct dim2_platform_data *pdata = pdev->dev.platform_data;
 	unsigned long flags;
-
-	spin_lock_irqsave(&dim_lock, flags);
-	dim_shutdown();
-	spin_unlock_irqrestore(&dim_lock, flags);
-
-	if (pdata && pdata->destroy)
-		pdata->destroy(pdata);
 
 	dim2_sysfs_destroy(&dev->bus);
 	most_deregister_interface(&dev->most_iface);
 	kthread_stop(dev->netinfo_task);
 
-	/*
-	 * break link to local platform_device_id struct
-	 * to prevent crash by unload platform device module
-	 */
-	pdev->id_entry = NULL;
+	spin_lock_irqsave(&dim_lock, flags);
+	dim_shutdown();
+	spin_unlock_irqrestore(&dim_lock, flags);
+
+	if (dev->disable_platform)
+		dev->disable_platform(pdev);
 
 	return 0;
 }
 
-static const struct platform_device_id dim2_id[] = {
-	{ "medialb_dim2" },
-	{ }, /* Terminating entry */
+/* platform specific functions [[ */
+
+static int fsl_mx6_enable(struct platform_device *pdev)
+{
+	struct dim2_hdm *dev = platform_get_drvdata(pdev);
+	int ret;
+
+	dev->clk = devm_clk_get(&pdev->dev, "mlb");
+	if (IS_ERR_OR_NULL(dev->clk)) {
+		dev_err(&pdev->dev, "unable to get mlb clock\n");
+		return -EFAULT;
+	}
+
+	ret = clk_prepare_enable(dev->clk);
+	if (ret) {
+		dev_err(&pdev->dev, "%s\n", "clk_prepare_enable failed");
+		return ret;
+	}
+
+	if (dev->clk_speed >= CLK_2048FS) {
+		/* enable pll */
+		dev->clk_pll = devm_clk_get(&pdev->dev, "pll8_mlb");
+		if (IS_ERR_OR_NULL(dev->clk_pll)) {
+			dev_err(&pdev->dev, "unable to get mlb pll clock\n");
+			clk_disable_unprepare(dev->clk);
+			return -EFAULT;
+		}
+
+		writel(0x888, dev->io_base + 0x38);
+		clk_prepare_enable(dev->clk_pll);
+	}
+
+	return 0;
+}
+
+static void fsl_mx6_disable(struct platform_device *pdev)
+{
+	struct dim2_hdm *dev = platform_get_drvdata(pdev);
+
+	if (dev->clk_speed >= CLK_2048FS)
+		clk_disable_unprepare(dev->clk_pll);
+
+	clk_disable_unprepare(dev->clk);
+}
+
+static int rcar_h2_enable(struct platform_device *pdev)
+{
+	struct dim2_hdm *dev = platform_get_drvdata(pdev);
+	int ret;
+
+	dev->clk = devm_clk_get(&pdev->dev, NULL);
+	if (IS_ERR(dev->clk)) {
+		dev_err(&pdev->dev, "cannot get clock\n");
+		return PTR_ERR(dev->clk);
+	}
+
+	ret = clk_prepare_enable(dev->clk);
+	if (ret) {
+		dev_err(&pdev->dev, "%s\n", "clk_prepare_enable failed");
+		return ret;
+	}
+
+	if (dev->clk_speed >= CLK_2048FS) {
+		/* enable MLP pll and LVDS drivers */
+		writel(0x03, dev->io_base + 0x600);
+		/* set bias */
+		writel(0x888, dev->io_base + 0x38);
+	} else {
+		/* PLL */
+		writel(0x04, dev->io_base + 0x600);
+	}
+
+
+	/* BBCR = 0b11 */
+	writel(0x03, dev->io_base + 0x500);
+	writel(0x0002FF02, dev->io_base + 0x508);
+
+	return 0;
+}
+
+static void rcar_h2_disable(struct platform_device *pdev)
+{
+	struct dim2_hdm *dev = platform_get_drvdata(pdev);
+
+	clk_disable_unprepare(dev->clk);
+
+	/* disable PLLs and LVDS drivers */
+	writel(0x0, dev->io_base + 0x600);
+}
+
+static int rcar_m3_enable(struct platform_device *pdev)
+{
+	struct dim2_hdm *dev = platform_get_drvdata(pdev);
+	u32 enable_512fs = dev->clk_speed == CLK_512FS;
+	int ret;
+
+	dev->clk = devm_clk_get(&pdev->dev, NULL);
+	if (IS_ERR(dev->clk)) {
+		dev_err(&pdev->dev, "cannot get clock\n");
+		return PTR_ERR(dev->clk);
+	}
+
+	ret = clk_prepare_enable(dev->clk);
+	if (ret) {
+		dev_err(&pdev->dev, "%s\n", "clk_prepare_enable failed");
+		return ret;
+	}
+
+	/* PLL */
+	writel(0x04, dev->io_base + 0x600);
+
+	writel(enable_512fs, dev->io_base + 0x604);
+
+	/* BBCR = 0b11 */
+	writel(0x03, dev->io_base + 0x500);
+	writel(0x0002FF02, dev->io_base + 0x508);
+
+	return 0;
+}
+
+static void rcar_m3_disable(struct platform_device *pdev)
+{
+	struct dim2_hdm *dev = platform_get_drvdata(pdev);
+
+	clk_disable_unprepare(dev->clk);
+
+	/* disable PLLs and LVDS drivers */
+	writel(0x0, dev->io_base + 0x600);
+}
+
+/* ]] platform specific functions */
+
+enum dim2_platforms { FSL_MX6, RCAR_H2, RCAR_M3 };
+
+static struct dim2_platform_data plat_data[] = {
+	[FSL_MX6] = { .enable = fsl_mx6_enable, .disable = fsl_mx6_disable },
+	[RCAR_H2] = { .enable = rcar_h2_enable, .disable = rcar_h2_disable },
+	[RCAR_M3] = { .enable = rcar_m3_enable, .disable = rcar_m3_disable },
 };
 
-MODULE_DEVICE_TABLE(platform, dim2_id);
+static const struct of_device_id dim2_of_match[] = {
+	{
+		.compatible = "fsl,imx6q-mlb150",
+		.data = plat_data + FSL_MX6
+	},
+	{
+		.compatible = "renesas,mlp",
+		.data = plat_data + RCAR_H2
+	},
+	{
+		.compatible = "rcar,medialb-dim2",
+		.data = plat_data + RCAR_M3
+	},
+	{
+		.compatible = "xlnx,axi4-os62420_3pin-1.00.a",
+	},
+	{
+		.compatible = "xlnx,axi4-os62420_6pin-1.00.a",
+	},
+	{},
+};
+
+MODULE_DEVICE_TABLE(of, dim2_of_match);
 
 static struct platform_driver dim2_driver = {
 	.probe = dim2_probe,
 	.remove = dim2_remove,
-	.id_table = dim2_id,
 	.driver = {
 		.name = "hdm_dim2",
+		.of_match_table = dim2_of_match,
 	},
 };
 
 module_platform_driver(dim2_driver);
 
-MODULE_AUTHOR("Jain Roy Ambi <JainRoy.Ambi@microchip.com>");
 MODULE_AUTHOR("Andrey Shvetsov <andrey.shvetsov@k2l.de>");
 MODULE_DESCRIPTION("MediaLB DIM2 Hardware Dependent Module");
 MODULE_LICENSE("GPL");

@@ -6,11 +6,12 @@ From: Andrey Shvetsov <andrey.shvetsov@k2l.de>
 diff --git a/drivers/staging/most/hdm-dim2/dim2_hdm.c b/drivers/staging/most/hdm-dim2/dim2_hdm.c
 --- a/drivers/staging/most/hdm-dim2/dim2_hdm.c
 +++ b/drivers/staging/most/hdm-dim2/dim2_hdm.c
-@@ -718,6 +718,40 @@ static void dma_free(struct mbo *mbo, u32 size)
- 	dma_free_coherent(NULL, size, mbo->virt_address, mbo->bus_address);
+@@ -738,6 +738,44 @@ static int get_dim2_clk_speed(const char *clock_speed, u8 *val)
+ 	return -EINVAL;
  }
  
-+static void __iomem *my_ioremap_resource(struct device *dev, struct resource *res)
++static void __iomem *devmy_ioremap_resource(struct device *dev,
++					    struct resource *res)
 +{
 +	void __iomem *io_base;
 +	struct platform_device *pdev =
@@ -36,7 +37,8 @@ diff --git a/drivers/staging/most/hdm-dim2/dim2_hdm.c b/drivers/staging/most/hdm
 +	return io_base;
 +}
 +
-+static void my_unmap_release(struct platform_device *pdev, void __iomem *io_base)
++static void devmy_unmap_release(struct platform_device *pdev,
++				void __iomem *io_base)
 +{
 +	struct resource *res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 +
@@ -44,77 +46,34 @@ diff --git a/drivers/staging/most/hdm-dim2/dim2_hdm.c b/drivers/staging/most/hdm
 +	release_mem_region(res->start, resource_size(res));
 +}
 +
++#define devm_ioremap_resource devmy_ioremap_resource
++
  /*
   * dim2_probe - dim2 probe handler
   * @pdev: platform device structure
-@@ -741,42 +775,46 @@ static int dim2_probe(struct platform_device *pdev)
- 
- 	platform_set_drvdata(pdev, dev);
- 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
--	dev->io_base = devm_ioremap_resource(&pdev->dev, res);
-+	dev->io_base = my_ioremap_resource(&pdev->dev, res);
- 	if (IS_ERR(dev->io_base))
- 		return PTR_ERR(dev->io_base);
- 
- 	irq = platform_get_irq(pdev, 0);
- 	if (irq < 0) {
- 		dev_err(&pdev->dev, "failed to get ahb0_int irq: %d\n", irq);
--		return irq;
-+		ret = irq;
-+		goto err_unmap_release;
- 	}
- 
- 	ret = devm_request_irq(&pdev->dev, irq, dim2_ahb_isr, 0,
- 			       "dim2_ahb0_int", dev);
- 	if (ret) {
- 		dev_err(&pdev->dev, "failed to request ahb0_int irq %d\n", irq);
+@@ -787,7 +825,7 @@ static int dim2_probe(struct platform_device *pdev)
+ 	pdata = of_match_node(dim2_of_match, pdev->dev.of_node)->data;
+ 	ret = pdata && pdata->enable ? pdata->enable(pdev) : 0;
+ 	if (ret)
 -		return ret;
 +		goto err_unmap_release;
- 	}
  
- 	irq = platform_get_irq(pdev, 1);
- 	if (irq < 0) {
- 		dev_err(&pdev->dev, "failed to get mlb_int irq: %d\n", irq);
--		return irq;
-+		ret = irq;
-+		goto err_unmap_release;
- 	}
+ 	dev->disable_platform = pdata ? pdata->disable : 0;
  
- 	ret = devm_request_irq(&pdev->dev, irq, dim2_mlb_isr, 0,
- 			       "dim2_mlb_int", dev);
- 	if (ret) {
- 		dev_err(&pdev->dev, "failed to request mlb_int irq %d\n", irq);
--		return ret;
-+		goto err_unmap_release;
- 	}
- 
- 	init_waitqueue_head(&dev->netinfo_waitq);
- 	dev->deliver_netinfo = 0;
- 	dev->netinfo_task = kthread_run(&deliver_netinfo_thread, (void *)dev,
- 					"dim2_netinfo");
--	if (IS_ERR(dev->netinfo_task))
--		return PTR_ERR(dev->netinfo_task);
-+	if (IS_ERR(dev->netinfo_task)) {
-+		ret = PTR_ERR(dev->netinfo_task);
-+		goto err_unmap_release;
-+	}
- 
- 	for (i = 0; i < DMA_CHANNELS; i++) {
- 		struct most_channel_capability *cap = dev->capabilities + i;
-@@ -847,6 +885,8 @@ static int dim2_probe(struct platform_device *pdev)
- 	most_deregister_interface(&dev->most_iface);
- err_stop_thread:
- 	kthread_stop(dev->netinfo_task);
+@@ -903,6 +941,8 @@ static int dim2_probe(struct platform_device *pdev)
+ err_disable_platform:
+ 	if (dev->disable_platform)
+ 		dev->disable_platform(pdev);
 +err_unmap_release:
-+	my_unmap_release(pdev, dev->io_base);
++	devmy_unmap_release(pdev, dev->io_base);
  
  	return ret;
  }
-@@ -873,6 +913,7 @@ static int dim2_remove(struct platform_device *pdev)
- 	dim2_sysfs_destroy(&dev->bus);
- 	most_deregister_interface(&dev->most_iface);
- 	kthread_stop(dev->netinfo_task);
-+	my_unmap_release(pdev, dev->io_base);
+@@ -928,6 +968,7 @@ static int dim2_remove(struct platform_device *pdev)
  
- 	/*
- 	 * break link to local platform_device_id struct
+ 	if (dev->disable_platform)
+ 		dev->disable_platform(pdev);
++	devmy_unmap_release(pdev, dev->io_base);
+ 
+ 	return 0;
+ }

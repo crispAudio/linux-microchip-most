@@ -6,7 +6,7 @@ From: Andrey Shvetsov <andrey.shvetsov@k2l.de>
 diff --git a/drivers/staging/most/hdm-dim2/dim2_hdm.c b/drivers/staging/most/hdm-dim2/dim2_hdm.c
 --- a/drivers/staging/most/hdm-dim2/dim2_hdm.c
 +++ b/drivers/staging/most/hdm-dim2/dim2_hdm.c
-@@ -899,7 +899,26 @@ static struct platform_driver dim2_driver = {
+@@ -1105,7 +1105,26 @@ static struct platform_driver dim2_driver = {
  	},
  };
  
@@ -32,5 +32,5 @@ diff --git a/drivers/staging/most/hdm-dim2/dim2_hdm.c b/drivers/staging/most/hdm
 +module_init(dim2_hdm_init);
 +module_exit(dim2_hdm_exit);
  
- MODULE_AUTHOR("Jain Roy Ambi <JainRoy.Ambi@microchip.com>");
  MODULE_AUTHOR("Andrey Shvetsov <andrey.shvetsov@k2l.de>");
+ MODULE_DESCRIPTION("MediaLB DIM2 Hardware Dependent Module");

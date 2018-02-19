@@ -1,0 +1,64 @@
+Microchip INIC DIM2 (MediaLB) interface driver
+
+
+Required properties:
+
+- compatible: Must be one of the
+        "fsl,imx6q-mlb150",
+        "renesas,mlp",
+        "rcar,medialb-dim2",
+        "xlnx,axi4-os62420_3pin-1.00.a",
+        "xlnx,axi4-os62420_6pin-1.00.a".
+
+- interrupts: The interrupt number to the cpu.  The interrupt specifier format
+  depends on the interrupt controller.  The driver treats the device tree
+  interrupts with indexes 0 and 1 as the mlb- and the ahb0- DIM2 interrupts
+  correspondingly.
+
+- microchip,clock-speed: The clock speed of the Microchip INIC (Intelligent
+  Network Interface Controller).  This must be one of the "256fs", "512fs",
+  "1024fs", "2048fs", "3072fs", "4096fs", "6144fs", "8192fs".
+
+
+Examples:
+
+mlp: mlp@ec520000 {
+        compatible = "rcar,medialb-dim2";
+        reg = <0 0xec520000 0 0x800>;
+        clocks = <&cpg CPG_MOD 802>;
+        power-domains = <&sysc R8A7796_PD_ALWAYS_ON>;
+        status = "disabled";
+};
+
+&mlp {
+        pinctrl-0 = <&mlp_pins>;
+        pinctrl-names = "default";
+        interrupts =
+                <GIC_SPI 384 IRQ_TYPE_LEVEL_HIGH>,
+                <GIC_SPI 385 IRQ_TYPE_LEVEL_HIGH>,
+                <GIC_SPI 386 IRQ_TYPE_LEVEL_HIGH>;
+        microchip,clock-speed = "1024fs";
+        status = "okay";
+};
+
+or
+
+mlb: mlb@0218c000 {
+        compatible = "fsl,imx6q-mlb150";
+        reg = <0x0218c000 0x4000>;
+        interrupts = <0 53 IRQ_TYPE_LEVEL_HIGH>,
+                     <0 117 IRQ_TYPE_LEVEL_HIGH>,
+                     <0 126 IRQ_TYPE_LEVEL_HIGH>;
+        clocks = <&clks IMX6QDL_CLK_MLB>,
+                 <&clks IMX6QDL_CLK_PLL8_MLB>;
+        clock-names = "mlb", "pll8_mlb";
+        iram = <&ocram>;
+        status = "disabled";
+};
+
+&mlb {
+        pinctrl-names = "default";
+        pinctrl-0 = <&pinctrl_mlb>;
+        microchip,clock-speed = "4096fs";
+        status = "okay";
+};
