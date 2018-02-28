@@ -575,12 +575,17 @@ static int hdm_enqueue(struct most_interface *iface, int channel,
 	conf = &mdev->conf[channel];
 	dev = &mdev->usb_device->dev;
 
-	if (!mdev->usb_device)
-		return -ENODEV;
+	mutex_lock(&mdev->io_mutex);
+	if (!mdev->usb_device) {
+		retval = -ENODEV;
+		goto _exit;
+	}
 
 	urb = usb_alloc_urb(NO_ISOCHRONOUS_URB, GFP_ATOMIC);
-	if (!urb)
-		return -ENOMEM;
+	if (!urb) {
+		retval = -ENOMEM;
+		goto _exit;
+	}
 
 	if ((conf->direction & MOST_CH_TX) && mdev->padding_active[channel] &&
 	    hdm_add_padding(mdev, channel, mbo)) {
@@ -620,12 +625,14 @@ static int hdm_enqueue(struct most_interface *iface, int channel,
 		dev_err(dev, "URB submit failed with error %d.\n", retval);
 		goto _error_1;
 	}
-	return 0;
+	goto _exit;
 
 _error_1:
 	usb_unanchor_urb(urb);
 _error:
 	usb_free_urb(urb);
+_exit:
+	mutex_unlock(&mdev->io_mutex);
 	return retval;
 }
 
