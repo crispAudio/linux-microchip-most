@@ -22,6 +22,7 @@
 struct medialb_dci {
 	struct kobject kobj_group;
 	struct mutex mt; /* build vs show */
+	u8 ni_state;
 	u8 node_position;
 	u16 node_address;
 };

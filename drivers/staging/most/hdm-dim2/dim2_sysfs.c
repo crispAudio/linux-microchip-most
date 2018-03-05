@@ -90,6 +90,11 @@ struct dci_attr {
 	ssize_t (*show)(struct medialb_dci *dci, char *buf);
 };
 
+static ssize_t ni_state_show(struct medialb_dci *dci, char *buf)
+{
+	return sprintf(buf, "%d\n", dci->ni_state);
+}
+
 static ssize_t node_position_show(struct medialb_dci *dci, char *buf)
 {
 	return sprintf(buf, "%d\n", dci->node_position);
@@ -101,6 +106,7 @@ static ssize_t node_address_show(struct medialb_dci *dci, char *buf)
 }
 
 static struct dci_attr dci_attrs[] = {
+	__ATTR_RO(ni_state),
 	__ATTR_RO(node_position),
 	__ATTR_RO(node_address),
 };
@@ -108,6 +114,7 @@ static struct dci_attr dci_attrs[] = {
 static struct attribute *dci_default_attrs[] = {
 	&dci_attrs[0].attr,
 	&dci_attrs[1].attr,
+	&dci_attrs[2].attr,
 	NULL,
 };
 
