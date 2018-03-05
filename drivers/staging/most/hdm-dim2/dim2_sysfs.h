@@ -24,7 +24,7 @@ struct medialb_bus {
 
 struct dim2_hdm;
 
-int dim2_sysfs_probe(struct medialb_bus *bus, struct kobject *parent_kobj);
+int dim2_sysfs_probe(struct medialb_bus **busp, struct kobject *parent_kobj);
 void dim2_sysfs_destroy(struct medialb_bus *bus);
 
 /*

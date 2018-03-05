@@ -103,7 +103,7 @@ struct dim2_hdm {
 	unsigned char mac_addrs[6];
 	unsigned char link_state;
 	int atx_idx;
-	struct medialb_bus bus;
+	struct medialb_bus *bus;
 	void (*on_netinfo)(struct most_interface *,
 			   unsigned char, unsigned char *);
 	void (*disable_platform)(struct platform_device *);
@@ -918,7 +918,7 @@ static int dim2_remove(struct platform_device *pdev)
 	struct dim2_hdm *dev = platform_get_drvdata(pdev);
 	unsigned long flags;
 
-	dim2_sysfs_destroy(&dev->bus);
+	dim2_sysfs_destroy(dev->bus);
 	most_deregister_interface(&dev->most_iface);
 	kthread_stop(dev->netinfo_task);
 

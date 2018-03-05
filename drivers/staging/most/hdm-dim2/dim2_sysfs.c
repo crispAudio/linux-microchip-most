@@ -16,6 +16,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/kernel.h>
+#include <linux/slab.h>
 #include "dim2_sysfs.h"
 
 struct bus_attr {
@@ -45,6 +46,7 @@ static const struct attribute_group bus_attr_group = {
 
 static void bus_kobj_release(struct kobject *kobj)
 {
+	kfree(container_of(kobj, struct medialb_bus, kobj_group));
 }
 
 static ssize_t bus_kobj_attr_show(struct kobject *kobj, struct attribute *attr,
@@ -83,12 +85,17 @@ static struct kobj_type bus_ktype = {
 	.sysfs_ops = &bus_kobj_sysfs_ops,
 };
 
-int dim2_sysfs_probe(struct medialb_bus *bus, struct kobject *parent_kobj)
+int dim2_sysfs_probe(struct medialb_bus **busp, struct kobject *parent_kobj)
 {
 	int err;
+	struct medialb_bus *bus;
 
-	kobject_init(&bus->kobj_group, &bus_ktype);
-	err = kobject_add(&bus->kobj_group, parent_kobj, "bus");
+	bus = kzalloc(sizeof(*bus), GFP_KERNEL);
+	if (!bus)
+		return -ENOMEM;
+
+	err = kobject_init_and_add(&bus->kobj_group,
+				   &bus_ktype, parent_kobj, "bus");
 	if (err) {
 		pr_err("kobject_add() failed: %d\n", err);
 		goto err_kobject_add;
@@ -100,12 +107,14 @@ int dim2_sysfs_probe(struct medialb_bus *bus, struct kobject *parent_kobj)
 		goto err_create_group;
 	}
 
+	*busp = bus;
 	return 0;
 
 err_create_group:
 	kobject_put(&bus->kobj_group);
 
 err_kobject_add:
+	kfree(bus);
 	return err;
 }
 
