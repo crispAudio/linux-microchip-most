@@ -18,14 +18,20 @@
 
 #include <linux/kobject.h>
 
+struct medialb_dci {
+	struct kobject kobj_group;
+	u8 node_position;
+};
+
 struct medialb_bus {
 	struct kobject kobj_group;
 };
 
 struct dim2_hdm;
 
-int dim2_sysfs_probe(struct medialb_bus **busp, struct kobject *parent_kobj);
-void dim2_sysfs_destroy(struct medialb_bus *bus);
+int dim2_sysfs_probe(struct medialb_bus **busp, struct medialb_dci **dcip,
+		     struct kobject *parent_kobj);
+void dim2_sysfs_destroy(struct medialb_bus *bus, struct medialb_dci *dci);
 
 /*
  * callback,

@@ -104,6 +104,7 @@ struct dim2_hdm {
 	unsigned char link_state;
 	int atx_idx;
 	struct medialb_bus *bus;
+	struct medialb_dci *dci;
 	void (*on_netinfo)(struct most_interface *,
 			   unsigned char, unsigned char *);
 	void (*disable_platform)(struct platform_device *);
@@ -256,6 +257,7 @@ static void retrieve_netinfo(struct dim2_hdm *dev, struct mbo *mbo)
 {
 	u8 *data = mbo->virt_address;
 
+	dev->dci->node_position = data[11];
 	pr_info("Node Address: 0x%03x\n", (u16)data[16] << 8 | data[17]);
 	dev->link_state = data[18];
 	pr_info("NIState: %d\n", dev->link_state);
@@ -888,7 +890,7 @@ static int dim2_probe(struct platform_device *pdev)
 		goto err_stop_thread;
 	}
 
-	ret = dim2_sysfs_probe(&dev->bus, kobj);
+	ret = dim2_sysfs_probe(&dev->bus, &dev->dci, kobj);
 	if (ret)
 		goto err_unreg_iface;
 
@@ -918,7 +920,7 @@ static int dim2_remove(struct platform_device *pdev)
 	struct dim2_hdm *dev = platform_get_drvdata(pdev);
 	unsigned long flags;
 
-	dim2_sysfs_destroy(dev->bus);
+	dim2_sysfs_destroy(dev->bus, dev->dci);
 	most_deregister_interface(&dev->most_iface);
 	kthread_stop(dev->netinfo_task);
 

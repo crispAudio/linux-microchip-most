@@ -85,10 +85,64 @@ static struct kobj_type bus_ktype = {
 	.sysfs_ops = &bus_kobj_sysfs_ops,
 };
 
-int dim2_sysfs_probe(struct medialb_bus **busp, struct kobject *parent_kobj)
+struct dci_attr {
+	struct attribute attr;
+	ssize_t (*show)(struct medialb_dci *dci, char *buf);
+};
+
+static ssize_t node_position_show(struct medialb_dci *dci, char *buf)
+{
+	return sprintf(buf, "%d\n", dci->node_position);
+}
+
+static struct dci_attr dci_attrs[] = {
+	__ATTR_RO(node_position),
+};
+
+static struct attribute *dci_default_attrs[] = {
+	&dci_attrs[0].attr,
+	NULL,
+};
+
+static const struct attribute_group dci_attr_group = {
+	.attrs = dci_default_attrs,
+};
+
+static void dci_kobj_release(struct kobject *kobj)
+{
+	kfree(container_of(kobj, struct medialb_dci, kobj_group));
+}
+
+static ssize_t dci_kobj_attr_show(struct kobject *kobj, struct attribute *attr,
+				  char *buf)
+{
+	struct medialb_dci *dci =
+		container_of(kobj, struct medialb_dci, kobj_group);
+	struct dci_attr *xattr = container_of(attr, struct dci_attr, attr);
+	ssize_t ret;
+
+	if (!xattr->show)
+		return -EIO;
+
+	ret = xattr->show(dci, buf);
+	return ret;
+}
+
+static struct sysfs_ops const dci_kobj_sysfs_ops = {
+	.show = dci_kobj_attr_show,
+};
+
+static struct kobj_type dci_ktype = {
+	.release = dci_kobj_release,
+	.sysfs_ops = &dci_kobj_sysfs_ops,
+};
+
+int dim2_sysfs_probe(struct medialb_bus **busp, struct medialb_dci **dcip,
+		     struct kobject *parent_kobj)
 {
 	int err;
 	struct medialb_bus *bus;
+	struct medialb_dci *dci;
 
 	bus = kzalloc(sizeof(*bus), GFP_KERNEL);
 	if (!bus)
@@ -107,9 +161,36 @@ int dim2_sysfs_probe(struct medialb_bus **busp, struct kobject *parent_kobj)
 		goto err_create_group;
 	}
 
+	dci = kzalloc(sizeof(*dci), GFP_KERNEL);
+	if (!dci) {
+		err = -ENOMEM;
+		goto err_kzalloc;
+	}
+
+	err = kobject_init_and_add(&dci->kobj_group,
+				   &dci_ktype, parent_kobj, "dci");
+	if (err) {
+		pr_err("kobject_add() failed: %d\n", err);
+		goto err_kobject_add_dci;
+	}
+
+	err = sysfs_create_group(&dci->kobj_group, &dci_attr_group);
+	if (err) {
+		pr_err("sysfs_create_group() failed: %d\n", err);
+		goto err_create_dci_group;
+	}
+
 	*busp = bus;
+	*dcip = dci;
 	return 0;
 
+err_create_dci_group:
+	kobject_put(&dci->kobj_group);
+
+err_kobject_add_dci:
+	kfree(dci);
+
+err_kzalloc:
 err_create_group:
 	kobject_put(&bus->kobj_group);
 
@@ -118,7 +199,8 @@ err_kobject_add:
 	return err;
 }
 
-void dim2_sysfs_destroy(struct medialb_bus *bus)
+void dim2_sysfs_destroy(struct medialb_bus *bus, struct medialb_dci *dci)
 {
+	kobject_put(&dci->kobj_group);
 	kobject_put(&bus->kobj_group);
 }
