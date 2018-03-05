@@ -84,7 +84,6 @@ struct hdm_channel {
  * @netinfo_task: thread to deliver network status
  * @netinfo_waitq: waitq for the thread to sleep
  * @deliver_netinfo: to identify whether network status received
- * @mac_addrs: INIC mac address
  * @atx_idx: index of async tx channel
  */
 struct dim2_hdm {
@@ -99,7 +98,6 @@ struct dim2_hdm {
 	struct task_struct *netinfo_task;
 	wait_queue_head_t netinfo_waitq;
 	int deliver_netinfo;
-	unsigned char mac_addrs[6];
 	int atx_idx;
 	struct medialb_bus *bus;
 	struct medialb_dci *dci;
@@ -235,7 +233,7 @@ static int deliver_netinfo_thread(void *data)
 			if (dev->on_netinfo) {
 				dev->on_netinfo(&dev->most_iface,
 						dev->dci->ni_state,
-						dev->mac_addrs);
+						dev->dci->mep_eui48);
 			}
 		}
 	}
@@ -259,8 +257,8 @@ static void retrieve_netinfo(struct dim2_hdm *dev, struct mbo *mbo)
 	dev->dci->ni_state = data[18];
 	dev->dci->node_position = data[11];
 	dev->dci->node_address = (u16)data[16] << 8 | data[17];
+	memcpy(dev->dci->mep_eui48, data + 19, 6);
 	mutex_unlock(&dev->dci->mt);
-	memcpy(dev->mac_addrs, data + 19, 6);
 	dev->deliver_netinfo++;
 	wake_up_interruptible(&dev->netinfo_waitq);
 }

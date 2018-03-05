@@ -105,16 +105,26 @@ static ssize_t node_address_show(struct medialb_dci *dci, char *buf)
 	return sprintf(buf, "0x%04x\n", dci->node_address);
 }
 
+static ssize_t mep_eui48_show(struct medialb_dci *dci, char *buf)
+{
+	const u8 *p = dci->mep_eui48;
+
+	return sprintf(buf, "%02x:%02x:%02x:%02x:%02x:%02x\n",
+		       p[0], p[1], p[2], p[3], p[4], p[5]);
+}
+
 static struct dci_attr dci_attrs[] = {
 	__ATTR_RO(ni_state),
 	__ATTR_RO(node_position),
 	__ATTR_RO(node_address),
+	__ATTR_RO(mep_eui48),
 };
 
 static struct attribute *dci_default_attrs[] = {
 	&dci_attrs[0].attr,
 	&dci_attrs[1].attr,
 	&dci_attrs[2].attr,
+	&dci_attrs[3].attr,
 	NULL,
 };
 

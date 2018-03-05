@@ -25,6 +25,7 @@ struct medialb_dci {
 	u8 ni_state;
 	u8 node_position;
 	u16 node_address;
+	u8 mep_eui48[6];
 };
 
 struct medialb_bus {
