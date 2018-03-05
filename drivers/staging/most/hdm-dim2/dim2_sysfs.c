@@ -95,12 +95,19 @@ static ssize_t node_position_show(struct medialb_dci *dci, char *buf)
 	return sprintf(buf, "%d\n", dci->node_position);
 }
 
+static ssize_t node_address_show(struct medialb_dci *dci, char *buf)
+{
+	return sprintf(buf, "0x%04x\n", dci->node_address);
+}
+
 static struct dci_attr dci_attrs[] = {
 	__ATTR_RO(node_position),
+	__ATTR_RO(node_address),
 };
 
 static struct attribute *dci_default_attrs[] = {
 	&dci_attrs[0].attr,
+	&dci_attrs[1].attr,
 	NULL,
 };
 
@@ -124,7 +131,9 @@ static ssize_t dci_kobj_attr_show(struct kobject *kobj, struct attribute *attr,
 	if (!xattr->show)
 		return -EIO;
 
+	mutex_lock(&dci->mt);
 	ret = xattr->show(dci, buf);
+	mutex_unlock(&dci->mt);
 	return ret;
 }
 
@@ -166,6 +175,8 @@ int dim2_sysfs_probe(struct medialb_bus **busp, struct medialb_dci **dcip,
 		err = -ENOMEM;
 		goto err_kzalloc;
 	}
+
+	mutex_init(&dci->mt);
 
 	err = kobject_init_and_add(&dci->kobj_group,
 				   &dci_ktype, parent_kobj, "dci");

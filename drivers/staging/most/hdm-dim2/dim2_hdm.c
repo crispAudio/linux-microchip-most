@@ -257,8 +257,10 @@ static void retrieve_netinfo(struct dim2_hdm *dev, struct mbo *mbo)
 {
 	u8 *data = mbo->virt_address;
 
+	mutex_lock(&dev->dci->mt);
 	dev->dci->node_position = data[11];
-	pr_info("Node Address: 0x%03x\n", (u16)data[16] << 8 | data[17]);
+	dev->dci->node_address = (u16)data[16] << 8 | data[17];
+	mutex_unlock(&dev->dci->mt);
 	dev->link_state = data[18];
 	pr_info("NIState: %d\n", dev->link_state);
 	memcpy(dev->mac_addrs, data + 19, 6);
