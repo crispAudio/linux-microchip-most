@@ -17,6 +17,16 @@
 #define	DIM2_SYSFS_H
 
 #include <linux/kobject.h>
+#include <linux/mutex.h>
+
+struct medialb_dci {
+	struct kobject kobj_group;
+	struct mutex mt; /* build vs show */
+	u8 ni_state;
+	u8 node_position;
+	u16 node_address;
+	u8 mep_eui48[6];
+};
 
 struct medialb_bus {
 	struct kobject kobj_group;
@@ -24,8 +34,9 @@ struct medialb_bus {
 
 struct dim2_hdm;
 
-int dim2_sysfs_probe(struct medialb_bus *bus, struct kobject *parent_kobj);
-void dim2_sysfs_destroy(struct medialb_bus *bus);
+int dim2_sysfs_probe(struct medialb_bus **busp, struct medialb_dci **dcip,
+		     struct kobject *parent_kobj);
+void dim2_sysfs_destroy(struct medialb_bus *bus, struct medialb_dci *dci);
 
 /*
  * callback,

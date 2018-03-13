@@ -84,8 +84,6 @@ struct hdm_channel {
  * @netinfo_task: thread to deliver network status
  * @netinfo_waitq: waitq for the thread to sleep
  * @deliver_netinfo: to identify whether network status received
- * @mac_addrs: INIC mac address
- * @link_state: network link state
  * @atx_idx: index of async tx channel
  */
 struct dim2_hdm {
@@ -100,10 +98,9 @@ struct dim2_hdm {
 	struct task_struct *netinfo_task;
 	wait_queue_head_t netinfo_waitq;
 	int deliver_netinfo;
-	unsigned char mac_addrs[6];
-	unsigned char link_state;
 	int atx_idx;
-	struct medialb_bus bus;
+	struct medialb_bus *bus;
+	struct medialb_dci *dci;
 	void (*on_netinfo)(struct most_interface *,
 			   unsigned char, unsigned char *);
 	void (*disable_platform)(struct platform_device *);
@@ -235,8 +232,8 @@ static int deliver_netinfo_thread(void *data)
 			dev->deliver_netinfo--;
 			if (dev->on_netinfo) {
 				dev->on_netinfo(&dev->most_iface,
-						dev->link_state,
-						dev->mac_addrs);
+						dev->dci->ni_state,
+						dev->dci->mep_eui48);
 			}
 		}
 	}
@@ -256,10 +253,12 @@ static void retrieve_netinfo(struct dim2_hdm *dev, struct mbo *mbo)
 {
 	u8 *data = mbo->virt_address;
 
-	pr_info("Node Address: 0x%03x\n", (u16)data[16] << 8 | data[17]);
-	dev->link_state = data[18];
-	pr_info("NIState: %d\n", dev->link_state);
-	memcpy(dev->mac_addrs, data + 19, 6);
+	mutex_lock(&dev->dci->mt);
+	dev->dci->ni_state = data[18];
+	dev->dci->node_position = data[11];
+	dev->dci->node_address = (u16)data[16] << 8 | data[17];
+	memcpy(dev->dci->mep_eui48, data + 19, 6);
+	mutex_unlock(&dev->dci->mt);
 	dev->deliver_netinfo++;
 	wake_up_interruptible(&dev->netinfo_waitq);
 }
@@ -888,7 +887,7 @@ static int dim2_probe(struct platform_device *pdev)
 		goto err_stop_thread;
 	}
 
-	ret = dim2_sysfs_probe(&dev->bus, kobj);
+	ret = dim2_sysfs_probe(&dev->bus, &dev->dci, kobj);
 	if (ret)
 		goto err_unreg_iface;
 
@@ -918,7 +917,7 @@ static int dim2_remove(struct platform_device *pdev)
 	struct dim2_hdm *dev = platform_get_drvdata(pdev);
 	unsigned long flags;
 
-	dim2_sysfs_destroy(&dev->bus);
+	dim2_sysfs_destroy(dev->bus, dev->dci);
 	most_deregister_interface(&dev->most_iface);
 	kthread_stop(dev->netinfo_task);
 
