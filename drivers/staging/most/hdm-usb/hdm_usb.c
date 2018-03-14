@@ -573,7 +573,6 @@ static int hdm_enqueue(struct most_interface *iface, int channel,
 
 	mdev = to_mdev(iface);
 	conf = &mdev->conf[channel];
-	dev = &mdev->usb_device->dev;
 
 	mutex_lock(&mdev->io_mutex);
 	if (!mdev->usb_device) {
@@ -581,6 +580,7 @@ static int hdm_enqueue(struct most_interface *iface, int channel,
 		goto _exit;
 	}
 
+	dev = &mdev->usb_device->dev;
 	urb = usb_alloc_urb(NO_ISOCHRONOUS_URB, GFP_ATOMIC);
 	if (!urb) {
 		retval = -ENOMEM;
