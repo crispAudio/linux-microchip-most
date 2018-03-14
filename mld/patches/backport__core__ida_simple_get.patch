@@ -6,7 +6,7 @@ From: Andrey Shvetsov <andrey.shvetsov@k2l.de>
 diff --git a/drivers/staging/most/aim-cdev/cdev.c b/drivers/staging/most/aim-cdev/cdev.c
 --- a/drivers/staging/most/aim-cdev/cdev.c
 +++ b/drivers/staging/most/aim-cdev/cdev.c
-@@ -30,6 +30,11 @@ static struct ida minor_id;
+@@ -32,6 +32,11 @@ static struct ida minor_id;
  static unsigned int major;
  static struct most_aim cdev_aim;
  

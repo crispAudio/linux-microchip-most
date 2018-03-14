@@ -42,15 +42,8 @@ CFLAGS_networking.o := -I$(src)/mostcore
 # CFLAGS_hdm_i2c.o := -I$(src)/mostcore
 
 ## uncomment below to use DIM2 interface
-# obj-m += hdm_dim2.o hdm_dim2_pd.o
+# obj-m += hdm_dim2.o
 # hdm_dim2-y := hdm-dim2/dim2_hdm.o hdm-dim2/dim2_hal.o hdm-dim2/dim2_sysfs.o
-## uncomment only one in the [[
-# hdm_dim2_pd-y := hdm-dim2/platform/dim2_mx6q_dt.o
-# hdm_dim2_pd-y := hdm-dim2/platform/dim2_arwen_mlb3.o
-# hdm_dim2_pd-y := hdm-dim2/platform/dim2_arwen_mlb6.o
-# hdm_dim2_pd-y := hdm-dim2/platform/dim2_h2_dt.o
-# hdm_dim2_pd-y := hdm-dim2/platform/dim2_mx6q.o
-## ]]
 # CFLAGS_dim2_hdm.o := -I$(src)/mostcore
 
 obj-m += hdm_usb.o

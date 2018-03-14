@@ -68,15 +68,9 @@ local_fetch() {
 	get_src hdm-dim2/dim2_hal.c
 	get_src hdm-dim2/dim2_hal.h
 	get_src hdm-dim2/dim2_hdm.c
-	get_src hdm-dim2/dim2_hdm.h
 	get_src hdm-dim2/dim2_reg.h
 	get_src hdm-dim2/dim2_sysfs.c
 	get_src hdm-dim2/dim2_sysfs.h
-	get_src hdm-dim2/platform/dim2_arwen_mlb3.c
-	get_src hdm-dim2/platform/dim2_arwen_mlb6.c
-	get_src hdm-dim2/platform/dim2_h2_dt.c
-	get_src hdm-dim2/platform/dim2_mx6q.c
-	get_src hdm-dim2/platform/dim2_mx6q_dt.c
 	get_src hdm-i2c/hdm_i2c.c
 	get_src hdm-i2c/platform/plat_imx6q.c
 	get_src hdm-i2c/platform/plat_zynq.c
