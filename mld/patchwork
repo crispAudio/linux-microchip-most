@@ -12,7 +12,7 @@ set -o errexit
 
 show_usage() {
 	cat <<EOF
-patchwork - Utility to work with MOST Linus Driver pathes.
+patchwork - Utility to work with MOST Linux Driver pathes.
 
 Usage:
   export KDIR=...
