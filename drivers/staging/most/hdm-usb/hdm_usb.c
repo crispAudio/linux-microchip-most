@@ -574,11 +574,6 @@ static int hdm_enqueue(struct most_interface *iface, int channel,
 	conf = &mdev->conf[channel];
 
 	mutex_lock(&mdev->io_mutex);
-	if (!mdev->usb_device) {
-		retval = -ENODEV;
-		goto _exit;
-	}
-
 	urb = usb_alloc_urb(NO_ISOCHRONOUS_URB, GFP_ATOMIC);
 	if (!urb) {
 		retval = -ENOMEM;
@@ -1167,7 +1162,7 @@ hdm_probe(struct usb_interface *interface, const struct usb_device_id *id)
 	setup_timer(&mdev->link_stat_timer, link_stat_timer_handler,
 		    (unsigned long)mdev);
 
-	mdev->usb_device = usb_dev;
+	mdev->usb_device = usb_get_dev(usb_dev);
 	mdev->link_stat_timer.expires = jiffies + (2 * HZ);
 
 	mdev->iface.mod = hdm_usb_fops.owner;
@@ -1284,6 +1279,8 @@ exit_free2:
 exit_free1:
 	kfree(mdev->conf);
 exit_free:
+	usb_set_intfdata(interface, NULL);
+	usb_put_dev(mdev->usb_device);
 	kfree(mdev);
 exit_ENOMEM:
 	if (ret == 0 || ret == -ENOMEM) {
@@ -1306,16 +1303,14 @@ static void hdm_disconnect(struct usb_interface *interface)
 {
 	struct most_dev *mdev = usb_get_intfdata(interface);
 
-	mutex_lock(&mdev->io_mutex);
-	usb_set_intfdata(interface, NULL);
-	mdev->usb_device = NULL;
-	mutex_unlock(&mdev->io_mutex);
-
 	del_timer_sync(&mdev->link_stat_timer);
 	cancel_work_sync(&mdev->poll_work_obj);
 
 	destroy_most_dci_obj(mdev->dci);
 	most_deregister_interface(&mdev->iface);
+
+	usb_set_intfdata(interface, NULL);
+	usb_put_dev(mdev->usb_device);
 
 	kfree(mdev->busy_urbs);
 	kfree(mdev->cap);
