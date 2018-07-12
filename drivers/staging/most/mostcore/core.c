@@ -692,7 +692,8 @@ static struct kset *most_inst_kset;
  *
  * Returns a pointer to the instance object or NULL when something went wrong.
  */
-static struct most_inst_obj *create_most_inst_obj(const char *name)
+static struct most_inst_obj *create_most_inst_obj(const char *name,
+						  struct most_interface *iface)
 {
 	struct most_inst_obj *inst;
 	int retval;
@@ -701,6 +702,7 @@ static struct most_inst_obj *create_most_inst_obj(const char *name)
 	if (!inst)
 		return NULL;
 	inst->kobj.kset = most_inst_kset;
+	inst->iface = iface;
 	retval = kobject_init_and_add(&inst->kobj, &most_inst_ktype, NULL,
 				      "%s", name);
 	if (retval) {
@@ -1710,7 +1712,7 @@ struct kobject *most_register_interface(struct most_interface *iface)
 	}
 	snprintf(name, STRING_SIZE, "mdev%d", id);
 
-	inst = create_most_inst_obj(name);
+	inst = create_most_inst_obj(name, iface);
 	if (!inst) {
 		pr_info("Failed to allocate interface instance\n");
 		ida_simple_remove(&mdev_id, id);
@@ -1740,7 +1742,6 @@ struct kobject *most_register_interface(struct most_interface *iface)
 	iface->attrs[i] = NULL;
 
 	INIT_LIST_HEAD(&inst->channel_list);
-	inst->iface = iface;
 	inst->dev_id = id;
 	list_add_tail(&inst->list, &instance_list);
 
