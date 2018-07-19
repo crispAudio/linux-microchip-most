@@ -467,7 +467,7 @@ static const struct snd_pcm_ops pcm_ops = {
 };
 
 static int split_arg_list(char *buf, char **card_name, u16 *ch_num,
-			  char **sample_res)
+			  char **sample_res, const char **pcm_rate)
 {
 	char *num;
 	int ret;
@@ -483,9 +483,12 @@ static int split_arg_list(char *buf, char **card_name, u16 *ch_num,
 	ret = kstrtou16(num, 0, ch_num);
 	if (ret)
 		goto err;
-	*sample_res = strsep(&buf, ".\n");
+	*sample_res = strsep(&buf, "x\n");
 	if (!*sample_res)
 		goto err;
+	*pcm_rate = strsep(&buf, "\n");
+	if (!*pcm_rate)
+		*pcm_rate = "48kHz";
 	return 0;
 
 err:
@@ -504,11 +507,23 @@ static const struct sample_resolution_info {
 	{ "32", 4, SNDRV_PCM_FMTBIT_S32_LE | SNDRV_PCM_FMTBIT_S32_BE },
 };
 
-static int audio_set_hw_params(struct snd_pcm_hardware *pcm_hw,
-			       u16 ch_num, char *sample_res,
+static const struct pcm_rate_info {
+	const char *pcm_rate;
+	int k;
+	unsigned int rates;
+	unsigned int rate_min;
+	unsigned int rate_max;
+} rinfo[] = {
+	{ "48kHz", 1, SNDRV_PCM_RATE_48000, 48000, 48000 },
+	{ "96kHz", 2, SNDRV_PCM_RATE_96000, 96000, 96000 },
+	{ "192kHz", 4, SNDRV_PCM_RATE_192000, 192000, 192000 },
+};
+
+static int audio_set_hw_params(struct snd_pcm_hardware *pcm_hw, u16 ch_num,
+			       const char *sample_res, const char *pcm_rate,
 			       struct most_channel_config *cfg)
 {
-	int i;
+	int i, r;
 
 	for (i = 0; i < ARRAY_SIZE(sinfo); i++) {
 		if (!strcmp(sample_res, sinfo[i].sample_res))
@@ -518,20 +533,29 @@ static int audio_set_hw_params(struct snd_pcm_hardware *pcm_hw,
 	return -EIO;
 
 found:
+
+	for (r = 0; r < ARRAY_SIZE(rinfo); r++) {
+		if (!strcmp(pcm_rate, rinfo[r].pcm_rate))
+			goto rate_found;
+	}
+	pr_err("Unsupported PCM rate format\n");
+	return -EIO;
+
+rate_found:
 	if (!ch_num) {
 		pr_err("Bad number of channels\n");
 		return -EINVAL;
 	}
 
-	if (cfg->subbuffer_size != ch_num * sinfo[i].bytes) {
+	if (cfg->subbuffer_size != ch_num * sinfo[i].bytes * rinfo[r].k) {
 		pr_err("Audio resolution doesn't fit subbuffer size\n");
 		return -EINVAL;
 	}
 
 	pcm_hw->info = MOST_PCM_INFO;
-	pcm_hw->rates = SNDRV_PCM_RATE_48000;
-	pcm_hw->rate_min = 48000;
-	pcm_hw->rate_max = 48000;
+	pcm_hw->rates = rinfo[r].rates;
+	pcm_hw->rate_min = rinfo[r].rate_min;
+	pcm_hw->rate_max = rinfo[r].rate_max;
 	pcm_hw->buffer_bytes_max = cfg->num_buffers * cfg->buffer_size;
 	pcm_hw->period_bytes_min = cfg->buffer_size;
 	pcm_hw->period_bytes_max = cfg->buffer_size;
@@ -570,6 +594,7 @@ static int audio_probe_channel(struct most_interface *iface, int channel_id,
 	char *card_name;
 	u16 ch_num;
 	char *sample_res;
+	const char *pcm_rate;
 
 	if (!iface)
 		return -EINVAL;
@@ -593,7 +618,8 @@ static int audio_probe_channel(struct most_interface *iface, int channel_id,
 		direction = SNDRV_PCM_STREAM_CAPTURE;
 	}
 
-	ret = split_arg_list(arg_list, &card_name, &ch_num, &sample_res);
+	ret = split_arg_list(arg_list, &card_name, &ch_num, &sample_res,
+			     &pcm_rate);
 	if (ret < 0)
 		return ret;
 
@@ -610,7 +636,7 @@ static int audio_probe_channel(struct most_interface *iface, int channel_id,
 	init_waitqueue_head(&channel->playback_waitq);
 
 	ret = audio_set_hw_params(&channel->pcm_hardware, ch_num, sample_res,
-				  cfg); 
+				  pcm_rate, cfg);
 	if (ret)
 		goto err_free_card;
 
