@@ -28,6 +28,7 @@
 #include <linux/io.h>
 #include <linux/err.h>
 #include <linux/stat.h>
+#include <linux/dma-mapping.h>
 
 #include <mostcore.h>
 
@@ -1247,7 +1248,19 @@ static void complete_all_mbos(struct list_head *head)
 	pr_info("Returned %u mbos", mbo_cnt);
 }
 
+static void *dma_alloc(struct mbo *mbo, u32 size)
+{
+	struct device *dev = mbo->ifp->dev;
 
+	return dma_alloc_coherent(dev, size, &mbo->bus_address, GFP_KERNEL);
+}
+
+static void dma_free(struct mbo *mbo, u32 size)
+{
+	struct device *dev = mbo->ifp->dev;
+
+	dma_free_coherent(dev, size, mbo->virt_address, mbo->bus_address);
+}
 
 MODULE_DEVICE_TABLE(of, i2s_id);
 
@@ -1358,7 +1371,10 @@ static int i2s_probe(struct platform_device *pdev)
 	dev->most_iface.channel_vector = dev->capabilites;
 	dev->most_iface.configure = configure_channel;
 	dev->most_iface.enqueue = enqueue;
+	dev->most_iface.dma_alloc = dma_alloc;
+	dev->most_iface.dma_free = dma_free;
 	dev->most_iface.poison_channel = poison_channel;
+	dev->most_iface.dev = &pdev->dev;
 
 	kobj = most_register_interface(&dev->most_iface);
 	if (IS_ERR(kobj)) {
