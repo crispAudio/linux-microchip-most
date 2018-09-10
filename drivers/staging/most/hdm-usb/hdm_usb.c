@@ -832,15 +832,15 @@ static void wq_clear_halt(struct work_struct *wq_obj)
 	unsigned int channel = clear_work->channel;
 	int pipe = clear_work->pipe;
 
-	mutex_lock(&mdev->io_mutex);
 	most_stop_enqueue(&mdev->iface, channel);
+	mutex_lock(&mdev->io_mutex);
 	usb_kill_anchored_urbs(&mdev->busy_urbs[channel]);
 	if (usb_clear_halt(mdev->usb_device, pipe))
 		dev_warn(&mdev->usb_device->dev, "Failed to reset endpoint.\n");
 
 	mdev->is_channel_healthy[channel] = true;
-	most_resume_enqueue(&mdev->iface, channel);
 	mutex_unlock(&mdev->io_mutex);
+	most_resume_enqueue(&mdev->iface, channel);
 }
 
 /**
