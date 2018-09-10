@@ -33,6 +33,14 @@ make_generator() {
 	echo "CFLAGS_t.o := -Werror=implicit-int -Werror=implicit-function-declaration"
 }
 
+zero_test_generator() {
+	echo "#include <linux/module.h>"
+	echo "static int __init test_init(void) { return 0; }"
+	echo "static void __exit test_exit(void) {}"
+	echo "module_init(test_init);"
+	echo "module_exit(test_exit);"
+}
+
 pd_test_generator() {
 	echo "#include <linux/module.h>"
 	echo "#include <linux/platform_device.h>"
@@ -69,6 +77,23 @@ show_if_unapplied() {
 	local PATCH="$1__$2.patch"
 	>>.patched
 	cat .patched |grep -q "^${PATCH}$" || echo "$PATCH"
+}
+
+zero_test() {
+	rm -rf _tmp
+	mkdir _tmp
+	make_generator > _tmp/Makefile
+	zero_test_generator > _tmp/t.c
+	make -C ${KDIR:-/lib/modules/$(uname -r)/build} M=$(pwd)/_tmp modules >.make.log 2>&1 || {
+		>&2 cat .make.log
+		>&2 echo
+		>&2 echo "zero test failed (check environment variables)"
+		>&2 echo "KDIR=$KDIR"
+		>&2 echo "CROSS_COMPILE=$CROSS_COMPILE"
+		>&2 echo "ARCH=$ARCH"
+		return 1;
+	}
+	return 0
 }
 
 check_mk() {
@@ -108,9 +133,11 @@ show_mandatory_if_unapplied() {
 
 case "${1:-test}" in
 (test)
+	zero_test || exit 1
 	show_mandatory_if_unapplied
 	;;
 (patch)
+	zero_test || exit 1
 	(show_if_unapplied backport hdm-dim2__add_module_owner
 	 show_if_unapplied backport hdm-i2c__add_module_owner
 	 show_mandatory_if_unapplied
