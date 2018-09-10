@@ -34,12 +34,14 @@ make_generator() {
 }
 
 pd_test_generator() {
+	echo "#include <linux/module.h>"
 	echo "#include <linux/platform_device.h>"
 	echo "static struct platform_driver xx;"
 	echo "module_platform_driver(xx);"
 }
 
 usbd_test_generator() {
+	echo "#include <linux/module.h>"
 	echo "#include <linux/usb.h>"
 	echo "static struct usb_driver xx;"
 	echo "module_usb_driver(xx);"
