@@ -142,7 +142,11 @@ case "${1:-test}" in
 	 show_mandatory_if_unapplied
 	 show_if_unapplied feature core_autoconf) |
 		while read x; do echo "apply $x ..."
-			patch -p4 --force < patches/$x && echo "$x" >>.patched
+			if [ -e "patches/$x" ]; then
+				patch -p4 --force < patches/$x && echo "$x" >>.patched
+			else
+				>&2 echo "missing patches/$x"
+			fi
 			echo
 		done
 	;;
