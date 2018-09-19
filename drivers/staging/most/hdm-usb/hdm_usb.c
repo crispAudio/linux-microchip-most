@@ -109,6 +109,7 @@ struct clear_hold_work {
  */
 struct most_dev {
 	struct kobject *parent;
+	struct kref refc;
 	struct usb_device *usb_device;
 	struct most_interface iface;
 	struct most_channel_capability *cap;
@@ -120,6 +121,7 @@ struct most_dev {
 	spinlock_t channel_lock[MAX_NUM_ENDPOINTS]; /* sync channel access */
 	bool padding_active[MAX_NUM_ENDPOINTS];
 	bool is_channel_healthy[MAX_NUM_ENDPOINTS];
+	bool is_present;
 	struct clear_hold_work clear_work[MAX_NUM_ENDPOINTS];
 	struct usb_anchor *busy_urbs;
 	struct mutex io_mutex;
@@ -134,6 +136,17 @@ struct most_dev {
 
 static void wq_clear_halt(struct work_struct *wq_obj);
 static void wq_netinfo(struct work_struct *wq_obj);
+
+static void mdev_delete(struct kref *refc)
+{
+	struct most_dev *mdev = container_of(refc, struct most_dev, refc);
+
+	usb_put_dev(mdev->usb_device);
+	kfree(mdev->busy_urbs);
+	kfree(mdev->ep_address);
+	kfree(mdev->conf);
+	kfree(mdev);
+}
 
 /**
  * drci_rd_reg - read a DCI register
@@ -574,8 +587,10 @@ static int hdm_enqueue(struct most_interface *iface, int channel,
 	conf = &mdev->conf[channel];
 
 	mutex_lock(&mdev->io_mutex);
-	if (!mdev->usb_device)
-		return -ENODEV;
+	if (!mdev->is_present) {
+		retval = -ENODEV;
+		goto _exit;
+	}
 
 	dev = &mdev->usb_device->dev;
 	urb = usb_alloc_urb(NO_ISOCHRONOUS_URB, GFP_ATOMIC);
@@ -1160,6 +1175,7 @@ hdm_probe(struct usb_interface *interface, const struct usb_device_id *id)
 		goto exit_ENOMEM;
 
 	usb_set_intfdata(interface, mdev);
+	kref_init(&mdev->refc);
 	num_endpoints = usb_iface_desc->desc.bNumEndpoints;
 	mutex_init(&mdev->io_mutex);
 	INIT_WORK(&mdev->poll_work_obj, wq_netinfo);
@@ -1167,6 +1183,7 @@ hdm_probe(struct usb_interface *interface, const struct usb_device_id *id)
 		    (unsigned long)mdev);
 
 	mdev->usb_device = usb_get_dev(usb_dev);
+	mdev->is_present = true;
 	mdev->link_stat_timer.expires = jiffies + (2 * HZ);
 
 	mdev->iface.mod = hdm_usb_fops.owner;
@@ -1195,7 +1212,7 @@ hdm_probe(struct usb_interface *interface, const struct usb_device_id *id)
 
 	mdev->cap = kcalloc(num_endpoints, sizeof(*mdev->cap), GFP_KERNEL);
 	if (!mdev->cap)
-		goto exit_free1;
+		goto exit_free;
 
 	mdev->iface.channel_vector = mdev->cap;
 	mdev->iface.priv = NULL;
@@ -1203,12 +1220,12 @@ hdm_probe(struct usb_interface *interface, const struct usb_device_id *id)
 	mdev->ep_address =
 		kcalloc(num_endpoints, sizeof(*mdev->ep_address), GFP_KERNEL);
 	if (!mdev->ep_address)
-		goto exit_free2;
+		goto exit_free;
 
 	mdev->busy_urbs =
 		kcalloc(num_endpoints, sizeof(*mdev->busy_urbs), GFP_KERNEL);
 	if (!mdev->busy_urbs)
-		goto exit_free3;
+		goto exit_free;
 
 	tmp_cap = mdev->cap;
 	for (i = 0; i < num_endpoints; i++) {
@@ -1247,10 +1264,12 @@ hdm_probe(struct usb_interface *interface, const struct usb_device_id *id)
 		   usb_dev->config->desc.bConfigurationValue,
 		   usb_iface_desc->desc.bInterfaceNumber);
 
+	kref_get(&mdev->refc);
 	mdev->parent = most_register_interface(&mdev->iface);
 	if (IS_ERR(mdev->parent)) {
+		kref_put(&mdev->refc, mdev_delete);
 		ret = PTR_ERR(mdev->parent);
-		goto exit_free4;
+		goto exit_free;
 	}
 
 	mutex_lock(&mdev->io_mutex);
@@ -1264,8 +1283,9 @@ hdm_probe(struct usb_interface *interface, const struct usb_device_id *id)
 		if (!mdev->dci) {
 			mutex_unlock(&mdev->io_mutex);
 			most_deregister_interface(&mdev->iface);
+			kref_put(&mdev->refc, mdev_delete);
 			ret = -ENOMEM;
-			goto exit_free4;
+			goto exit_free;
 		}
 
 		kobject_uevent(&mdev->dci->kobj, KOBJ_ADD);
@@ -1274,18 +1294,9 @@ hdm_probe(struct usb_interface *interface, const struct usb_device_id *id)
 	mutex_unlock(&mdev->io_mutex);
 	return 0;
 
-exit_free4:
-	kfree(mdev->busy_urbs);
-exit_free3:
-	kfree(mdev->ep_address);
-exit_free2:
-	kfree(mdev->cap);
-exit_free1:
-	kfree(mdev->conf);
 exit_free:
 	usb_set_intfdata(interface, NULL);
-	usb_put_dev(mdev->usb_device);
-	kfree(mdev);
+	kref_put(&mdev->refc, mdev_delete);
 exit_ENOMEM:
 	if (ret == 0 || ret == -ENOMEM) {
 		ret = -ENOMEM;
@@ -1308,23 +1319,22 @@ static void hdm_disconnect(struct usb_interface *interface)
 	struct most_dev *mdev;
 
 	mdev = usb_get_intfdata(interface);
+	mutex_lock(&mdev->io_mutex);
+	mdev->is_present = false;
+	mutex_unlock(&mdev->io_mutex);
+	usb_set_intfdata(interface, NULL);
 	del_timer_sync(&mdev->link_stat_timer);
 	cancel_work_sync(&mdev->poll_work_obj);
 
 	destroy_most_dci_obj(mdev->dci);
-	mutex_lock(&mdev->io_mutex);
 	most_deregister_interface(&mdev->iface);
+	kref_put(&mdev->refc, mdev_delete);
 
-	usb_set_intfdata(interface, NULL);
-	usb_put_dev(mdev->usb_device);
+	mutex_lock(&mdev->io_mutex);
 	mdev->usb_device = NULL;
-
 	mutex_unlock(&mdev->io_mutex);
-	kfree(mdev->busy_urbs);
-	kfree(mdev->cap);
-	kfree(mdev->conf);
-	kfree(mdev->ep_address);
-	kfree(mdev);
+
+	kref_put(&mdev->refc, mdev_delete);
 }
 
 static struct usb_driver hdm_usb = {
