@@ -124,6 +124,7 @@ show_mandatory_if_unapplied() {
 	check_mk fn networking__ether_addr_equal "linux/etherdevice.h" "ether_addr_equal(0,0)"
 	check_mk fn networking__skb_put_data "linux/skbuff.h" "skb_put_data(0,0,0)"
 	check_mk fn sound__snd_card_new "sound/core.h" "snd_card_new(0,0,0,0,0,0)"
+	check_mk fn usb__setup_timer "linux/timer.h" "setup_timer((struct timer_list *)0,0,0)"
 
 	check_mk pd hdm-dim2__module_platform_driver
 	check_mk usbd usb__module_usb_driver
