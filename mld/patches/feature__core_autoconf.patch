@@ -25,7 +25,7 @@ diff --git a/drivers/staging/most/mostcore/core.c b/drivers/staging/most/mostcor
  
  struct most_c_aim_obj {
  	struct most_aim *ptr;
-@@ -918,6 +920,30 @@ most_c_obj *get_channel_by_name(char *mdev, char *mdev_ch)
+@@ -920,6 +922,30 @@ most_c_obj *get_channel_by_name(char *mdev, char *mdev_ch)
  	return c;
  }
  
@@ -56,7 +56,7 @@ diff --git a/drivers/staging/most/mostcore/core.c b/drivers/staging/most/mostcor
  /**
   * add_link_store - store() function for add_link attribute
   * @aim_obj: pointer to AIM object
-@@ -946,45 +972,33 @@ static ssize_t add_link_store(struct most_aim_obj *aim_obj,
+@@ -948,45 +974,33 @@ static ssize_t add_link_store(struct most_aim_obj *aim_obj,
  			      size_t len)
  {
  	struct most_c_obj *c;
@@ -108,7 +108,7 @@ diff --git a/drivers/staging/most/mostcore/core.c b/drivers/staging/most/mostcor
  
  	return len;
  }
-@@ -1681,6 +1695,73 @@ int most_deregister_aim(struct most_aim *aim)
+@@ -1683,6 +1697,73 @@ int most_deregister_aim(struct most_aim *aim)
  }
  EXPORT_SYMBOL_GPL(most_deregister_aim);
  
@@ -182,7 +182,7 @@ diff --git a/drivers/staging/most/mostcore/core.c b/drivers/staging/most/mostcor
  /**
   * most_register_interface - registers an interface with core
   * @iface: pointer to the instance of the interface description.
-@@ -1779,6 +1860,7 @@ struct kobject *most_register_interface(struct most_interface *iface)
+@@ -1780,6 +1861,7 @@ struct kobject *most_register_interface(struct most_interface *iface)
  		mutex_init(&c->start_mutex);
  		mutex_init(&c->nq_mutex);
  		list_add_tail(&c->list, &inst->channel_list);
@@ -190,7 +190,7 @@ diff --git a/drivers/staging/most/mostcore/core.c b/drivers/staging/most/mostcor
  	}
  	pr_info("registered new MOST device mdev%d (%s)\n",
  		inst->dev_id, iface->description);
-@@ -1882,6 +1964,8 @@ static int __init most_init(void)
+@@ -1883,6 +1965,8 @@ static int __init most_init(void)
  	pr_info("init()\n");
  	INIT_LIST_HEAD(&instance_list);
  	INIT_LIST_HEAD(&aim_list);

@@ -6,7 +6,7 @@ From: Andrey Shvetsov <andrey.shvetsov@k2l.de>
 diff --git a/drivers/staging/most/hdm-dim2/dim2_hdm.c b/drivers/staging/most/hdm-dim2/dim2_hdm.c
 --- a/drivers/staging/most/hdm-dim2/dim2_hdm.c
 +++ b/drivers/staging/most/hdm-dim2/dim2_hdm.c
-@@ -738,6 +738,44 @@ static int get_dim2_clk_speed(const char *clock_speed, u8 *val)
+@@ -737,6 +737,44 @@ static int get_dim2_clk_speed(const char *clock_speed, u8 *val)
  	return -EINVAL;
  }
  
@@ -51,7 +51,7 @@ diff --git a/drivers/staging/most/hdm-dim2/dim2_hdm.c b/drivers/staging/most/hdm
  /*
   * dim2_probe - dim2 probe handler
   * @pdev: platform device structure
-@@ -787,7 +825,7 @@ static int dim2_probe(struct platform_device *pdev)
+@@ -786,7 +824,7 @@ static int dim2_probe(struct platform_device *pdev)
  	pdata = of_match_node(dim2_of_match, pdev->dev.of_node)->data;
  	ret = pdata && pdata->enable ? pdata->enable(pdev) : 0;
  	if (ret)
@@ -60,7 +60,7 @@ diff --git a/drivers/staging/most/hdm-dim2/dim2_hdm.c b/drivers/staging/most/hdm
  
  	dev->disable_platform = pdata ? pdata->disable : 0;
  
-@@ -903,6 +941,8 @@ static int dim2_probe(struct platform_device *pdev)
+@@ -902,6 +940,8 @@ static int dim2_probe(struct platform_device *pdev)
  err_disable_platform:
  	if (dev->disable_platform)
  		dev->disable_platform(pdev);
@@ -69,7 +69,7 @@ diff --git a/drivers/staging/most/hdm-dim2/dim2_hdm.c b/drivers/staging/most/hdm
  
  	return ret;
  }
-@@ -928,6 +968,7 @@ static int dim2_remove(struct platform_device *pdev)
+@@ -927,6 +967,7 @@ static int dim2_remove(struct platform_device *pdev)
  
  	if (dev->disable_platform)
  		dev->disable_platform(pdev);

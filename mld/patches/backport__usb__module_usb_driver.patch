@@ -6,7 +6,7 @@ From: Andrey Shvetsov <andrey.shvetsov@k2l.de>
 diff --git a/drivers/staging/most/hdm-usb/hdm_usb.c b/drivers/staging/most/hdm-usb/hdm_usb.c
 --- a/drivers/staging/most/hdm-usb/hdm_usb.c
 +++ b/drivers/staging/most/hdm-usb/hdm_usb.c
-@@ -1332,7 +1332,23 @@ static struct usb_driver hdm_usb = {
+@@ -1326,7 +1326,23 @@ static struct usb_driver hdm_usb = {
  	.disconnect = hdm_disconnect,
  };
  

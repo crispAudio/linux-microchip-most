@@ -6,7 +6,7 @@ From: Andrey Shvetsov <andrey.shvetsov@k2l.de>
 diff --git a/drivers/staging/most/aim-sound/sound.c b/drivers/staging/most/aim-sound/sound.c
 --- a/drivers/staging/most/aim-sound/sound.c
 +++ b/drivers/staging/most/aim-sound/sound.c
-@@ -597,8 +597,8 @@ static int audio_probe_channel(struct most_interface *iface, int channel_id,
+@@ -623,8 +623,8 @@ static int audio_probe_channel(struct most_interface *iface, int channel_id,
  	if (ret < 0)
  		return ret;
  
