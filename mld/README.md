@@ -20,7 +20,7 @@ $ chmod +x fetch-mld
 
 get the latest release:
 ```sh
-$ OUT_DIR=mld ./fetch-mld mld-1.7.0 && cd mld
+$ OUT_DIR=mld ./fetch-mld mld-1.8.0 && cd mld
 ```
 
 or get the latest development state:
@@ -82,6 +82,25 @@ command | action
 
 
 ## History of changes
+
+### mld-1.8.0
+
+- **sound**: added support for the *96kHz* and *192kHz* PCM rate
+- **usb**: fixed mutex deadlock
+- **usb**: fixed DMA memory leak
+- **usb**: prevented sending an empty packet when data is aligned to an
+  endpoint packet boundary
+- **dim2**: added sysfs property *dci/mep_eui48* (MAC address) 
+- **dim2**: added sysfs property *dci/ni_state*
+- **dim2**: added sysfs property *dci/node_address*
+- **dim2**: added sysfs property *dci/node_position*
+- **dim2**: added support for R-Car M3
+- **dim2**: used device tree to read the clock speed and initialize irqs,
+  see Documentation/devicetree/bindings/inic/microchip,inic-dim2.txt
+- **dim2**: removed platform drivers
+- **cdev**: fixed leak for chrdev_region
+- made diverse code improvements
+
 
 ### mld-1.7.0
 
