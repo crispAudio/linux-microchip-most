@@ -19,7 +19,7 @@ set -o errexit
 VERSION=100
 
 TAG=${1:-${MLD_TAG:-mchp-dev}}
-PRJ=https://raw.githubusercontent.com/microchip-ais/linux
+PRJ=https://github.com/microchip-ais/linux/raw
 GIT_REPO=https://github.com/microchip-ais/linux.git
 
 _err() {

@@ -14,7 +14,7 @@ The steps below download the MOST<sup>&#174;</sup> Linux Driver **sources**,
 specified by the user.
 
 ```sh
-$ wget https://raw.githubusercontent.com/microchip-ais/linux/mchp-dev/mld/fetch-mld
+$ wget https://github.com/microchip-ais/linux/raw/mchp-dev/mld/fetch-mld
 $ chmod +x fetch-mld
 ```
 
