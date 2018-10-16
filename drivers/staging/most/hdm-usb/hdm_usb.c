@@ -235,14 +235,13 @@ static unsigned int get_stream_frame_size(struct most_channel_config *cfg)
  */
 static int hdm_poison_channel(struct most_interface *iface, int channel)
 {
-	struct most_dev *mdev = to_mdev(iface);
+	struct most_dev *mdev;
 	unsigned long flags;
 	spinlock_t *lock; /* temp. lock */
 
-	if (unlikely(!iface)) {
-		dev_warn(&mdev->usb_device->dev, "Poison: Bad interface.\n");
+	if (unlikely(!iface))
 		return -EIO;
-	}
+	mdev = to_mdev(iface);
 	if (unlikely(channel < 0 || channel >= iface->num_channels)) {
 		dev_warn(&mdev->usb_device->dev, "Channel ID out of range.\n");
 		return -ECHRNG;
@@ -1149,13 +1148,14 @@ hdm_probe(struct usb_interface *interface, const struct usb_device_id *id)
 	struct usb_host_interface *usb_iface_desc = interface->cur_altsetting;
 	struct usb_device *usb_dev = interface_to_usbdev(interface);
 	struct device *dev = &usb_dev->dev;
-	struct most_dev *mdev = kzalloc(sizeof(*mdev), GFP_KERNEL);
+	struct most_dev *mdev;
 	unsigned int i;
 	unsigned int num_endpoints;
 	struct most_channel_capability *tmp_cap;
 	struct usb_endpoint_descriptor *ep_desc;
 	int ret = 0;
 
+	mdev = kzalloc(sizeof(*mdev), GFP_KERNEL);
 	if (!mdev)
 		goto exit_ENOMEM;
 
@@ -1305,8 +1305,9 @@ exit_ENOMEM:
  */
 static void hdm_disconnect(struct usb_interface *interface)
 {
-	struct most_dev *mdev = usb_get_intfdata(interface);
+	struct most_dev *mdev;
 
+	mdev = usb_get_intfdata(interface);
 	del_timer_sync(&mdev->link_stat_timer);
 	cancel_work_sync(&mdev->poll_work_obj);
 
