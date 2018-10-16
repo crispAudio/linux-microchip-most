@@ -575,6 +575,9 @@ static int hdm_enqueue(struct most_interface *iface, int channel,
 	conf = &mdev->conf[channel];
 
 	mutex_lock(&mdev->io_mutex);
+	if (!mdev->usb_device)
+		return -ENODEV;
+
 	dev = &mdev->usb_device->dev;
 	urb = usb_alloc_urb(NO_ISOCHRONOUS_URB, GFP_ATOMIC);
 	if (!urb) {
@@ -1308,11 +1311,14 @@ static void hdm_disconnect(struct usb_interface *interface)
 	cancel_work_sync(&mdev->poll_work_obj);
 
 	destroy_most_dci_obj(mdev->dci);
+	mutex_lock(&mdev->io_mutex);
 	most_deregister_interface(&mdev->iface);
 
 	usb_set_intfdata(interface, NULL);
 	usb_put_dev(mdev->usb_device);
+	mdev->usb_device = NULL;
 
+	mutex_unlock(&mdev->io_mutex);
 	kfree(mdev->busy_urbs);
 	kfree(mdev->cap);
 	kfree(mdev->conf);
