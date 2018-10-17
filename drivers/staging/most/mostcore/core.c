@@ -73,6 +73,7 @@ struct most_c_obj {
 
 struct most_inst_obj {
 	int dev_id;
+	bool is_connected;
 	struct most_interface *iface;
 	struct list_head channel_list;
 	struct most_c_obj *channel[MAX_CHANNELS];
@@ -1326,7 +1327,8 @@ static void most_write_completion(struct mbo *mbo)
 	c = mbo->context;
 	if (mbo->status == MBO_E_INVAL)
 		pr_info("WARN: Tx MBO status: invalid\n");
-	if (unlikely(c->is_poisoned || (mbo->status == MBO_E_CLOSE)))
+	if (unlikely(c->is_poisoned || (mbo->status == MBO_E_CLOSE) ||
+		     !c->inst->is_connected))
 		trash_mbo(mbo);
 	else
 		arm_mbo(mbo);
@@ -1459,7 +1461,8 @@ static void most_read_completion(struct mbo *mbo)
 {
 	struct most_c_obj *c = mbo->context;
 
-	if (unlikely(c->is_poisoned || (mbo->status == MBO_E_CLOSE))) {
+	if (unlikely(c->is_poisoned || (mbo->status == MBO_E_CLOSE) ||
+		     !c->inst->is_connected)) {
 		trash_mbo(mbo);
 		return;
 	}
@@ -1589,6 +1592,12 @@ int most_stop_channel(struct most_interface *iface, int id,
 		module_put(iface->mod);
 
 	c->is_poisoned = true;
+	if (!c->inst->is_connected) {
+		flush_trash_fifo(c);
+		flush_channel_fifos(c);
+		goto out_clear_poison;
+	}
+
 	if (c->iface->poison_channel(c->iface, c->channel_id)) {
 		pr_err("Cannot stop channel %d of mdev %s\n", c->channel_id,
 		       c->iface->description);
@@ -1607,6 +1616,7 @@ int most_stop_channel(struct most_interface *iface, int id,
 #else
 	wait_for_completion(&c->cleanup);
 #endif
+out_clear_poison:
 	c->is_poisoned = false;
 
 out:
@@ -1743,6 +1753,7 @@ struct kobject *most_register_interface(struct most_interface *iface)
 
 	INIT_LIST_HEAD(&inst->channel_list);
 	inst->dev_id = id;
+	inst->is_connected = true;
 	list_add_tail(&inst->list, &instance_list);
 
 	for (i = 0; i < iface->num_channels; i++) {
@@ -1813,6 +1824,7 @@ void most_deregister_interface(struct most_interface *iface)
 	pr_info("deregistering MOST device %s (%s)\n", i->kobj.name,
 		iface->description);
 
+	i->is_connected = false;
 	list_for_each_entry(c, &i->channel_list, list) {
 		if (c->aim0.ptr)
 			c->aim0.ptr->disconnect_channel(c->iface,
