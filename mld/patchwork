@@ -87,7 +87,7 @@ zero_test() {
 	make -C ${KDIR:-/lib/modules/$(uname -r)/build} M=$(pwd)/_tmp modules >.make.log 2>&1 || {
 		>&2 cat .make.log
 		>&2 echo
-		>&2 echo "zero test failed (check environment variables)"
+		>&2 echo "ERROR: zero test failed, check environment variables"
 		>&2 echo "KDIR=$KDIR"
 		>&2 echo "CROSS_COMPILE=$CROSS_COMPILE"
 		>&2 echo "ARCH=$ARCH"
@@ -146,7 +146,8 @@ case "${1:-test}" in
 			if [ -e "patches/$x" ]; then
 				patch -p4 --force < patches/$x && echo "$x" >>.patched
 			else
-				>&2 echo "missing patches/$x"
+				>&2 echo "ERROR: missing patches/$x"
+				exit 1
 			fi
 			echo
 		done
