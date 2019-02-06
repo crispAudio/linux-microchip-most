@@ -1272,8 +1272,8 @@ static void request_netinfo(struct most_interface *most_iface, int ch_idx,
 		return;
 
 	mutex_lock(&mdev->dci_mt);
-	add_dci_read(mdev, net_params, net_params_read_complete);
 	add_dci_write(mdev, dci_notify, notify_eui48_val);
+	add_dci_read(mdev, net_params, net_params_read_complete);
 	mutex_unlock(&mdev->dci_mt);
 }
 
