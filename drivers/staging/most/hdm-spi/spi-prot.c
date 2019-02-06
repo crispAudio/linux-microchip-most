@@ -576,7 +576,7 @@ static void add_dci_job(struct hdm_device *mdev, u8 cmd, const u16 *reg,
 	job->val = val;
 	job->complete_fn = complete_fn;
 	job->regs_num = regs_num;
-	list_move(&job->list, &mdev->active_dci_jobs);
+	list_move_tail(&job->list, &mdev->active_dci_jobs);
 }
 
 static void start_dci_request(struct hdm_device *mdev)
@@ -753,7 +753,7 @@ static void dci_service_cmd(struct hdm_device *mdev, u32 dci_ctrl)
 	if (job->complete_fn)
 		job->complete_fn(mdev, job->regs_num);
 
-	list_move(&job->list, &mdev->dci_jobs_heap);
+	list_move_tail(&job->list, &mdev->dci_jobs_heap);
 
 	if (!list_empty(&mdev->active_dci_jobs)) {
 		dci_ctrl_write(&mdev->dci_reg, cmd_done);
