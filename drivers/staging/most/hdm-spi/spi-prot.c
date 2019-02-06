@@ -1386,7 +1386,7 @@ static int spi_hdm_probe(struct spi_device *spi)
 
 	 /* enable SINT, mask all interrupts */
 	mdev->gint.aim_mask = GINT_CHSTS_INTM;
-	flush_int_mask(&mdev->gint);
+	write_gint(&mdev->gint, GINT_CHSTS_ERRM);
 
 	/*
 	 * no interrupt delay,
