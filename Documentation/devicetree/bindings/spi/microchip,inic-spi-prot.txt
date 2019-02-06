@@ -21,6 +21,7 @@ Example:
         status = "okay";
         protocol-driver {
                 compatible = "microchip,inic-spi-prot";
+                reg = <0>;
                 interrupt-parent = <&intc>;
                 interrupts = <0 58 IRQ_TYPE_LEVEL_HIGH>;
                 spi-max-frequency = <25000000>;
