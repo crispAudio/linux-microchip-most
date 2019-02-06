@@ -682,8 +682,8 @@ static const u16 ntf_clear[8] = {
 
 static const u16 ntf_clear_val[8] = {
 	BIT(2), /* eui48 */
-	BIT(1) | BIT(2), /* sync needed | route state */
-	BIT(1) | BIT(2), /* sync needed | route state */
+	BIT(0) | BIT(1), /* sync needed | route state changed */
+	BIT(0) | BIT(1), /* sync needed | route state changed */
 };
 
 static const u16 atx_cfg[8] = { DCI_REG_CONFIG(ATX) };
