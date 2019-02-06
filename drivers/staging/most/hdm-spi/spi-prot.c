@@ -661,14 +661,13 @@ static bool dci_get_ack(struct hdm_device *mdev, u16 val[], u8 num)
 
 #define DCI_REG_EVENTS(ch)  (0x3100 | (ch##_DCI_CH_IDX) << 4)
 #define DCI_REG_CONFIG(ch)  (0x3102 | (ch##_DCI_CH_IDX) << 4)
-#define DCI_REG_ROUTE_STATE(ch)  (0x3103 | (ch##_DCI_CH_IDX) << 4)
 #define DCI_REG_DATA_TYPE(ch)  (0x3104 | (ch##_DCI_CH_IDX) << 4)
 #define DCI_REG_ONOFF_STATE(ch)  (0x3107 | (ch##_DCI_CH_IDX) << 4)
 
 static const u16 net_params[8] = {
 	0x145, 0x146, 0x147,
-	DCI_REG_ROUTE_STATE(ATX),
-	DCI_REG_ROUTE_STATE(ARX),
+	DCI_REG_ONOFF_STATE(ATX),
+	DCI_REG_ONOFF_STATE(ARX),
 };
 
 static const u16 ntf_clear[8] = {
