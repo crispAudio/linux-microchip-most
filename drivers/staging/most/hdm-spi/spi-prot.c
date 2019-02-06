@@ -182,9 +182,6 @@ struct hdm_device {
 	void (*on_netinfo)(struct most_interface *, unsigned char,
 			   unsigned char *);
 
-	u8 mac[ETH_ALEN];
-	u8 link_stat;
-
 	/*
 	 * the size of the software tx buffer must not be bigger than
 	 * the interrupt threshold for the corresponding channel
@@ -696,23 +693,25 @@ static const u16 notify_eui48_val[8] = { BIT(2) };
 
 static void net_params_read_complete(struct hdm_device *mdev, int *regs_num)
 {
+	u8 mac[ETH_ALEN];
+	u8 link_stat;
 	u16 val[5];
 
 	if (!dci_get_ack(mdev, val, ARRAY_SIZE(val)))
 		return;
 
-	mdev->mac[0] = val[0] >> 8;
-	mdev->mac[1] = val[0];
-	mdev->mac[2] = val[1] >> 8;
-	mdev->mac[3] = val[1];
-	mdev->mac[4] = val[2] >> 8;
-	mdev->mac[5] = val[2];
+	mac[0] = val[0] >> 8;
+	mac[1] = val[0];
+	mac[2] = val[1] >> 8;
+	mac[3] = val[1];
+	mac[4] = val[2] >> 8;
+	mac[5] = val[2];
 
-	mdev->link_stat = val[3] == 1 && val[4] == 1;
+	link_stat = val[3] == 1 && val[4] == 1;
 
 	mutex_lock(&mdev->ni_mt);
 	if (mdev->on_netinfo)
-		mdev->on_netinfo(&mdev->most_iface, mdev->link_stat, mdev->mac);
+		mdev->on_netinfo(&mdev->most_iface, link_stat, mac);
 	mutex_unlock(&mdev->ni_mt);
 }
 
