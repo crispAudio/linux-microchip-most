@@ -83,6 +83,11 @@ command | action
 
 ## History of changes
 
+### mchp-dev
+
+- **spi**: fixed DCI and networking issues
+
+
 ### mld-1.8.0
 
 - **sound**: added support for the *96kHz* and *192kHz* PCM rate
@@ -90,7 +95,7 @@ command | action
 - **usb**: fixed DMA memory leak
 - **usb**: prevented sending an empty packet when data is aligned to an
   endpoint packet boundary
-- **dim2**: added sysfs property *dci/mep_eui48* (MAC address) 
+- **dim2**: added sysfs property *dci/mep_eui48* (MAC address)
 - **dim2**: added sysfs property *dci/ni_state*
 - **dim2**: added sysfs property *dci/node_address*
 - **dim2**: added sysfs property *dci/node_position*
