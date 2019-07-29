@@ -20,7 +20,7 @@ $ chmod +x fetch-mld
 
 get the latest release:
 ```sh
-$ OUT_DIR=mld ./fetch-mld mld-1.8.0 && cd mld
+$ OUT_DIR=mld ./fetch-mld mld-1.8.1 && cd mld
 ```
 
 or get the latest development state:
@@ -85,7 +85,11 @@ command | action
 
 ### mchp-dev
 
+
+### mld-1.8.1
+
 - **spi**: fixed DCI and networking issues
+- **patchwork**: fixed use of backport__usb__setup_timer.patch
 
 
 ### mld-1.8.0
