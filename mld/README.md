@@ -85,6 +85,8 @@ command | action
 
 ### mchp-dev
 
+- **patchwork**: added backport__sound__snd_pcm_lib_mmap_vmalloc.patch
+
 
 ### mld-1.8.1
 

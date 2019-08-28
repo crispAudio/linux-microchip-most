@@ -1,0 +1,16 @@
+backport: sound: snd_pcm_lib_mmap_vmalloc
+
+From: Andrey Shvetsov <andrey.shvetsov@k2l.de>
+
+
+diff --git a/drivers/staging/most/aim-sound/sound.c b/drivers/staging/most/aim-sound/sound.c
+--- a/drivers/staging/most/aim-sound/sound.c
++++ b/drivers/staging/most/aim-sound/sound.c
+@@ -463,7 +463,6 @@ static const struct snd_pcm_ops pcm_ops = {
+ 	.trigger    = pcm_trigger,
+ 	.pointer    = pcm_pointer,
+ 	.page       = snd_pcm_lib_get_vmalloc_page,
+-	.mmap       = snd_pcm_lib_mmap_vmalloc,
+ };
+ 
+ static int split_arg_list(char *buf, char **card_name, u16 *ch_num,

@@ -96,6 +96,7 @@ local_fetch() {
 	get_patch backport__networking__skb_put_data.patch
 	get_patch backport__sound__snd_card_new.patch
 	get_patch backport__sound__snd_pcm_set_ops.patch
+	get_patch backport__sound__snd_pcm_lib_mmap_vmalloc.patch
 	get_patch backport__usb__module_usb_driver.patch
 	get_patch backport__usb__setup_timer.patch
 	get_patch feature__core_autoconf.patch
