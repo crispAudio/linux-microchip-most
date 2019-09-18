@@ -70,7 +70,6 @@ If you need to build other components, uncomment corresponding parts in the
 
 command | action
 -|-
-`./patchwork test` | shows all necessary kernel specific patches that are not yet applied
 `make patch` or `./patchwork patch` | applies all kernel specific backport patches and recommended patches
 `make unpatch` or `./patchwork unpatch` | reverts all applied patches
 `make` or `make modules` | makes kernel modules

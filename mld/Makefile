@@ -78,7 +78,7 @@ backport_error:
 	@echo ''
 	@echo 'HAVE YOU APPLIED ALL THE NEEDED BACKPORT PATCHES?'
 	@echo ''
-	@echo 'Use "./patchwork test" to see unapplied mandatory patches'
+	@echo 'Use "make patch" to apply all needed backport patches'
 	@echo ''
 
 help:

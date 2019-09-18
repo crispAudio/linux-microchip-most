@@ -18,10 +18,9 @@ Usage:
   export KDIR=...
   export CROSS_COMPILE=...
   export ARCH=...
-  ./patchwork [test|patch|unpatch]
+  ./patchwork [patch|unpatch]
 
 Parameters
-  test - (default) select all necessary kernel specific backport patches
   patch - patch all necessary kernel specific backport and recommended patches
   unpatch - revert all applied patches ('cat .patched' shows all applied patches)
   help - shows this help
@@ -132,11 +131,7 @@ show_mandatory_if_unapplied() {
 	check_mk attr core__attr
 }
 
-case "${1:-test}" in
-(test)
-	zero_test || exit 1
-	show_mandatory_if_unapplied
-	;;
+case "${1:-}" in
 (patch)
 	zero_test || exit 1
 	(show_if_unapplied backport hdm-dim2__add_module_owner
