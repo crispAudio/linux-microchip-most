@@ -70,14 +70,13 @@ If you need to build other components, uncomment corresponding parts in the
 
 command | action
 -|-
-`make patch` or `./patchwork patch` | applies all kernel specific backport patches and recommended patches
-`make unpatch` or `./patchwork unpatch` | reverts all applied patches
+`make patch` | applies all kernel specific backport patches and recommended patches
+`make unpatch` | reverts all applied patches
 `make` or `make modules` | makes kernel modules
 `make clean` | cleans built artifacts
 `cat .patched` | shows all applied patches
 `ls *.ko` | shows built modules
 `make help` | shows help of the Makefile
-`./patchwork help` | shows help of the patchwork utility
 
 
 ## History of changes
