@@ -20,7 +20,7 @@ $ chmod +x fetch-mld
 
 get the latest release:
 ```sh
-$ OUT_DIR=mld ./fetch-mld mld-1.8.2 && cd mld
+$ OUT_DIR=mld ./fetch-mld mld-1.8.3 && cd mld
 ```
 
 or get the latest development state:
@@ -82,6 +82,9 @@ command | action
 ## History of changes
 
 ### mchp-dev
+
+
+### mld-1.8.3
 
 - **usb**: clear functional stall on OUT endpoint
 

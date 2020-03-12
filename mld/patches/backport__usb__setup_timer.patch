@@ -18,7 +18,7 @@ diff --git a/drivers/staging/most/hdm-usb/hdm_usb.c b/drivers/staging/most/hdm-u
  
  	schedule_work(&mdev->poll_work_obj);
  	mdev->link_stat_timer.expires = jiffies + (2 * HZ);
-@@ -1159,8 +1159,7 @@ hdm_probe(struct usb_interface *interface, const struct usb_device_id *id)
+@@ -1174,8 +1174,7 @@ hdm_probe(struct usb_interface *interface, const struct usb_device_id *id)
  	num_endpoints = usb_iface_desc->desc.bNumEndpoints;
  	mutex_init(&mdev->io_mutex);
  	INIT_WORK(&mdev->poll_work_obj, wq_netinfo);
