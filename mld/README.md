@@ -83,6 +83,8 @@ command | action
 
 ### mchp-dev
 
+- fixed error "mostcore.h: No such file or directory"
+
 
 ### mld-1.8.3
 
